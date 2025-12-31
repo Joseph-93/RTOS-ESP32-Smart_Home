@@ -1,0 +1,10 @@
+1. Build the timer to actually read the actual photoresistive sensor
+    DONE, but I haven't checked that it's implemented beautifully. I'd like to do that myself, I guess?
+2. Build the interrupt to blink the light when a button is pressed (button will simulate the door sensor for now)
+3. Build the Queue and corresponding task, to read from the queue and write (what will be OLED) to the UART
+4. Build a timer to handle IR sensor and Mic sensor readings
+5. Make the sensors all write to the OLED queue
+6. Turn the Queue from UART to OLED (maybe make it use both?)
+7. Set up task priority (and figure out how to test it!!)
+8. Actually integrate the IR sensor
+9. Acutally set up the Hall sensor. test it at wire lengths equal to distance to the door.
