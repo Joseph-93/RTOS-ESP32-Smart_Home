@@ -25,7 +25,7 @@ esp_lcd_touch_handle_t touch_init(void) {
     touch_config.y_max = TOUCH_Y_MAX;
     touch_config.rst_gpio_num = (gpio_num_t)-1;
     touch_config.int_gpio_num = (gpio_num_t)-1;
-    touch_config.flags.swap_xy = false;
+    touch_config.flags.swap_xy = true;  // Swap X and Y
     touch_config.flags.mirror_x = true;
     touch_config.flags.mirror_y = true;
 
