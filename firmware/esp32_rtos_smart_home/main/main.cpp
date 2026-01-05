@@ -12,22 +12,26 @@
 #include "freertos/task.h"
 #include "gui.h"
 #include "network_actions.h"
+#include "wifi_init.h"
 
 static const char *TAG = "SmartHome";
+
+// TODO: Change these to your WiFi credentials
+#define WIFI_SSID      "its getting hotspot in here"
+#define WIFI_PASSWORD  "SoTakeOffAllYourClothing"
 
 extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "Starting ESP32 Smart Home System...");
     ESP_LOGI(TAG, "ESP-IDF Version: %s", esp_get_idf_version());
     
-    // Test NetworkActionsComponent
-    NetworkActionsComponent networkActions;
-    networkActions.initialize();
-    
-    // Read back the parameters to verify
-    ESP_LOGI(TAG, "Retry count: %d", networkActions.getIntParam("retry_count")->getValue(0, 0));
-    ESP_LOGI(TAG, "Timeout: %.1f sec", networkActions.getFloatParam("timeout_sec")->getValue(0, 0));
-    ESP_LOGI(TAG, "WiFi enabled: %s", networkActions.getBoolParam("wifi_enabled")->getValue(0, 0) ? "true" : "false");
+    // Initialize WiFi and connect
+    ESP_LOGI(TAG, "Initializing WiFi...");
+    if (!wifi_init_sta(WIFI_SSID, WIFI_PASSWORD)) {
+        ESP_LOGE(TAG, "WiFi connection failed!");
+    } else {
+        ESP_LOGI(TAG, "WiFi connected successfully!");
+    }
     
     // Initialize GUI system (includes lcd and touch)
     gui_init();
