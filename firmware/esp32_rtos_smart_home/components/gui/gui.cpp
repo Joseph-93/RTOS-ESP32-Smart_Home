@@ -1,4 +1,6 @@
 #include "gui.h"
+#include "lcd/lcd.h"
+#include "touch/touch.h"
 #include "lvgl.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -186,9 +188,10 @@ static void lvgl_timer_task(void *arg) {
     }
 }
 
-void gui_init(esp_lcd_panel_handle_t panel_handle, esp_lcd_touch_handle_t touch_handle) {
-    panel_handle_ref = panel_handle;
-    touch_handle_ref = touch_handle;
+void gui_init(void) {
+    // Initialize hardware components
+    panel_handle_ref = lcd_init();
+    touch_handle_ref = touch_init();
     
     // Initialize LVGL
     lv_init();

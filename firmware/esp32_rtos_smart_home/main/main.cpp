@@ -2,15 +2,16 @@
  * ESP32 Smart Home RTOS Project
  * 
  * Modular architecture with separate components:
- * - LCD: ILI9341 display hardware initialization
- * - Touch: XPT2046 touch controller initialization
- * - GUI: LVGL graphics library integration and UI
+ * - GUI: LVGL graphics library integration and UI (owns LCD and Touch)
+ * - Network Actions: Network-related functionality
  */
 
 #include "esp_log.h"
-#include "lcd.h"
-#include "touch.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "gui.h"
+#include "network_actions.h"
 
 static const char *TAG = "SmartHome";
 
@@ -19,12 +20,17 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Starting ESP32 Smart Home System...");
     ESP_LOGI(TAG, "ESP-IDF Version: %s", esp_get_idf_version());
     
-    // Initialize hardware components
-    esp_lcd_panel_handle_t panel = lcd_init();
-    esp_lcd_touch_handle_t touch = touch_init();
+    // Test NetworkActionsComponent
+    NetworkActionsComponent networkActions;
+    networkActions.initialize();
     
-    // Initialize GUI system
-    gui_init(panel, touch);
+    // Read back the parameters to verify
+    ESP_LOGI(TAG, "Retry count: %d", networkActions.getIntParam("retry_count")->getValue(0, 0));
+    ESP_LOGI(TAG, "Timeout: %.1f sec", networkActions.getFloatParam("timeout_sec")->getValue(0, 0));
+    ESP_LOGI(TAG, "WiFi enabled: %s", networkActions.getBoolParam("wifi_enabled")->getValue(0, 0) ? "true" : "false");
+    
+    // Initialize GUI system (includes lcd and touch)
+    gui_init();
     gui_create_ui();
     
     ESP_LOGI(TAG, "System initialized - ready!");

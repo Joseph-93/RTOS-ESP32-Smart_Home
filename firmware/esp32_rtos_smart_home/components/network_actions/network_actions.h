@@ -1,6 +1,18 @@
 #pragma once
 
+#include "../component.h"
+
 #ifdef __cplusplus
+
+// NetworkActionsComponent - manages network communication parameters
+class NetworkActionsComponent : public Component {
+public:
+    NetworkActionsComponent();
+    ~NetworkActionsComponent() override;
+    
+    void initialize() override;
+};
+
 extern "C" {
 #endif
 
