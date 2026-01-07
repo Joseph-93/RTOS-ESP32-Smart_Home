@@ -13,6 +13,7 @@
 #include "gui.h"
 #include "network_actions.h"
 #include "wifi_init.h"
+#include <vector>
 
 static const char *TAG = "SmartHome";
 
@@ -20,8 +21,15 @@ static const char *TAG = "SmartHome";
 #define WIFI_SSID      "its getting hotspot in here"
 #define WIFI_PASSWORD  "SoTakeOffAllYourClothing"
 
+// Global component instances
+static GUIComponent gui_component;
+static NetworkActionsComponent network_component;
+
 extern "C" void app_main(void)
 {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[ENTER] app_main");
+#endif
     ESP_LOGI(TAG, "Starting ESP32 Smart Home System...");
     ESP_LOGI(TAG, "ESP-IDF Version: %s", esp_get_idf_version());
     
@@ -33,9 +41,21 @@ extern "C" void app_main(void)
         ESP_LOGI(TAG, "WiFi connected successfully!");
     }
     
-    // Initialize GUI system (includes lcd and touch)
+    // Initialize components
+    ESP_LOGI(TAG, "Initializing components...");
+    network_component.initialize();
+    gui_component.initialize();
+    
+    // Register components with GUI
+    ESP_LOGI(TAG, "Registering components with GUI...");
+    gui_component.registerComponent(&gui_component);
+    gui_component.registerComponent(&network_component);
+    
+    // Initialize GUI hardware system (includes lcd and touch)
     gui_init();
-    gui_create_ui();
+    
+    // Request UI creation (will be done by LVGL task)
+    gui_create_ui(&gui_component);
     
     ESP_LOGI(TAG, "System initialized - ready!");
     
@@ -43,4 +63,7 @@ extern "C" void app_main(void)
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[EXIT] app_main");
+#endif
 }

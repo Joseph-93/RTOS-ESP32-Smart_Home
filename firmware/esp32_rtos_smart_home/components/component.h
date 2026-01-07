@@ -2,6 +2,9 @@
 
 #include <string>
 #include <vector>
+#include <functional>
+#include <climits>
+#include <cfloat>
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
@@ -14,8 +17,8 @@ inline const char *PARAM_TAG = "Parameter";
 template<typename T>
 class Parameter {
 public:
-    Parameter(const std::string &name, size_t rows, size_t cols)
-        : name(name), rows(rows), cols(cols) {
+    Parameter(const std::string &name, size_t rows, size_t cols, T min_val = T(), T max_val = T())
+        : name(name), rows(rows), cols(cols), min_value(min_val), max_value(max_val) {
         
         size_t total_elements = rows * cols;
         size_t total_bytes = total_elements * sizeof(T);
@@ -63,6 +66,8 @@ public:
     
     size_t getRows() const { return rows; }
     size_t getCols() const { return cols; }
+    T getMin() const { return min_value; }
+    T getMax() const { return max_value; }
     
     std::vector<T> getRegion(size_t startRow, size_t startCol, size_t numRows, size_t numCols) const {
         if (startRow + numRows > rows || startCol + numCols > cols) {
@@ -112,6 +117,8 @@ private:
     size_t rows;
     size_t cols;
     std::vector<T> data;
+    T min_value;
+    T max_value;
 };
 
 // Type aliases
@@ -119,6 +126,21 @@ using IntParameter = Parameter<int>;
 using FloatParameter = Parameter<float>;
 using BoolParameter = Parameter<uint8_t>;  // Use uint8_t instead of bool because std::vector<bool> is specialized and doesn't play nice with our usage
 using StringParameter = Parameter<std::string>;
+
+// Forward declaration
+class Component;
+
+// ComponentAction - represents a user-invokable action
+struct ComponentAction {
+    std::string name;                                  // Display name of the action
+    std::string description;                           // Optional description
+    std::function<bool(Component*)> callback;          // Function to call when action is invoked
+    
+    ComponentAction(const std::string& name, 
+                   const std::string& description,
+                   std::function<bool(Component*)> callback)
+        : name(name), description(description), callback(callback) {}
+};
 
 // Component base class
 class Component {
@@ -145,17 +167,27 @@ public:
     FloatParameter* getFloatParam(const std::string &paramName);
     BoolParameter* getBoolParam(const std::string &paramName);
     StringParameter* getStringParam(const std::string &paramName);
+    
+    // Action management
+    const std::vector<ComponentAction>& getActions() const;
+    void invokeAction(const std::string& actionName);
 
 protected:
     std::string name;
     bool initialized;
+    std::vector<ComponentAction> actions;
+    
+    // Parameter storage
     std::vector<IntParameter> intParams;
     std::vector<FloatParameter> floatParams;
     std::vector<BoolParameter> boolParams;
     std::vector<StringParameter> stringParams;
     
-    void addIntParam(const std::string &paramName, size_t rows, size_t cols);
-    void addFloatParam(const std::string &paramName, size_t rows, size_t cols);
+    void addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val = INT_MIN, int max_val = INT_MAX);
+    void addFloatParam(const std::string &paramName, size_t rows, size_t cols, float min_val = -FLT_MAX, float max_val = FLT_MAX);
     void addBoolParam(const std::string &paramName, size_t rows, size_t cols);
     void addStringParam(const std::string &paramName, size_t rows, size_t cols);
+    
+    void addAction(const std::string& name, const std::string& description, 
+                   std::function<bool(Component*)> callback);
 };

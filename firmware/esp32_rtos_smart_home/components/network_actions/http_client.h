@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include "esp_http_client.h"
 
 // Compact struct for an HTTP/HTTPS message configuration
 struct HttpMessage {
@@ -27,7 +28,9 @@ public:
     
     bool initialize();
     bool send(const HttpMessage& msg);
+    void cleanup();
     
 private:
     bool initialized;
+    esp_http_client_handle_t client;
 };

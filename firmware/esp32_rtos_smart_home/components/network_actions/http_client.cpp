@@ -5,39 +5,67 @@
 
 static const char *TAG = "HttpClient";
 
-HttpClient::HttpClient() : initialized(false) {}
+HttpClient::HttpClient() : initialized(false), client(nullptr) {}
 
-HttpClient::~HttpClient() {}
+HttpClient::~HttpClient() {
+    cleanup();
+}
 
 bool HttpClient::initialize() {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[ENTER] HttpClient::initialize");
+#endif
     ESP_LOGI(TAG, "Initializing HTTP/HTTPS client");
+    
+    // Create a reusable HTTP client with dummy URL (will be reconfigured per request)
+    esp_http_client_config_t config = {};
+    config.url = "http://example.com";  // Dummy URL - will be set before each request
+    config.timeout_ms = 10000;  // Default timeout
+    
+    client = esp_http_client_init(&config);
+    if (!client) {
+        ESP_LOGE(TAG, "Failed to create persistent HTTP client");
+#ifdef DEBUG
+        ESP_LOGI(TAG, "[EXIT] HttpClient::initialize - failed");
+#endif
+        return false;
+    }
+    
+    ESP_LOGI(TAG, "Persistent HTTP client created successfully, client handle: %p", client);
     initialized = true;
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[EXIT] HttpClient::initialize - success, initialized=%d, client=%p", initialized, client);
+#endif
     return true;
 }
 
 bool HttpClient::send(const HttpMessage& msg) {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[ENTER] HttpClient::send - initialized=%d, client=%p", initialized, client);
+#endif
     if (!initialized) {
         ESP_LOGE(TAG, "HTTP client not initialized");
+#ifdef DEBUG
+        ESP_LOGI(TAG, "[EXIT] HttpClient::send - not initialized");
+#endif
         return false;
     }
     
     ESP_LOGI(TAG, "Sending HTTP %s to %s (message: %s)", 
              msg.method.c_str(), msg.url.c_str(), msg.name.c_str());
     
-    // Configure HTTP client
-    esp_http_client_config_t config = {};
-    config.url = msg.url.c_str();
-    config.timeout_ms = msg.timeout_ms;
-    config.method = HTTP_METHOD_GET;  // Default, will override
-    
-    // Create client
-    esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client) {
-        ESP_LOGE(TAG, "Failed to initialize HTTP client");
+        ESP_LOGE(TAG, "HTTP client not initialized properly");
+#ifdef DEBUG
+        ESP_LOGI(TAG, "[EXIT] HttpClient::send - client is null");
+#endif
         return false;
     }
     
-    ESP_LOGI(TAG, "HTTP client created");
+    // Reconfigure the persistent client for this request
+    esp_http_client_set_url(client, msg.url.c_str());
+    esp_http_client_set_timeout_ms(client, msg.timeout_ms);
+    
     bool success = false;
     
     // Set method
@@ -97,15 +125,20 @@ bool HttpClient::send(const HttpMessage& msg) {
         ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
     }
     
-    // MANDATORY CLEANUP
-    ESP_LOGI(TAG, "CLEANING UP HTTP client");
-    err = esp_http_client_cleanup(client);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "!!!! CRITICAL: HTTP CLIENT CLEANUP FAILED !!!!");
-        ESP_LOGE(TAG, "!!!! POSSIBLE FD LEAK - ERROR: %s !!!!", esp_err_to_name(err));
-        assert(false && "HTTP CLIENT CLEANUP FAILED - POTENTIAL FD LEAK");
-    }
-    ESP_LOGI(TAG, "HTTP client cleaned up successfully");
+    // Note: Client is persistent and will be reused for subsequent requests
+    // Cleanup happens in the destructor
     
     return success;
+}
+
+void HttpClient::cleanup() {
+    if (client) {
+        ESP_LOGI(TAG, "Cleaning up persistent HTTP client");
+        esp_err_t err = esp_http_client_cleanup(client);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "HTTP client cleanup failed: %s", esp_err_to_name(err));
+        }
+        client = nullptr;
+        initialized = false;
+    }
 }

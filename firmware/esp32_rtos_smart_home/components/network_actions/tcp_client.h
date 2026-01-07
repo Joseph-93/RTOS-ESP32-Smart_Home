@@ -2,6 +2,7 @@
 
 #include <string>
 #include <cstdint>
+#include <map>
 
 // Compact struct for a TCP message configuration
 struct TcpMessage {
@@ -24,7 +25,13 @@ public:
     
     bool initialize();
     bool send(const TcpMessage& msg);
+    void cleanup();
     
 private:
     bool initialized;
+    // Socket pool: key is "host:port", value is socket FD
+    std::map<std::string, int> socket_pool;
+    
+    int getOrCreateSocket(const std::string& host, uint16_t port, uint32_t timeout_ms);
+    void closeSocket(const std::string& key);
 };

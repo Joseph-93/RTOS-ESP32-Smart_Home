@@ -32,6 +32,15 @@ public:
     const HttpMessage* getHttpMessage(const std::string& name) const;
     const WsMessage* getWsMessage(const std::string& name) const;
     
+    // Getters for message counts (useful for GUI)
+    size_t getTcpMessageCount() const { return tcp_messages.size(); }
+    size_t getHttpMessageCount() const { return http_messages.size(); }
+    size_t getWsMessageCount() const { return ws_messages.size(); }
+    
+    const std::vector<TcpMessage>& getTcpMessages() const { return tcp_messages; }
+    const std::vector<HttpMessage>& getHttpMessages() const { return http_messages; }
+    const std::vector<WsMessage>& getWsMessages() const { return ws_messages; }
+    
 private:
     // Client instances
     TcpClient tcp_client;
@@ -43,9 +52,13 @@ private:
     std::vector<HttpMessage> http_messages;
     std::vector<WsMessage> ws_messages;
     
-    // JSON parsing helpers
+    // Message loading and parsing helpers
+    void loadAllMessageExamples();
     void parseTcpMessages();
     void parseHttpMessages();
     void parseWsMessages();
+    
+    // Action registration
+    void registerActions();
 };
 #endif
