@@ -14,6 +14,9 @@ struct HttpMessage {
     std::vector<std::string> headers;  // Format: "Key: Value"
     uint32_t timeout_ms;
     
+    // Default constructor
+    HttpMessage() : name(""), url(""), method("GET"), body(""), headers(), timeout_ms(10000) {}
+    
     HttpMessage(const std::string& name, const std::string& url, const std::string& method,
                 const std::string& body = "", const std::vector<std::string>& headers = {},
                 uint32_t timeout_ms = 10000)

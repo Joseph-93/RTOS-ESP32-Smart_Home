@@ -1,12 +1,14 @@
 #include "lcd.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include "driver/dac.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_ili9341.h"
 #include "esp_log.h"
 
 static const char *TAG = "LCD";
+static uint8_t current_brightness = 100; // Default 100%
 
 esp_lcd_panel_handle_t lcd_init(void) {
     // Initialize SPI bus (VSPI)
@@ -52,10 +54,28 @@ esp_lcd_panel_handle_t lcd_init(void) {
     
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
     
-    // Turn on backlight
-    gpio_set_direction((gpio_num_t)LCD_PIN_BL, GPIO_MODE_OUTPUT);
-    gpio_set_level((gpio_num_t)LCD_PIN_BL, 1);
+    // Initialize DAC for backlight control on GPIO 25 (DAC1)
+    ESP_ERROR_CHECK(dac_output_enable(DAC_CHANNEL_1)); // GPIO 25 is DAC1
+    lcd_set_brightness(100); // Set to full brightness initially
     
-    ESP_LOGI(TAG, "LCD initialized");
+    ESP_LOGI(TAG, "LCD initialized with DAC backlight control");
     return panel_handle;
+}
+
+void lcd_set_brightness(uint8_t brightness) {
+    if (brightness > 100) {
+        brightness = 100;
+    }
+    
+    // DAC outputs 0-255, map brightness 0-100 to DAC value
+    uint8_t dac_value = (brightness * 255) / 100;
+    
+    ESP_ERROR_CHECK(dac_output_voltage(DAC_CHANNEL_1, dac_value));
+    current_brightness = brightness;
+    
+    ESP_LOGI(TAG, "Backlight brightness set to %d%% (DAC: %d)", brightness, dac_value);
+}
+
+uint8_t lcd_get_brightness(void) {
+    return current_brightness;
 }

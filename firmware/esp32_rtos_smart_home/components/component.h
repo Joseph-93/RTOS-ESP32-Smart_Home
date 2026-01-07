@@ -18,7 +18,8 @@ template<typename T>
 class Parameter {
 public:
     Parameter(const std::string &name, size_t rows, size_t cols, T min_val = T(), T max_val = T())
-        : name(name), rows(rows), cols(cols), min_value(min_val), max_value(max_val) {
+        : name(name), rows(rows), cols(cols), min_value(min_val), max_value(max_val), 
+          onChange(nullptr) {
         
         size_t total_elements = rows * cols;
         size_t total_bytes = total_elements * sizeof(T);
@@ -61,13 +62,44 @@ public:
                      name.c_str(), row, col, rows, cols);
             assert(false && "Parameter setValue out of bounds");
         }
-        data[row * cols + col] = val; 
+        data[row * cols + col] = val;
+        
+        // Trigger callback if defined
+        if (hasCallback()) {
+            onChange(row, col);
+        }
     }
     
     size_t getRows() const { return rows; }
     size_t getCols() const { return cols; }
     T getMin() const { return min_value; }
     T getMax() const { return max_value; }
+    
+    // Append a new value (grows the parameter by one row, assumes single column)
+    void appendValue(const T& value) {
+#ifdef DEBUG
+        ESP_LOGI(PARAM_TAG, "Parameter '%s': Appending value, growing from %zu rows to %zu rows", 
+                 name.c_str(), rows, rows + 1);
+#endif
+        data.push_back(value);
+        size_t new_row = rows;
+        rows = data.size() / cols;
+        
+        // Trigger callback if defined
+        if (hasCallback()) {
+            onChange(new_row, 0);
+        }
+    }
+    
+    // Callback management
+    void setOnChange(std::function<void(size_t, size_t)> callback) {
+        onChange = callback;
+        has_callback = true;
+    }
+    
+    bool hasCallback() const {
+        return has_callback;
+    }
     
     std::vector<T> getRegion(size_t startRow, size_t startCol, size_t numRows, size_t numCols) const {
         if (startRow + numRows > rows || startCol + numCols > cols) {
@@ -110,15 +142,24 @@ public:
                          data.begin() + (startRow + r) * cols + startCol);
             }
         }
+        
+        // Trigger callback for each changed cell if defined
+        if (hasCallback()) {
+            for (size_t r = 0; r < numRows; r++) {
+                for (size_t c = 0; c < numCols; c++) {
+                    onChange(startRow + r, startCol + c);
+                }
+            }
+        }
     }
 
 private:
     std::string name;
-    size_t rows;
-    size_t cols;
+    size_t rows, cols;
     std::vector<T> data;
-    T min_value;
-    T max_value;
+    T min_value, max_value;
+    std::function<void(size_t, size_t)> onChange;
+    bool has_callback = false;
 };
 
 // Type aliases

@@ -12,8 +12,9 @@ struct WsMessage {
     std::string message;
     std::string subprotocol;  // Optional websocket subprotocol
     uint32_t timeout_ms;
-    
-    WsMessage(const std::string& name, const std::string& url, const std::string& message,
+        // Default constructor
+    WsMessage() : name(""), url(""), message(""), subprotocol(""), timeout_ms(10000) {}
+        WsMessage(const std::string& name, const std::string& url, const std::string& message,
               const std::string& subprotocol = "", uint32_t timeout_ms = 10000)
         : name(name), url(url), message(message), subprotocol(subprotocol), timeout_ms(timeout_ms) {}
 };

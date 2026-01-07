@@ -29,18 +29,28 @@ void NetworkActionsComponent::initialize() {
 #endif
     ESP_LOGI(TAG, "Initializing NetworkActionsComponent...");
     
-    // Add string parameters for message configurations
-    addStringParam("tcp_messages", 1, 1);
-    addStringParam("http_messages", 1, 1);
-    addStringParam("ws_messages", 1, 1);
+    // Create EMPTY parameters (size 0) - will grow as we append messages
+    addStringParam("tcp_messages", 0, 1);
+    addStringParam("http_messages", 0, 1);
+    addStringParam("ws_messages", 0, 1);
     
-    // Load all message examples from MessageExamples namespace into parameters
+    // Set up parse callbacks BEFORE loading (these will be called when parameter values change)
+    auto* tcp_param = getStringParam("tcp_messages");
+    auto* http_param = getStringParam("http_messages");
+    auto* ws_param = getStringParam("ws_messages");
+    
+    if (tcp_param) {
+        tcp_param->setOnChange([this](size_t row, size_t col) { this->parseTcpMessage(row, col); });
+    }
+    if (http_param) {
+        http_param->setOnChange([this](size_t row, size_t col) { this->parseHttpMessage(row, col); });
+    }
+    if (ws_param) {
+        ws_param->setOnChange([this](size_t row, size_t col) { this->parseWsMessage(row, col); });
+    }
+    
+    // NOW load all message examples into the parameters (will trigger callbacks)
     loadAllMessageExamples();
-    
-    // Parse parameters to populate message vectors
-    parseTcpMessages();
-    parseHttpMessages();
-    parseWsMessages();
     
     // Initialize clients
     tcp_client.initialize();
@@ -64,69 +74,53 @@ void NetworkActionsComponent::loadAllMessageExamples() {
     ESP_LOGI(TAG, "[ENTER] loadAllMessageExamples");
 #endif
     
-    // Build JSON arrays for each message type by categorizing examples
-    cJSON* tcp_array = cJSON_CreateArray();
-    cJSON* http_array = cJSON_CreateArray();
-    cJSON* ws_array = cJSON_CreateArray();
+    // Get the parameters (they should already be created)
+    auto* tcp_param = getStringParam("tcp_messages");
+    auto* http_param = getStringParam("http_messages");
+    auto* ws_param = getStringParam("ws_messages");
     
-    // Use the centralized array from message_examples.h
+    if (!tcp_param || !http_param || !ws_param) {
+        ESP_LOGE(TAG, "Parameters not created before loading examples!");
+        return;
+    }
+    
+    // Append each message as a new row (grows parameters dynamically)
+    size_t tcp_count = 0, http_count = 0, ws_count = 0;
+    
     for (size_t i = 0; i < MessageExamples::ALL_EXAMPLES_COUNT; i++) {
         const char* example_json = MessageExamples::ALL_EXAMPLES[i];
         cJSON* root = cJSON_Parse(example_json);
-        if (!root) {
-            ESP_LOGE(TAG, "Failed to parse message example JSON");
-            continue;
-        }
-        
-        // Check if it's an array with at least one item
-        if (!cJSON_IsArray(root) || cJSON_GetArraySize(root) == 0) {
-            cJSON_Delete(root);
+        if (!root || !cJSON_IsArray(root) || cJSON_GetArraySize(root) == 0) {
+            if (root) cJSON_Delete(root);
             continue;
         }
         
         cJSON* item = cJSON_GetArrayItem(root, 0);
         
-        // Determine message type based on presence of fields
+        // Convert single item to JSON string
+        char* item_json = cJSON_PrintUnformatted(item);
+        
+        // Determine message type and append to appropriate parameter
         cJSON* host = cJSON_GetObjectItem(item, "host");
         cJSON* url = cJSON_GetObjectItem(item, "url");
         cJSON* message = cJSON_GetObjectItem(item, "message");
         
         if (host) {
-            // TCP message - add to tcp_array
-            cJSON_AddItemToArray(tcp_array, cJSON_Duplicate(item, 1));
+            tcp_param->appendValue(std::string(item_json));
+            tcp_count++;
         } else if (message) {
-            // WebSocket message - add to ws_array
-            cJSON_AddItemToArray(ws_array, cJSON_Duplicate(item, 1));
+            ws_param->appendValue(std::string(item_json));
+            ws_count++;
         } else if (url) {
-            // HTTP message - add to http_array
-            cJSON_AddItemToArray(http_array, cJSON_Duplicate(item, 1));
+            http_param->appendValue(std::string(item_json));
+            http_count++;
         }
         
+        cJSON_free(item_json);
         cJSON_Delete(root);
     }
     
-    // Convert arrays to JSON strings and store in parameters
-    char* tcp_json = cJSON_PrintUnformatted(tcp_array);
-    char* http_json = cJSON_PrintUnformatted(http_array);
-    char* ws_json = cJSON_PrintUnformatted(ws_array);
-    
-    auto* tcp_param = getStringParam("tcp_messages");
-    auto* http_param = getStringParam("http_messages");
-    auto* ws_param = getStringParam("ws_messages");
-    
-    if (tcp_param) tcp_param->setValue(0, 0, tcp_json);
-    if (http_param) http_param->setValue(0, 0, http_json);
-    if (ws_param) ws_param->setValue(0, 0, ws_json);
-    
-    // Clean up
-    cJSON_free(tcp_json);
-    cJSON_free(http_json);
-    cJSON_free(ws_json);
-    cJSON_Delete(tcp_array);
-    cJSON_Delete(http_array);
-    cJSON_Delete(ws_array);
-    
-    ESP_LOGI(TAG, "Loaded message examples into parameters");
+    ESP_LOGI(TAG, "Loaded %zu TCP, %zu HTTP, %zu WS message examples", tcp_count, http_count, ws_count);
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] loadAllMessageExamples");
 #endif
@@ -134,157 +128,181 @@ void NetworkActionsComponent::loadAllMessageExamples() {
 
 // JSON parsing implementations
 
-void NetworkActionsComponent::parseTcpMessages() {
+void NetworkActionsComponent::parseTcpMessage(size_t row, size_t col) {
 #ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] parseTcpMessages");
+    ESP_LOGI(TAG, "[ENTER] parseTcpMessage - row: %zu, col: %zu", row, col);
 #endif
     auto* param = getStringParam("tcp_messages");
     if (!param) {
+        ESP_LOGE(TAG, "tcp_messages parameter not found");
+        return;
+    }
+    
+    const std::string& json_str = param->getValue(row, col);
+    if (json_str.empty()) {
 #ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] parseTcpMessages - no param");
+        ESP_LOGI(TAG, "[EXIT] parseTcpMessage - empty string");
 #endif
         return;
     }
     
-    const std::string& json_str = param->getValue(0, 0);
-    cJSON* root = cJSON_Parse(json_str.c_str());
-    if (!root) {
-        ESP_LOGE(TAG, "Failed to parse TCP messages JSON");
+    cJSON* item = cJSON_Parse(json_str.c_str());
+    if (!item) {
+        ESP_LOGE(TAG, "Failed to parse TCP message at [%zu,%zu]", row, col);
+#ifdef DEBUG
+        ESP_LOGI(TAG, "[EXIT] parseTcpMessage - parse failed");
+#endif
         return;
     }
     
-    int array_size = cJSON_GetArraySize(root);
-    for (int i = 0; i < array_size; i++) {
-        cJSON* item = cJSON_GetArrayItem(root, i);
-        
-        cJSON* name = cJSON_GetObjectItem(item, "name");
-        cJSON* host = cJSON_GetObjectItem(item, "host");
-        cJSON* port = cJSON_GetObjectItem(item, "port");
-        cJSON* data = cJSON_GetObjectItem(item, "data");
-        cJSON* timeout = cJSON_GetObjectItem(item, "timeout_ms");
-        
-        if (name && host && port && data) {
-            tcp_messages.emplace_back(
-                cJSON_GetStringValue(name),
-                cJSON_GetStringValue(host),
-                static_cast<uint16_t>(port->valueint),
-                cJSON_GetStringValue(data),
-                timeout ? static_cast<uint32_t>(timeout->valueint) : 5000
-            );
+    cJSON* name = cJSON_GetObjectItem(item, "name");
+    cJSON* host = cJSON_GetObjectItem(item, "host");
+    cJSON* port = cJSON_GetObjectItem(item, "port");
+    cJSON* data = cJSON_GetObjectItem(item, "data");
+    cJSON* timeout = cJSON_GetObjectItem(item, "timeout_ms");
+    
+    if (name && host && port && data) {
+        // Grow tcp_messages if needed
+        if (row >= tcp_messages.size()) {
+            tcp_messages.resize(row + 1);
         }
+        
+        tcp_messages[row] = TcpMessage(
+            cJSON_GetStringValue(name),
+            cJSON_GetStringValue(host),
+            static_cast<uint16_t>(port->valueint),
+            cJSON_GetStringValue(data),
+            timeout ? static_cast<uint32_t>(timeout->valueint) : 5000
+        );
+        ESP_LOGI(TAG, "Parsed TCP message at index %zu: %s", row, cJSON_GetStringValue(name));
     }
     
-    cJSON_Delete(root);
-    ESP_LOGI(TAG, "Parsed %zu TCP messages", tcp_messages.size());
+    cJSON_Delete(item);
 #ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] parseTcpMessages");
+    ESP_LOGI(TAG, "[EXIT] parseTcpMessage");
 #endif
 }
 
-void NetworkActionsComponent::parseHttpMessages() {
+void NetworkActionsComponent::parseHttpMessage(size_t row, size_t col) {
 #ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] parseHttpMessages");
+    ESP_LOGI(TAG, "[ENTER] parseHttpMessage - row: %zu, col: %zu", row, col);
 #endif
     auto* param = getStringParam("http_messages");
     if (!param) {
+        ESP_LOGE(TAG, "http_messages parameter not found");
+        return;
+    }
+    
+    const std::string& json_str = param->getValue(row, col);
+    if (json_str.empty()) {
 #ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] parseHttpMessages - no param");
+        ESP_LOGI(TAG, "[EXIT] parseHttpMessage - empty string");
 #endif
         return;
     }
     
-    const std::string& json_str = param->getValue(0, 0);
-    cJSON* root = cJSON_Parse(json_str.c_str());
-    if (!root) {
-        ESP_LOGE(TAG, "Failed to parse HTTP messages JSON");
+    cJSON* item = cJSON_Parse(json_str.c_str());
+    if (!item) {
+        ESP_LOGE(TAG, "Failed to parse HTTP message at [%zu,%zu]", row, col);
+#ifdef DEBUG
+        ESP_LOGI(TAG, "[EXIT] parseHttpMessage - parse failed");
+#endif
         return;
     }
     
-    int array_size = cJSON_GetArraySize(root);
-    for (int i = 0; i < array_size; i++) {
-        cJSON* item = cJSON_GetArrayItem(root, i);
-        
-        cJSON* name = cJSON_GetObjectItem(item, "name");
-        cJSON* url = cJSON_GetObjectItem(item, "url");
-        cJSON* method = cJSON_GetObjectItem(item, "method");
-        cJSON* body = cJSON_GetObjectItem(item, "body");
-        cJSON* headers_array = cJSON_GetObjectItem(item, "headers");
-        cJSON* timeout = cJSON_GetObjectItem(item, "timeout_ms");
-        
-        if (name && url && method) {
-            std::vector<std::string> headers;
-            if (headers_array && cJSON_IsArray(headers_array)) {
-                int header_count = cJSON_GetArraySize(headers_array);
-                for (int j = 0; j < header_count; j++) {
-                    cJSON* header = cJSON_GetArrayItem(headers_array, j);
-                    if (cJSON_IsString(header)) {
-                        headers.push_back(cJSON_GetStringValue(header));
-                    }
+    cJSON* name = cJSON_GetObjectItem(item, "name");
+    cJSON* url = cJSON_GetObjectItem(item, "url");
+    cJSON* method = cJSON_GetObjectItem(item, "method");
+    cJSON* body = cJSON_GetObjectItem(item, "body");
+    cJSON* headers_array = cJSON_GetObjectItem(item, "headers");
+    cJSON* timeout = cJSON_GetObjectItem(item, "timeout_ms");
+    
+    if (name && url && method) {
+        std::vector<std::string> headers;
+        if (headers_array && cJSON_IsArray(headers_array)) {
+            int header_count = cJSON_GetArraySize(headers_array);
+            for (int j = 0; j < header_count; j++) {
+                cJSON* header = cJSON_GetArrayItem(headers_array, j);
+                if (cJSON_IsString(header)) {
+                    headers.push_back(cJSON_GetStringValue(header));
                 }
             }
-            
-            http_messages.emplace_back(
-                cJSON_GetStringValue(name),
-                cJSON_GetStringValue(url),
-                cJSON_GetStringValue(method),
-                body ? cJSON_GetStringValue(body) : "",
-                headers,
-                timeout ? static_cast<uint32_t>(timeout->valueint) : 10000
-            );
         }
+        
+        // Grow http_messages if needed
+        if (row >= http_messages.size()) {
+            http_messages.resize(row + 1);
+        }
+        
+        http_messages[row] = HttpMessage(
+            cJSON_GetStringValue(name),
+            cJSON_GetStringValue(url),
+            cJSON_GetStringValue(method),
+            body ? cJSON_GetStringValue(body) : "",
+            headers,
+            timeout ? static_cast<uint32_t>(timeout->valueint) : 10000
+        );
+        ESP_LOGI(TAG, "Parsed HTTP message at index %zu: %s", row, cJSON_GetStringValue(name));
     }
     
-    cJSON_Delete(root);
-    ESP_LOGI(TAG, "Parsed %zu HTTP messages", http_messages.size());
+    cJSON_Delete(item);
 #ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] parseHttpMessages");
+    ESP_LOGI(TAG, "[EXIT] parseHttpMessage");
 #endif
 }
 
-void NetworkActionsComponent::parseWsMessages() {
+void NetworkActionsComponent::parseWsMessage(size_t row, size_t col) {
 #ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] parseWsMessages");
+    ESP_LOGI(TAG, "[ENTER] parseWsMessage - row: %zu, col: %zu", row, col);
 #endif
     auto* param = getStringParam("ws_messages");
     if (!param) {
+        ESP_LOGE(TAG, "ws_messages parameter not found");
+        return;
+    }
+    
+    const std::string& json_str = param->getValue(row, col);
+    if (json_str.empty()) {
 #ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] parseWsMessages - no param");
+        ESP_LOGI(TAG, "[EXIT] parseWsMessage - empty string");
 #endif
         return;
     }
     
-    const std::string& json_str = param->getValue(0, 0);
-    cJSON* root = cJSON_Parse(json_str.c_str());
-    if (!root) {
-        ESP_LOGE(TAG, "Failed to parse WebSocket messages JSON");
+    cJSON* item = cJSON_Parse(json_str.c_str());
+    if (!item) {
+        ESP_LOGE(TAG, "Failed to parse WebSocket message at [%zu,%zu]", row, col);
+#ifdef DEBUG
+        ESP_LOGI(TAG, "[EXIT] parseWsMessage - parse failed");
+#endif
         return;
     }
     
-    int array_size = cJSON_GetArraySize(root);
-    for (int i = 0; i < array_size; i++) {
-        cJSON* item = cJSON_GetArrayItem(root, i);
-        
-        cJSON* name = cJSON_GetObjectItem(item, "name");
-        cJSON* url = cJSON_GetObjectItem(item, "url");
-        cJSON* message = cJSON_GetObjectItem(item, "message");
-        cJSON* subprotocol = cJSON_GetObjectItem(item, "subprotocol");
-        cJSON* timeout = cJSON_GetObjectItem(item, "timeout_ms");
-        
-        if (name && url && message) {
-            ws_messages.emplace_back(
-                cJSON_GetStringValue(name),
-                cJSON_GetStringValue(url),
-                cJSON_GetStringValue(message),
-                subprotocol ? cJSON_GetStringValue(subprotocol) : "",
-                timeout ? static_cast<uint32_t>(timeout->valueint) : 10000
-            );
+    cJSON* name = cJSON_GetObjectItem(item, "name");
+    cJSON* url = cJSON_GetObjectItem(item, "url");
+    cJSON* message = cJSON_GetObjectItem(item, "message");
+    cJSON* subprotocol = cJSON_GetObjectItem(item, "subprotocol");
+    cJSON* timeout = cJSON_GetObjectItem(item, "timeout_ms");
+    
+    if (name && url && message) {
+        // Grow ws_messages if needed
+        if (row >= ws_messages.size()) {
+            ws_messages.resize(row + 1);
         }
+        
+        ws_messages[row] = WsMessage(
+            cJSON_GetStringValue(name),
+            cJSON_GetStringValue(url),
+            cJSON_GetStringValue(message),
+            subprotocol ? cJSON_GetStringValue(subprotocol) : "",
+            timeout ? static_cast<uint32_t>(timeout->valueint) : 10000
+        );
+        ESP_LOGI(TAG, "Parsed WebSocket message at index %zu: %s", row, cJSON_GetStringValue(name));
     }
     
-    cJSON_Delete(root);
-    ESP_LOGI(TAG, "Parsed %zu WebSocket messages", ws_messages.size());
+    cJSON_Delete(item);
 #ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] parseWsMessages");
+    ESP_LOGI(TAG, "[EXIT] parseWsMessage");
 #endif
 }
 

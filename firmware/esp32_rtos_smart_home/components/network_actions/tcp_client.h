@@ -12,6 +12,9 @@ struct TcpMessage {
     std::string data;
     uint32_t timeout_ms;
     
+    // Default constructor
+    TcpMessage() : name(""), host(""), port(0), data(""), timeout_ms(5000) {}
+    
     TcpMessage(const std::string& name, const std::string& host, uint16_t port, 
                const std::string& data, uint32_t timeout_ms = 5000)
         : name(name), host(host), port(port), data(data), timeout_ms(timeout_ms) {}

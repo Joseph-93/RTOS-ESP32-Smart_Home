@@ -54,9 +54,9 @@ private:
     
     // Message loading and parsing helpers
     void loadAllMessageExamples();
-    void parseTcpMessages();
-    void parseHttpMessages();
-    void parseWsMessages();
+    void parseTcpMessage(size_t row, size_t col);
+    void parseHttpMessage(size_t row, size_t col);
+    void parseWsMessage(size_t row, size_t col);
     
     // Action registration
     void registerActions();

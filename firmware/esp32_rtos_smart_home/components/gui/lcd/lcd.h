@@ -9,7 +9,7 @@ extern "C" {
 // LCD Display pins
 #define LCD_PIN_DC   2   // Data/Command
 #define LCD_PIN_RST  4   // Reset
-#define LCD_PIN_BL   15  // Backlight
+#define LCD_PIN_BL   25  // Backlight (DAC1)
 
 // VSPI pins
 #define PIN_NUM_MISO 19
@@ -26,6 +26,18 @@ extern "C" {
  * @return Panel handle on success, NULL on failure
  */
 esp_lcd_panel_handle_t lcd_init(void);
+
+/**
+ * @brief Set LCD backlight brightness using DAC
+ * @param brightness Brightness level (0-100)
+ */
+void lcd_set_brightness(uint8_t brightness);
+
+/**
+ * @brief Get current LCD backlight brightness
+ * @return Current brightness level (0-100)
+ */
+uint8_t lcd_get_brightness(void);
 
 #ifdef __cplusplus
 }
