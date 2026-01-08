@@ -35,7 +35,7 @@ void LightSensorComponent::initialize() {
     addIntParam("current_light_level", 1, 1, 0, 4095);
 
     BaseType_t result = xTaskCreate(
-        LightSensorComponent::lightSensorTaskFunc,
+        LightSensorComponent::lightSensorTaskWrapper,
         "light_sensor_task",
         8192, // Stack depth - increased due to callback chain and logging
         this, // Just send the pointer to this component
@@ -63,7 +63,7 @@ void LightSensorComponent::initialize() {
     if (light_sensor_timer_handle == nullptr) {
         ESP_LOGE(TAG, "Failed to create light sensor timer");
     } else {
-        BaseType_t result = xTimerStart(light_sensor_timer_handle, 0);
+        result = xTimerStart(light_sensor_timer_handle, 0);
         if (result != pdPASS) {
             ESP_LOGE(TAG, "Failed to start light sensor timer");
         } else {
@@ -79,13 +79,13 @@ void LightSensorComponent::initialize() {
 }
 
 // Static task entry point - required for FreeRTOS task creation
-void LightSensorComponent::lightSensorTaskFunc(void* pvParameters) {
+void LightSensorComponent::lightSensorTaskWrapper(void* pvParameters) {
     LightSensorComponent* sensor = static_cast<LightSensorComponent*>(pvParameters);
-    sensor->runLightSensorTask();
+    sensor->lightSensorTask();
 }
 
 // Instance method containing the actual task loop and logic
-void LightSensorComponent::runLightSensorTask() {
+void LightSensorComponent::lightSensorTask() {
     ESP_LOGI(TAG, "Light sensor task started");
     
     auto* param = getIntParam("current_light_level");
@@ -105,24 +105,6 @@ void LightSensorComponent::runLightSensorTask() {
         // Update the parameter
         if (param) {
             param->setValue(0, 0, inverted_value);
-        }
-
-        // Calculate and set brightness
-        if (param && gui_component) {
-            int light_level = param->getValue(0, 0);
-            
-            // Map 0-4095 to 0-100 brightness percentage
-            // New nonlinear mapping: x^(1/4)*6.25+50
-            // 50 is baseline brightness. 6.25 scales to 100. x^1/4 is for response curve.
-            int brightness = static_cast<int>(pow(light_level, 0.25) * 6.25 + 50);
-            
-            ESP_LOGI(TAG, "Light level: %d -> Setting brightness to: %d%%", light_level, brightness);
-            
-            // Update GUI brightness parameter
-            auto* brightness_param = gui_component->getIntParam("lcd_brightness");
-            if (brightness_param) {
-                brightness_param->setValue(0, 0, brightness);
-            }
         }
     }
 }

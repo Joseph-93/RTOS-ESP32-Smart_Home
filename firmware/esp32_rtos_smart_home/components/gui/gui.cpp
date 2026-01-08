@@ -138,10 +138,81 @@ void GUIComponent::initialize() {
         brightness_param->setValue(0, 0, 100);
     }
 
+    // Create GUI status task and its timer for lower-priority operations
+    BaseType_t result = xTaskCreate(
+        GUIComponent::guiStatusTaskWrapper,
+        "gui_status_task",
+        4096, // Stack depth
+        this,
+        tskIDLE_PRIORITY + 1,
+        &gui_status_task_handle
+    );
+    if (result != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create GUI status task");
+    } else {
+        ESP_LOGI(TAG, "GUI status task created successfully");
+    }
+
+    gui_status_timer_handle = xTimerCreate(
+        "gui_status_timer",
+        pdMS_TO_TICKS(100), // 100 millisecond interval
+        pdTRUE,              // Auto-reload
+        this,                // Pass 'this' as timer ID so we can access it in callback
+        [](TimerHandle_t timer) {
+            // Get the GUIComponent pointer from timer ID
+            static int count = 0;
+            if (count % 10 == 0) {
+                ESP_LOGI(TAG, "GUI status timer callback - notifying task");
+            }
+            GUIComponent* gui = static_cast<GUIComponent*>(pvTimerGetTimerID(timer));
+            xTaskNotifyGive(gui->gui_status_task_handle);
+            count++;
+        }
+    );
+
+    result = xTimerStart(gui_status_timer_handle, 0);
+    if (result != pdPASS) {
+        ESP_LOGE(TAG, "Failed to start GUI status timer");
+    } else {
+        ESP_LOGI(TAG, "GUI status timer started successfully");
+    }
+
     initialized = true;
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] GUIComponent::initialize");
 #endif
+}
+
+void GUIComponent::guiStatusTaskWrapper(void* pvParameters) {
+    GUIComponent* gui_component = static_cast<GUIComponent*>(pvParameters);
+    gui_component->guiStatusTask();
+}
+
+void GUIComponent::guiStatusTask() {
+    ESP_LOGI(TAG, "GUI status task started");
+    
+    while (true) {
+        // Wait for notification from timer
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        
+        // Calculate and set brightness
+        if (light_sensor_current_light_level) {
+            int light_level = light_sensor_current_light_level->getValue(0, 0);
+            
+            // Map 0-4095 to 0-100 brightness percentage
+            // New nonlinear mapping: x^(1/4)*6.25+50
+            // 50 is baseline brightness. 6.25 scales to 100. x^1/4 is for response curve.
+            int brightness = static_cast<int>(pow(light_level, 0.25) * 6.25 + 50);
+            
+            ESP_LOGI(TAG, "Light level: %d -> Setting brightness to: %d%%", light_level, brightness);
+            
+            // Update GUI brightness parameter
+            auto* brightness_param = this->getIntParam("lcd_brightness");
+            if (brightness_param) {
+                brightness_param->setValue(0, 0, brightness);
+            }
+        }
+    }
 }
 
 void GUIComponent::registerComponent(Component* component) {
@@ -155,7 +226,9 @@ void GUIComponent::registerComponent(Component* component) {
 #endif
         return;
     }
-    
+    if (component->getName() == "LightSensor") {
+        light_sensor_current_light_level = component->getIntParam("current_light_level");
+    }
     registered_components.push_back(component);
     ESP_LOGI(TAG, "Registered component: %s", component->getName().c_str());
 #ifdef DEBUG

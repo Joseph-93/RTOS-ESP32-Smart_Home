@@ -33,6 +33,10 @@ public:
     // Ensure a node's screen is created (lazy creation)
     void ensureScreenCreated(MenuNode* node);
 
+    // Task function for lower-priority gui operations
+    static void guiStatusTaskWrapper(void* pvParameters);
+    void guiStatusTask();
+
 private:
     // Menu tree root
     MenuNode* root_node;
@@ -40,6 +44,10 @@ private:
     
     // All registered components
     std::vector<Component*> registered_components;
+
+    IntParameter* light_sensor_current_light_level; // Pointer to light sensor param for brightness adjustment
+    TaskHandle_t gui_status_task_handle = nullptr;
+    TimerHandle_t gui_status_timer_handle = nullptr;
     
     // All menu nodes (for memory management)
     std::vector<MenuNode*> all_nodes;

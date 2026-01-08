@@ -17,10 +17,10 @@ public:
     void setGuiComponent(Component* gui) { gui_component = gui; }
     
     // Static task entry point for FreeRTOS
-    static void lightSensorTaskFunc(void* pvParameters);
+    static void lightSensorTaskWrapper(void* pvParameters);
     
     // Instance method that runs the task loop
-    void runLightSensorTask();
+    void lightSensorTask();
 
 private:
     // Add private members here as needed
