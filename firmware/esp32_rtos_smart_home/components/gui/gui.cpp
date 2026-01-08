@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/dac.h"
 #include <math.h>
 #include <algorithm>
 
@@ -116,6 +117,27 @@ void GUIComponent::initialize() {
     ESP_LOGI(TAG, "[ENTER] GUIComponent::initialize");
 #endif
     ESP_LOGI(TAG, "Initializing GUIComponent...");
+
+    // Add a brightness parameter to control LCD backlight
+    addIntParam("lcd_brightness", 1, 1, 0, 100);
+    auto* brightness_param = getIntParam("lcd_brightness");
+    if (brightness_param) {
+        brightness_param->setOnChange([this](size_t row, size_t col) {
+            auto* param = getIntParam("lcd_brightness");
+            if (param) {
+                int brightness = param->getValue(row, col);
+                // Map 0-100% to useful DAC range (26-64)
+                // Below 40% (DAC 26) was too dim, so start there
+                uint8_t dac_value = 26 + (brightness * 38) / 100;
+                ESP_LOGI(TAG, "Setting LCD brightness to %d%% (DAC: %d)", brightness, dac_value);
+                // Set DAC output on GPIO 25 (DAC channel 1)
+                dac_output_voltage(DAC_CHANNEL_1, dac_value);
+            }
+        });
+        // Set initial brightness to 100%
+        brightness_param->setValue(0, 0, 100);
+    }
+
     initialized = true;
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] GUIComponent::initialize");
@@ -155,9 +177,6 @@ void GUIComponent::buildMenuTree() {
     
     // For each registered component, create its menu subtree
     for (Component* comp : registered_components) {
-        // Skip GUI itself
-        if (comp == this) continue;
-        
         MenuNode* comp_node = createComponentNode(comp, root_node);
         root_node->children.push_back(comp_node);
     }
