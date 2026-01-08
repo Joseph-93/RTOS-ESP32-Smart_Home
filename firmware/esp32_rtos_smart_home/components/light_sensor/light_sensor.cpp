@@ -50,7 +50,7 @@ void LightSensorComponent::initialize() {
 
     light_sensor_timer_handle = xTimerCreate(
         "light_sensor_timer",
-        pdMS_TO_TICKS(1000), // 1 second interval
+        pdMS_TO_TICKS(50), // 50 millisecond interval
         pdTRUE,              // Auto-reload
         this,                // Pass 'this' as timer ID so we can access it in callback
         [](TimerHandle_t timer) {
