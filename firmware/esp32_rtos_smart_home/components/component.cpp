@@ -22,9 +22,6 @@ std::string Component::getName() const {
 }
 
 bool Component::isInitialized() const {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER/EXIT] isInitialized() - returning: %d", initialized);
-#endif
     return initialized;
 }
 

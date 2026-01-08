@@ -119,20 +119,18 @@ void GUIComponent::initialize() {
     ESP_LOGI(TAG, "Initializing GUIComponent...");
 
     // Add a brightness parameter to control LCD backlight
-    addIntParam("lcd_brightness", 1, 1, 0, 100);
-    auto* brightness_param = getIntParam("lcd_brightness");
+    addIntParam("desired_lcd_brightness", 1, 1, 0, 100); // desired target brightness 0-100%
+    addIntParam("current_lcd_brightness", 1, 1, 0, 100); // Read-only current brightness 0-100%
+    addIntParam("brighness_change_per_second", 1, 1, 10, 100); // How fast to change brightness (0-100% per second)
+    auto* brightness_param = getIntParam("current_lcd_brightness");
     if (brightness_param) {
         brightness_param->setOnChange([this](size_t row, size_t col, int val) {
-            auto* param = getIntParam("lcd_brightness");
-            if (param) {
-                int brightness = param->getValue(row, col);
-                // Map 0-100% to useful DAC range (26-64)
-                // Below 40% (DAC 26) was too dim, so start there
-                uint8_t dac_value = 26 + (brightness * 38) / 100;
-                ESP_LOGI(TAG, "Setting LCD brightness to %d%% (DAC: %d)", brightness, dac_value);
-                // Set DAC output on GPIO 25 (DAC channel 1)
-                dac_output_voltage(DAC_CHANNEL_1, dac_value);
-            }
+            int brightness = val;
+            // Map 0-100% to useful DAC range (26-64)
+            // Below 40% (DAC 26) was too dim, so start there
+            uint8_t dac_value = 26 + (brightness * 38) / 100;
+            // Set DAC output on GPIO 25 (DAC channel 1)
+            dac_output_voltage(DAC_CHANNEL_1, dac_value);
         });
         // Set initial brightness to 100%
         brightness_param->setValue(0, 0, 100);
@@ -160,13 +158,8 @@ void GUIComponent::initialize() {
         this,                // Pass 'this' as timer ID so we can access it in callback
         [](TimerHandle_t timer) {
             // Get the GUIComponent pointer from timer ID
-            static int count = 0;
-            if (count % 10 == 0) {
-                ESP_LOGI(TAG, "GUI status timer callback - notifying task");
-            }
             GUIComponent* gui = static_cast<GUIComponent*>(pvTimerGetTimerID(timer));
             xTaskNotifyGive(gui->gui_status_task_handle);
-            count++;
         }
     );
 
@@ -195,6 +188,15 @@ void GUIComponent::guiStatusTask() {
         // Wait for notification from timer
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         
+        if (!isInitialized()) {
+            continue;
+        }
+
+        // Collect all the parameters only once
+        static auto* desired_brightness_param = this->getIntParam("desired_lcd_brightness");
+        static auto* current_brightness_param = this->getIntParam("current_lcd_brightness");
+        static auto* change_rate_param = this->getIntParam("brighness_change_per_second");
+
         // Calculate and set brightness
         if (light_sensor_current_light_level) {
             int light_level = light_sensor_current_light_level->getValue(0, 0);
@@ -204,13 +206,30 @@ void GUIComponent::guiStatusTask() {
             // 50 is baseline brightness. 6.25 scales to 100. x^1/4 is for response curve.
             int brightness = static_cast<int>(pow(light_level, 0.25) * 6.25 + 50);
             
-            ESP_LOGI(TAG, "Light level: %d -> Setting brightness to: %d%%", light_level, brightness);
-            
             // Update GUI brightness parameter
-            auto* brightness_param = this->getIntParam("lcd_brightness");
-            if (brightness_param) {
-                brightness_param->setValue(0, 0, brightness);
+            if (desired_brightness_param) {
+                desired_brightness_param->setValue(0, 0, brightness);
             }
+        }
+
+        // Update the current brightness parameter to get closer to desired brightness
+        int current_brightness = current_brightness_param->getValue(0, 0);
+        int desired_brightness = desired_brightness_param->getValue(0, 0);
+        int change_rate = change_rate_param->getValue(0, 0)/10; // percent per second
+        if (current_brightness < desired_brightness) {
+            current_brightness += change_rate;
+            if (current_brightness > desired_brightness) {
+                current_brightness = desired_brightness;
+            }
+            ESP_LOGI(TAG, "Increasing brightness to %d%%", current_brightness);
+            current_brightness_param->setValue(0, 0, current_brightness);
+        } else if (current_brightness > desired_brightness) {
+            current_brightness -= change_rate;
+            if (current_brightness < desired_brightness) {
+                current_brightness = desired_brightness;
+            }
+            ESP_LOGI(TAG, "Decreasing brightness to %d%%", current_brightness);
+            current_brightness_param->setValue(0, 0, current_brightness);
         }
     }
 }

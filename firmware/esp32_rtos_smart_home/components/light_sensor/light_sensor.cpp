@@ -56,7 +56,6 @@ void LightSensorComponent::initialize() {
         [](TimerHandle_t timer) {
             // Get the LightSensorComponent pointer from timer ID
             LightSensorComponent* sensor = static_cast<LightSensorComponent*>(pvTimerGetTimerID(timer));
-            ESP_LOGI(TAG, "Light sensor timer callback - notifying task");
             xTaskNotifyGive(sensor->light_sensor_task_handle);
         });
     
@@ -93,8 +92,6 @@ void LightSensorComponent::lightSensorTask() {
     while (1) {
         // Wait for notification from timer (blocking)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        
-        ESP_LOGI(TAG, "Light sensor task woke up - reading sensor");
         
         // Read the light sensor on GPIO36 (ADC1_CHANNEL_0)
         int raw_value = adc1_get_raw(LIGHT_SENSOR_PIN);
