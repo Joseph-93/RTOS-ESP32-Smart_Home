@@ -202,9 +202,9 @@ void GUIComponent::guiStatusTask() {
             int light_level = light_sensor_current_light_level->getValue(0, 0);
             
             // Map 0-4095 to 0-100 brightness percentage
-            // New nonlinear mapping: x^(1/4)*6.25+50
-            // 50 is baseline brightness. 6.25 scales to 100. x^1/4 is for response curve.
-            int brightness = static_cast<int>(pow(light_level, 0.25) * 6.25 + 50);
+            // New nonlinear mapping: x^(1/4)*8.75+30
+            // 30 is baseline brightness. 8.75 scales to 100. x^1/4 is for response curve.
+            int brightness = static_cast<int>(pow(light_level, 0.25) * 8.75 + 30);
             
             // Update GUI brightness parameter
             if (desired_brightness_param) {
