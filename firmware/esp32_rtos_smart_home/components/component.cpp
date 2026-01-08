@@ -29,16 +29,16 @@ bool Component::isInitialized() const {
 }
 
 // Const getters
-const std::vector<IntParameter>& Component::getIntParams() const { return intParams; }
-const std::vector<FloatParameter>& Component::getFloatParams() const { return floatParams; }
-const std::vector<BoolParameter>& Component::getBoolParams() const { return boolParams; }
-const std::vector<StringParameter>& Component::getStringParams() const { return stringParams; }
+const std::vector<std::unique_ptr<IntParameter>>& Component::getIntParams() const { return intParams; }
+const std::vector<std::unique_ptr<FloatParameter>>& Component::getFloatParams() const { return floatParams; }
+const std::vector<std::unique_ptr<BoolParameter>>& Component::getBoolParams() const { return boolParams; }
+const std::vector<std::unique_ptr<StringParameter>>& Component::getStringParams() const { return stringParams; }
 
 // Non-const getters
-std::vector<IntParameter>& Component::getIntParams() { return intParams; }
-std::vector<FloatParameter>& Component::getFloatParams() { return floatParams; }
-std::vector<BoolParameter>& Component::getBoolParams() { return boolParams; }
-std::vector<StringParameter>& Component::getStringParams() { return stringParams; }
+std::vector<std::unique_ptr<IntParameter>>& Component::getIntParams() { return intParams; }
+std::vector<std::unique_ptr<FloatParameter>>& Component::getFloatParams() { return floatParams; }
+std::vector<std::unique_ptr<BoolParameter>>& Component::getBoolParams() { return boolParams; }
+std::vector<std::unique_ptr<StringParameter>>& Component::getStringParams() { return stringParams; }
 
 // Get methods
 IntParameter* Component::getIntParam(const std::string &paramName) {
@@ -46,11 +46,11 @@ IntParameter* Component::getIntParam(const std::string &paramName) {
     ESP_LOGI("Component", "[ENTER] getIntParam() - paramName: %s", paramName.c_str());
 #endif
     for (auto &p : intParams) {
-        if (p.getName() == paramName) {
+        if (p->getName() == paramName) {
 #ifdef DEBUG
             ESP_LOGI("Component", "[EXIT] getIntParam() - found");
 #endif
-            return &p;
+            return p.get();
         }
     }
 #ifdef DEBUG
@@ -64,11 +64,11 @@ FloatParameter* Component::getFloatParam(const std::string &paramName) {
     ESP_LOGI("Component", "[ENTER] getFloatParam() - paramName: %s", paramName.c_str());
 #endif
     for (auto &p : floatParams) {
-        if (p.getName() == paramName) {
+        if (p->getName() == paramName) {
 #ifdef DEBUG
             ESP_LOGI("Component", "[EXIT] getFloatParam() - found");
 #endif
-            return &p;
+            return p.get();
         }
     }
 #ifdef DEBUG
@@ -82,11 +82,11 @@ BoolParameter* Component::getBoolParam(const std::string &paramName) {
     ESP_LOGI("Component", "[ENTER] getBoolParam() - paramName: %s", paramName.c_str());
 #endif
     for (auto &p : boolParams) {
-        if (p.getName() == paramName) {
+        if (p->getName() == paramName) {
 #ifdef DEBUG
             ESP_LOGI("Component", "[EXIT] getBoolParam() - found");
 #endif
-            return &p;
+            return p.get();
         }
     }
 #ifdef DEBUG
@@ -100,11 +100,11 @@ StringParameter* Component::getStringParam(const std::string &paramName) {
     ESP_LOGI("Component", "[ENTER] getStringParam() - paramName: %s", paramName.c_str());
 #endif
     for (auto &p : stringParams) {
-        if (p.getName() == paramName) {
+        if (p->getName() == paramName) {
 #ifdef DEBUG
             ESP_LOGI("Component", "[EXIT] getStringParam() - found");
 #endif
-            return &p;
+            return p.get();
         }
     }
 #ifdef DEBUG
@@ -118,7 +118,7 @@ void Component::addIntParam(const std::string &paramName, size_t rows, size_t co
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addIntParam() - paramName: %s", paramName.c_str());
 #endif
-    intParams.emplace_back(paramName, rows, cols, min_val, max_val);
+    intParams.push_back(std::make_unique<IntParameter>(paramName, rows, cols, min_val, max_val));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addIntParam() - paramName: %s", paramName.c_str());
 #endif
@@ -128,7 +128,7 @@ void Component::addFloatParam(const std::string &paramName, size_t rows, size_t 
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addFloatParam() - paramName: %s", paramName.c_str());
 #endif
-    floatParams.emplace_back(paramName, rows, cols, min_val, max_val);
+    floatParams.push_back(std::make_unique<FloatParameter>(paramName, rows, cols, min_val, max_val));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addFloatParam() - paramName: %s", paramName.c_str());
 #endif
@@ -138,7 +138,7 @@ void Component::addBoolParam(const std::string &paramName, size_t rows, size_t c
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addBoolParam() - paramName: %s", paramName.c_str());
 #endif
-    boolParams.emplace_back(paramName, rows, cols);
+    boolParams.push_back(std::make_unique<BoolParameter>(paramName, rows, cols));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addBoolParam() - paramName: %s", paramName.c_str());
 #endif
@@ -148,7 +148,7 @@ void Component::addStringParam(const std::string &paramName, size_t rows, size_t
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addStringParam() - paramName: %s", paramName.c_str());
 #endif
-    stringParams.emplace_back(paramName, rows, cols);
+    stringParams.push_back(std::make_unique<StringParameter>(paramName, rows, cols));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addStringParam() - paramName: %s", paramName.c_str());
 #endif

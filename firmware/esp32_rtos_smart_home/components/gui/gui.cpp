@@ -122,7 +122,7 @@ void GUIComponent::initialize() {
     addIntParam("lcd_brightness", 1, 1, 0, 100);
     auto* brightness_param = getIntParam("lcd_brightness");
     if (brightness_param) {
-        brightness_param->setOnChange([this](size_t row, size_t col) {
+        brightness_param->setOnChange([this](size_t row, size_t col, int val) {
             auto* param = getIntParam("lcd_brightness");
             if (param) {
                 int brightness = param->getValue(row, col);
@@ -229,36 +229,36 @@ MenuNode* GUIComponent::createParametersNode(Component* component, MenuNode* par
     
     // Create child nodes for each parameter (structure only, no screens yet)
     for (auto& param : component->getIntParams()) {
-        MenuNode* param_node = new MenuNode(param.getName(), node, this);
+        MenuNode* param_node = new MenuNode(param->getName(), node, this);
         param_node->associated_component = component;
-        param_node->param_name = param.getName();
+        param_node->param_name = param->getName();
         param_node->param_type = "int";
         all_nodes.push_back(param_node);
         node->children.push_back(param_node);
     }
     
     for (auto& param : component->getFloatParams()) {
-        MenuNode* param_node = new MenuNode(param.getName(), node, this);
+        MenuNode* param_node = new MenuNode(param->getName(), node, this);
         param_node->associated_component = component;
-        param_node->param_name = param.getName();
+        param_node->param_name = param->getName();
         param_node->param_type = "float";
         all_nodes.push_back(param_node);
         node->children.push_back(param_node);
     }
     
     for (auto& param : component->getBoolParams()) {
-        MenuNode* param_node = new MenuNode(param.getName(), node, this);
+        MenuNode* param_node = new MenuNode(param->getName(), node, this);
         param_node->associated_component = component;
-        param_node->param_name = param.getName();
+        param_node->param_name = param->getName();
         param_node->param_type = "bool";
         all_nodes.push_back(param_node);
         node->children.push_back(param_node);
     }
     
     for (auto& param : component->getStringParams()) {
-        MenuNode* param_node = new MenuNode(param.getName(), node, this);
+        MenuNode* param_node = new MenuNode(param->getName(), node, this);
         param_node->associated_component = component;
-        param_node->param_name = param.getName();
+        param_node->param_name = param->getName();
         param_node->param_type = "string";
         all_nodes.push_back(param_node);
         node->children.push_back(param_node);

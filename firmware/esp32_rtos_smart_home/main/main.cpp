@@ -12,6 +12,7 @@
 #include "freertos/task.h"
 #include "gui.h"
 #include "network_actions.h"
+#include "light_sensor.h"
 #include "wifi_init.h"
 #include <vector>
 
@@ -24,6 +25,7 @@ static const char *TAG = "SmartHome";
 // Global component instances
 static GUIComponent gui_component;
 static NetworkActionsComponent network_component;
+static LightSensorComponent light_sensor_component;
 
 extern "C" void app_main(void)
 {
@@ -45,11 +47,16 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Initializing components...");
     network_component.initialize();
     gui_component.initialize();
+    light_sensor_component.initialize();
+    
+    // Connect light sensor to GUI so it can adjust brightness
+    light_sensor_component.setGuiComponent(&gui_component);
     
     // Register components with GUI
     ESP_LOGI(TAG, "Registering components with GUI...");
     gui_component.registerComponent(&gui_component);
     gui_component.registerComponent(&network_component);
+    gui_component.registerComponent(&light_sensor_component);
     
     // Initialize GUI hardware system (includes lcd and touch)
     gui_init();

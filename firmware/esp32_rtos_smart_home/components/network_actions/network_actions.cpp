@@ -40,13 +40,13 @@ void NetworkActionsComponent::initialize() {
     auto* ws_param = getStringParam("ws_messages");
     
     if (tcp_param) {
-        tcp_param->setOnChange([this](size_t row, size_t col) { this->parseTcpMessage(row, col); });
+        tcp_param->setOnChange([this](size_t row, size_t col, const std::string& val) { this->parseTcpMessage(row, col, val); });
     }
     if (http_param) {
-        http_param->setOnChange([this](size_t row, size_t col) { this->parseHttpMessage(row, col); });
+        http_param->setOnChange([this](size_t row, size_t col, const std::string& val) { this->parseHttpMessage(row, col, val); });
     }
     if (ws_param) {
-        ws_param->setOnChange([this](size_t row, size_t col) { this->parseWsMessage(row, col); });
+        ws_param->setOnChange([this](size_t row, size_t col, const std::string& val) { this->parseWsMessage(row, col, val); });
     }
     
     // NOW load all message examples into the parameters (will trigger callbacks)
@@ -128,7 +128,7 @@ void NetworkActionsComponent::loadAllMessageExamples() {
 
 // JSON parsing implementations
 
-void NetworkActionsComponent::parseTcpMessage(size_t row, size_t col) {
+void NetworkActionsComponent::parseTcpMessage(size_t row, size_t col, const std::string& val) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] parseTcpMessage - row: %zu, col: %zu", row, col);
 #endif
@@ -183,7 +183,7 @@ void NetworkActionsComponent::parseTcpMessage(size_t row, size_t col) {
 #endif
 }
 
-void NetworkActionsComponent::parseHttpMessage(size_t row, size_t col) {
+void NetworkActionsComponent::parseHttpMessage(size_t row, size_t col, const std::string& val) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] parseHttpMessage - row: %zu, col: %zu", row, col);
 #endif
@@ -251,7 +251,7 @@ void NetworkActionsComponent::parseHttpMessage(size_t row, size_t col) {
 #endif
 }
 
-void NetworkActionsComponent::parseWsMessage(size_t row, size_t col) {
+void NetworkActionsComponent::parseWsMessage(size_t row, size_t col, const std::string& val) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] parseWsMessage - row: %zu, col: %zu", row, col);
 #endif

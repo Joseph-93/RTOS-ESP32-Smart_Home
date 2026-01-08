@@ -54,9 +54,9 @@ private:
     
     // Message loading and parsing helpers
     void loadAllMessageExamples();
-    void parseTcpMessage(size_t row, size_t col);
-    void parseHttpMessage(size_t row, size_t col);
-    void parseWsMessage(size_t row, size_t col);
+    void parseTcpMessage(size_t row, size_t col, const std::string& val);
+    void parseHttpMessage(size_t row, size_t col, const std::string& val);
+    void parseWsMessage(size_t row, size_t col, const std::string& val);
     
     // Action registration
     void registerActions();
