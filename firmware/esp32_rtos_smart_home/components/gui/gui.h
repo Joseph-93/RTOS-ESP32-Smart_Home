@@ -37,6 +37,9 @@ public:
     static void guiStatusTaskWrapper(void* pvParameters);
     void guiStatusTask();
 
+    // LVGL touch callback (static trampoline)
+    static void lvgl_touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data);
+
 private:
     // Menu tree root
     MenuNode* root_node;
@@ -48,6 +51,7 @@ private:
     IntParameter* light_sensor_current_light_level; // Pointer to light sensor param for brightness adjustment
     TaskHandle_t gui_status_task_handle = nullptr;
     TimerHandle_t gui_status_timer_handle = nullptr;
+    TickType_t last_interaction_tick = 0;
     
     // All menu nodes (for memory management)
     std::vector<MenuNode*> all_nodes;
@@ -72,6 +76,9 @@ private:
     static void action_button_event_cb(lv_event_t* e);
     static void param_edit_button_event_cb(lv_event_t* e);
     static void param_save_button_event_cb(lv_event_t* e);
+    
+    // Touch reading implementation (non-static)
+    void handleTouchRead(lv_indev_data_t *data);
 };
 
 // MenuNode - represents a node in the menu tree
@@ -106,8 +113,9 @@ extern "C" {
 
 /**
  * @brief Initialize GUI subsystem (lcd, touch, and LVGL)
+ * @param gui_component The GUIComponent instance for touch callbacks
  */
-void gui_init(void);
+void gui_init(GUIComponent* gui_component);
 
 /**
  * @brief Create the main UI - now managed by GUIComponent

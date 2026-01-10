@@ -29,7 +29,8 @@ void NetworkActionsComponent::initialize() {
 #endif
     ESP_LOGI(TAG, "Initializing NetworkActionsComponent...");
     
-    // Create EMPTY parameters (size 0) - will grow as we append messages
+    // Create EMPTY parameters (0 rows) with 1 column - will grow as we append messages
+    // Need at least 1 column for appendValue to work (it divides by cols)
     addStringParam("tcp_messages", 0, 1);
     addStringParam("http_messages", 0, 1);
     addStringParam("ws_messages", 0, 1);

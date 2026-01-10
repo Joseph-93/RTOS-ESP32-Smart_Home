@@ -32,7 +32,7 @@ void LightSensorComponent::initialize() {
     adc1_config_channel_atten(LIGHT_SENSOR_PIN, ADC_ATTEN_DB_12);
 
     // Example: addIntParam("light_level", 1, 1, 0, 1023);
-    addIntParam("current_light_level", 1, 1, 0, 4095);
+    addIntParam("current_light_level", 1, 1, 0, 4095, 4095);
 
     BaseType_t result = xTaskCreate(
         LightSensorComponent::lightSensorTaskWrapper,

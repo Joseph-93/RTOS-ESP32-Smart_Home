@@ -59,7 +59,7 @@ extern "C" void app_main(void)
     gui_component.registerComponent(&light_sensor_component);
     
     // Initialize GUI hardware system (includes lcd and touch)
-    gui_init();
+    gui_init(&gui_component);
     
     // Request UI creation (will be done by LVGL task)
     gui_create_ui(&gui_component);

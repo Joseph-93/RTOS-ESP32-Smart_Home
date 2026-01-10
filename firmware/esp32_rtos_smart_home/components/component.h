@@ -20,7 +20,7 @@ inline const char *PARAM_TAG = "Parameter";
 template<typename T>
 class Parameter {
 public:
-    Parameter(const std::string &name, size_t rows, size_t cols, T min_val = T(), T max_val = T())
+    Parameter(const std::string &name, size_t rows, size_t cols, T min_val = T(), T max_val = T(), T default_val = T())
         : name(name), rows(rows), cols(cols), min_value(min_val), max_value(max_val), 
           onChange(nullptr) {
         
@@ -41,6 +41,11 @@ public:
         if (mutex == nullptr) {
             ESP_LOGE(PARAM_TAG, "Parameter '%s': Failed to create mutex!", name.c_str());
             assert(false && "Mutex creation failed");
+        }
+
+        // Initialize data with default value
+        for (size_t i = 0; i < total_elements; ++i) {
+            data[i] = default_val;
         }
         
         ESP_LOGI(PARAM_TAG, "Parameter '%s' allocated: %zux%zu (%zu bytes)", 
@@ -307,10 +312,10 @@ protected:
     std::vector<std::unique_ptr<BoolParameter>> boolParams;
     std::vector<std::unique_ptr<StringParameter>> stringParams;
     
-    void addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val = INT_MIN, int max_val = INT_MAX);
-    void addFloatParam(const std::string &paramName, size_t rows, size_t cols, float min_val = -FLT_MAX, float max_val = FLT_MAX);
-    void addBoolParam(const std::string &paramName, size_t rows, size_t cols);
-    void addStringParam(const std::string &paramName, size_t rows, size_t cols);
+    void addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val = INT_MIN, int max_val = INT_MAX, int default_val = 0);
+    void addFloatParam(const std::string &paramName, size_t rows, size_t cols, float min_val = -FLT_MAX, float max_val = FLT_MAX, float default_val = 0.0f);
+    void addBoolParam(const std::string &paramName, size_t rows, size_t cols, bool default_val = false);
+    void addStringParam(const std::string &paramName, size_t rows, size_t cols, const std::string &default_val = "");
     
     void addAction(const std::string& name, const std::string& description, 
                    std::function<bool(Component*)> callback);

@@ -111,41 +111,42 @@ StringParameter* Component::getStringParam(const std::string &paramName) {
 }
 
 // Protected add methods
-void Component::addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val, int max_val) {
+void Component::addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val, int max_val, int default_val) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addIntParam() - paramName: %s", paramName.c_str());
 #endif
-    intParams.push_back(std::make_unique<IntParameter>(paramName, rows, cols, min_val, max_val));
+    intParams.push_back(std::make_unique<IntParameter>(paramName, rows, cols, min_val, max_val, default_val));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addIntParam() - paramName: %s", paramName.c_str());
 #endif
 }
 
-void Component::addFloatParam(const std::string &paramName, size_t rows, size_t cols, float min_val, float max_val) {
+void Component::addFloatParam(const std::string &paramName, size_t rows, size_t cols, float min_val, float max_val, float default_val) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addFloatParam() - paramName: %s", paramName.c_str());
 #endif
-    floatParams.push_back(std::make_unique<FloatParameter>(paramName, rows, cols, min_val, max_val));
+    floatParams.push_back(std::make_unique<FloatParameter>(paramName, rows, cols, min_val, max_val, default_val));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addFloatParam() - paramName: %s", paramName.c_str());
 #endif
 }
 
-void Component::addBoolParam(const std::string &paramName, size_t rows, size_t cols) {
+void Component::addBoolParam(const std::string &paramName, size_t rows, size_t cols, bool default_val) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addBoolParam() - paramName: %s", paramName.c_str());
 #endif
-    boolParams.push_back(std::make_unique<BoolParameter>(paramName, rows, cols));
+    // BoolParameter is Parameter<uint8_t>, so we need to pass min, max, and default as uint8_t
+    boolParams.push_back(std::make_unique<BoolParameter>(paramName, rows, cols, 0, 1, default_val ? 1 : 0));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addBoolParam() - paramName: %s", paramName.c_str());
 #endif
 }
 
-void Component::addStringParam(const std::string &paramName, size_t rows, size_t cols) {
+void Component::addStringParam(const std::string &paramName, size_t rows, size_t cols, const std::string &default_val) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addStringParam() - paramName: %s", paramName.c_str());
 #endif
-    stringParams.push_back(std::make_unique<StringParameter>(paramName, rows, cols));
+    stringParams.push_back(std::make_unique<StringParameter>(paramName, rows, cols, default_val));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addStringParam() - paramName: %s", paramName.c_str());
 #endif

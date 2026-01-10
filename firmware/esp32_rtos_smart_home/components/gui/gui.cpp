@@ -119,9 +119,13 @@ void GUIComponent::initialize() {
     ESP_LOGI(TAG, "Initializing GUIComponent...");
 
     // Add a brightness parameter to control LCD backlight
-    addIntParam("desired_lcd_brightness", 1, 1, 0, 100); // desired target brightness 0-100%
-    addIntParam("current_lcd_brightness", 1, 1, 0, 100); // Read-only current brightness 0-100%
-    addIntParam("brighness_change_per_second", 1, 1, 10, 100); // How fast to change brightness (0-100% per second)
+    addIntParam("desired_lcd_brightness", 1, 1, 0, 100, 100); // desired target brightness 0-100%
+    addIntParam("current_lcd_brightness", 1, 1, 0, 100, 100); // Read-only current brightness 0-100%
+    addIntParam("brighness_change_per_second", 1, 1, 10, 100, 50); // How fast to change brightness (0-100% per second)
+    addIntParam("lcd_screen_timeout_seconds", 1, 1, 10, 600, 20); // Screen timeout in seconds
+    addBoolParam("lcd_screen_on", 1, 1, true); // If false, turn off screen (saves power)
+    addBoolParam("override_auto_brightness", 1, 1, false); // If true, disable auto brightness adjustment
+    addBoolParam("override_screen_timeout", 1, 1, false); // If true, disable screen timeout
     auto* brightness_param = getIntParam("current_lcd_brightness");
     if (brightness_param) {
         brightness_param->setOnChange([this](size_t row, size_t col, int val) {
@@ -184,39 +188,99 @@ void GUIComponent::guiStatusTaskWrapper(void* pvParameters) {
 void GUIComponent::guiStatusTask() {
     ESP_LOGI(TAG, "GUI status task started");
     
+    // Declare static param pointers (will be initialized on first run AFTER component is initialized)
+    static IntParameter* desired_brightness_param = nullptr;
+    static IntParameter* current_brightness_param = nullptr;
+    static IntParameter* change_rate_param = nullptr;
+    static IntParameter* screen_timeout_param = nullptr;
+    static BoolParameter* lcd_screen_on_param = nullptr;
+    static BoolParameter* override_auto_brightness_param = nullptr;
+    static BoolParameter* override_screen_timeout_param = nullptr;
+    static bool first_run = true;
+    
     while (true) {
         // Wait for notification from timer
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        // Initialize last interaction tick on first run
+        if (first_run) {
+            last_interaction_tick = xTaskGetTickCount();
+            first_run = false;
+        }
         
         if (!isInitialized()) {
             continue;
         }
 
-        // Collect all the parameters only once
-        static auto* desired_brightness_param = this->getIntParam("desired_lcd_brightness");
-        static auto* current_brightness_param = this->getIntParam("current_lcd_brightness");
-        static auto* change_rate_param = this->getIntParam("brighness_change_per_second");
+        // Initialize parameter pointers on first run (AFTER component is initialized)
+        if (!(desired_brightness_param && current_brightness_param && change_rate_param &&
+            screen_timeout_param && lcd_screen_on_param && override_auto_brightness_param && override_screen_timeout_param)) {
+            desired_brightness_param = this->getIntParam("desired_lcd_brightness");
+            current_brightness_param = this->getIntParam("current_lcd_brightness");
+            change_rate_param = this->getIntParam("brighness_change_per_second");
+            screen_timeout_param = this->getIntParam("lcd_screen_timeout_seconds");
+            lcd_screen_on_param = this->getBoolParam("lcd_screen_on");
+            override_auto_brightness_param = this->getBoolParam("override_auto_brightness");
+            override_screen_timeout_param = this->getBoolParam("override_screen_timeout");
+        }
 
-        // Calculate and set brightness
-        if (light_sensor_current_light_level) {
-            int light_level = light_sensor_current_light_level->getValue(0, 0);
-            
-            // Map 0-4095 to 0-100 brightness percentage
-            // New nonlinear mapping: x^(1/4)*8.75+30
-            // 30 is baseline brightness. 8.75 scales to 100. x^1/4 is for response curve.
-            int brightness = static_cast<int>(pow(light_level, 0.25) * 8.75 + 30);
-            
-            // Update GUI brightness parameter
+        // Handle screen timeout
+        if (override_screen_timeout_param && override_screen_timeout_param->getValue(0, 0) == false) {
+            TickType_t tick_delta = xTaskGetTickCount() - last_interaction_tick;
+            TickType_t timeout_ticks = pdMS_TO_TICKS(screen_timeout_param->getValue(0, 0) * 1000);
+            if (tick_delta >= timeout_ticks && lcd_screen_on_param) {
+                // Timeout reached - turn off screen
+                lcd_screen_on_param->setValue(0, 0, false);
+            }
+            else {
+                // Timeout not yet reached - ensure screen is on
+                lcd_screen_on_param->setValue(0, 0, true);
+            }
+        }
+
+        if (lcd_screen_on_param && lcd_screen_on_param->getValue(0, 0) == false) {
+            // Screen off - set brightness to 0
             if (desired_brightness_param) {
-                desired_brightness_param->setValue(0, 0, brightness);
+                desired_brightness_param->setValue(0, 0, 0);
+            }
+            ESP_LOGI(TAG, "Screen is off - skipping brightness adjustment");
+        }
+        else {
+            // Calculate and set desired brightness
+            if (light_sensor_current_light_level && override_auto_brightness_param && override_auto_brightness_param->getValue(0, 0) == false) { // light_sensor_current_light_level is a Parameter from LightSensor
+                int light_level = light_sensor_current_light_level->getValue(0, 0);
+                
+                // QUADRATIC MAPPING:
+                // New nonlinear mapping: x^(1/4)*8.75+30
+                // 30 is baseline brightness. 8.75 scales to 100. x^1/4 is for response curve.
+                // int brightness = static_cast<int>(pow(light_level, 0.25) * 8.75 + 30);
+
+                // LINEAR MAPPING:
+                // int brightness = (light_level * 100) / 4095;
+
+                // LINEAR MAPPING WITH BASELINE:
+                int baseline = 30; // Minimum brightness
+                int brightness = baseline + (light_level * (100 - baseline)) / 4095;
+                
+                // Update GUI brightness parameter
+                if (desired_brightness_param) {
+                    desired_brightness_param->setValue(0, 0, brightness);
+                }
             }
         }
 
         // Update the current brightness parameter to get closer to desired brightness
+        // NOTE: This should ALWAYS be triggered, as it is no longer CONTROL-LAW, but rather a CONTROL LOOP for smooth transitions!
         int current_brightness = current_brightness_param->getValue(0, 0);
         int desired_brightness = desired_brightness_param->getValue(0, 0);
         int change_rate = change_rate_param->getValue(0, 0)/10; // percent per second
-        if (current_brightness < desired_brightness) {
+        int brightness_diff = desired_brightness - current_brightness;
+        if (abs(brightness_diff) <= change_rate) {
+            // Do not allow deadband oscillation - snap to desired
+            current_brightness_param->setValue(0, 0, desired_brightness);
+            continue;
+        }
+        else if (current_brightness < desired_brightness) {
             current_brightness += change_rate;
             if (current_brightness > desired_brightness) {
                 current_brightness = desired_brightness;
@@ -1300,9 +1364,17 @@ static void create_touch_feedback(int16_t x, int16_t y) {
 #endif
 }
 
-// LVGL input device read callback
-static void lvgl_touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
-    // Note: No debug logging here - this is called very frequently!
+// LVGL input device read callback (static trampoline)
+void GUIComponent::lvgl_touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
+    // Retrieve the GUIComponent instance from user_data
+    GUIComponent* gui = static_cast<GUIComponent*>(drv->user_data);
+    if (gui) {
+        gui->handleTouchRead(data);
+    }
+}
+
+// Touch reading implementation (non-static member function)
+void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
     static uint16_t touchpad_x[1] = {0};
     static uint16_t touchpad_y[1] = {0};
     static uint8_t touchpad_cnt = 0;
@@ -1313,6 +1385,9 @@ static void lvgl_touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
     bool touched = esp_lcd_touch_get_coordinates(touch_handle_ref, touchpad_x, touchpad_y, NULL, &touchpad_cnt, 1);
     
     if (touched && touchpad_cnt > 0) {
+        // Update the last time a touch was detected (only when actually touched!)
+        last_interaction_tick = xTaskGetTickCount();
+        
         data->state = LV_INDEV_STATE_PRESSED;
         data->point.x = touchpad_x[0];
         data->point.y = touchpad_y[0];
@@ -1380,7 +1455,7 @@ static void lvgl_timer_task(void *arg) {
     }
 }
 
-void gui_init(void) {
+void gui_init(GUIComponent* gui_component) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] gui_init");
 #endif
@@ -1411,7 +1486,8 @@ void gui_init(void) {
     // Initialize LVGL input device driver (touch)
     lv_indev_drv_init(&lvgl_indev_drv);
     lvgl_indev_drv.type = LV_INDEV_TYPE_POINTER;
-    lvgl_indev_drv.read_cb = lvgl_touch_read_cb;
+    lvgl_indev_drv.read_cb = GUIComponent::lvgl_touch_read_cb;
+    lvgl_indev_drv.user_data = gui_component; // Store GUIComponent instance for callback
     lv_indev_drv_register(&lvgl_indev_drv);
     
     ESP_LOGI(TAG, "LVGL initialized");
