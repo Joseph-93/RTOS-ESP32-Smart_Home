@@ -57,6 +57,24 @@ void NetworkActionsComponent::initialize() {
     tcp_client.initialize();
     http_client.initialize();
     ws_client.initialize();
+
+    network_actions_queue = xQueueCreate(10, sizeof(NetworkActionQueueItem));
+    if (network_actions_queue == nullptr) {
+        ESP_LOGE(TAG, "Failed to create network actions queue");
+        assert(false && "Queue creation failed");
+    }
+    BaseType_t result = xTaskCreate(
+        network_actions_task,
+        "network_actions_task",
+        8192, // Stack depth
+        this, // Just send the pointer to this component
+        tskIDLE_PRIORITY + 1,
+        &network_actions_task_handle
+    );
+    if (result != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create network actions task");
+        assert(false && "Task creation failed");
+    }
     
     // Register actions for each message type
     registerActions();
@@ -67,6 +85,45 @@ void NetworkActionsComponent::initialize() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] NetworkActionsComponent::initialize");
 #endif
+}
+
+void NetworkActionsComponent::send_next_from_queue() {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[ENTER] send_next_from_queue");
+#endif
+    NetworkActionQueueItem item;
+    while (true) {
+        if (xQueueReceive(network_actions_queue, &item, portMAX_DELAY) == pdTRUE) {
+            bool result = false;
+            switch (item.protocol) {
+                case NetworkActionQueueItem::NetworkProtocol::TCP:
+                    if (item.message_index < tcp_messages.size()) {
+                        result = tcp_client.send(tcp_messages[item.message_index]);
+                    }
+                    break;
+                case NetworkActionQueueItem::NetworkProtocol::HTTP:
+                    if (item.message_index < http_messages.size()) {
+                        result = http_client.send(http_messages[item.message_index]);
+                    }
+                    break;
+                case NetworkActionQueueItem::NetworkProtocol::WebSocket:
+                    if (item.message_index < ws_messages.size()) {
+                        result = ws_client.send(ws_messages[item.message_index]);
+                    }
+                    break;
+            }
+            ESP_LOGI(TAG, "Sent network action (protocol: %d, index: %zu) - result: %d",
+                     static_cast<int>(item.protocol), item.message_index, result);
+        }
+        else {
+            ESP_LOGE(TAG, "Failed to receive from network actions queue");
+        }
+    }
+}
+
+void NetworkActionsComponent::network_actions_task(void* pvParameters) {
+    NetworkActionsComponent* network_actions_component = static_cast<NetworkActionsComponent*>(pvParameters);
+    network_actions_component->send_next_from_queue();
 }
 
 // Helper function to load all message examples from MessageExamples namespace into parameters
@@ -320,11 +377,15 @@ bool NetworkActionsComponent::sendTcp(size_t index) {
 #endif
         return false;
     }
-    bool result = tcp_client.send(tcp_messages[index]);
+    NetworkActionQueueItem item = {
+        NetworkActionQueueItem::NetworkProtocol::TCP,
+        index
+    };
+    BaseType_t result = xQueueSend(network_actions_queue, &item, 0); // Non-blocking
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] sendTcp - result: %d", result);
 #endif
-    return result;
+    return result == pdTRUE;
 }
 
 bool NetworkActionsComponent::sendHttp(size_t index) {
@@ -338,11 +399,15 @@ bool NetworkActionsComponent::sendHttp(size_t index) {
 #endif
         return false;
     }
-    bool result = http_client.send(http_messages[index]);
+    NetworkActionQueueItem item = {
+        NetworkActionQueueItem::NetworkProtocol::HTTP,
+        index
+    };
+    BaseType_t result = xQueueSend(network_actions_queue, &item, 0); // Non-blocking
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] sendHttp - result: %d", result);
 #endif
-    return result;
+    return result == pdTRUE;
 }
 
 bool NetworkActionsComponent::sendWs(size_t index) {
@@ -356,11 +421,15 @@ bool NetworkActionsComponent::sendWs(size_t index) {
 #endif
         return false;
     }
-    bool result = ws_client.send(ws_messages[index]);
+    NetworkActionQueueItem item = {
+        NetworkActionQueueItem::NetworkProtocol::WebSocket,
+        index
+    };
+    BaseType_t result = xQueueSend(network_actions_queue, &item, 0); // Non-blocking
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] sendWs - result: %d", result);
 #endif
-    return result;
+    return result == pdTRUE;
 }
 
 // Index lookup helpers

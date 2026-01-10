@@ -40,24 +40,40 @@ public:
     const std::vector<TcpMessage>& getTcpMessages() const { return tcp_messages; }
     const std::vector<HttpMessage>& getHttpMessages() const { return http_messages; }
     const std::vector<WsMessage>& getWsMessages() const { return ws_messages; }
-    
+
 private:
+    struct NetworkActionQueueItem {
+        enum class NetworkProtocol {
+            TCP,
+            WebSocket,
+            HTTP
+        } protocol;
+        size_t message_index;
+    };
+
     // Client instances
     TcpClient tcp_client;
     HttpClient http_client;
     WsClient ws_client;
-    
+
     // Parsed message configurations
     std::vector<TcpMessage> tcp_messages;
     std::vector<HttpMessage> http_messages;
     std::vector<WsMessage> ws_messages;
-    
+
     // Message loading and parsing helpers
     void loadAllMessageExamples();
     void parseTcpMessage(size_t row, size_t col, const std::string& val);
     void parseHttpMessage(size_t row, size_t col, const std::string& val);
     void parseWsMessage(size_t row, size_t col, const std::string& val);
-    
+
+    // Queue management to make network sends non-blocking for other tasks
+    QueueHandle_t network_actions_queue;
+    TaskHandle_t network_actions_task_handle;
+
+    static void network_actions_task(void* pvParameters);
+    void send_next_from_queue();
+
     // Action registration
     void registerActions();
 };
