@@ -1379,6 +1379,7 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
     static uint16_t touchpad_y[1] = {0};
     static uint8_t touchpad_cnt = 0;
     static bool was_pressed = false;
+    static bool touch_started_while_screen_off = false;  // Track invalid touches
     
     // Poll touch controller
     esp_lcd_touch_read_data(touch_handle_ref);
@@ -1387,11 +1388,31 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
     if (touched && touchpad_cnt > 0) {
         // Update the last time a touch was detected (only when actually touched!)
         last_interaction_tick = xTaskGetTickCount();
+
+        static BoolParameter* lcd_screen_on_param = nullptr;
+        if (!lcd_screen_on_param) {
+            lcd_screen_on_param = getBoolParam("lcd_screen_on");
+        }
         
+        // On NEW touch (transition from not-pressed to pressed), check if screen is off
+        if (!was_pressed) {
+            if (lcd_screen_on_param && !lcd_screen_on_param->getValue(0,0)) {
+                touch_started_while_screen_off = true;  // Mark this entire touch as invalid
+            }
+        }
+        
+        // If this touch started while screen was off, block it for the entire duration
+        if (touch_started_while_screen_off) {
+            data->state = LV_INDEV_STATE_RELEASED;
+            was_pressed = true;  // Track we're in a touch, but don't process it
+            return;
+        }
+        
+        // Screen was on when touch started - process touch normally
         data->state = LV_INDEV_STATE_PRESSED;
         data->point.x = touchpad_x[0];
         data->point.y = touchpad_y[0];
-        
+
         // Create visual feedback on new press
         if (!was_pressed) {
             create_touch_feedback(touchpad_x[0], touchpad_y[0]);
@@ -1400,6 +1421,7 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
     } else {
         data->state = LV_INDEV_STATE_RELEASED;
         was_pressed = false;
+        touch_started_while_screen_off = false;  // Clear flag when touch ends
     }
 }
 
