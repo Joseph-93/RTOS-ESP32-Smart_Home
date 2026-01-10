@@ -7,10 +7,15 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/dac.h"
+#include "driver/gpio.h"
 #include <math.h>
 #include <algorithm>
 
 static const char *TAG = "GUI";
+
+// XPT2046 touch interrupt configuration
+#define TOUCH_IRQ_GPIO  GPIO_NUM_22
+static volatile bool touch_irq_triggered = false;
 
 // Display dimensions
 #define LCD_H_RES    320
@@ -243,11 +248,11 @@ void GUIComponent::guiStatusTask() {
             if (desired_brightness_param) {
                 desired_brightness_param->setValue(0, 0, 0);
             }
-            ESP_LOGI(TAG, "Screen is off - skipping brightness adjustment");
         }
         else {
-            // Calculate and set desired brightness
-            if (light_sensor_current_light_level && override_auto_brightness_param && override_auto_brightness_param->getValue(0, 0) == false) { // light_sensor_current_light_level is a Parameter from LightSensor
+            // Screen is ON - set desired brightness
+            if (light_sensor_current_light_level && override_auto_brightness_param && override_auto_brightness_param->getValue(0, 0) == false) {
+                // Auto-brightness enabled - calculate from light sensor
                 int light_level = light_sensor_current_light_level->getValue(0, 0);
                 
                 // QUADRATIC MAPPING:
@@ -265,6 +270,11 @@ void GUIComponent::guiStatusTask() {
                 // Update GUI brightness parameter
                 if (desired_brightness_param) {
                     desired_brightness_param->setValue(0, 0, brightness);
+                }
+            } else {
+                // Auto-brightness disabled - use manual control (default to 100% if currently 0)
+                if (desired_brightness_param && desired_brightness_param->getValue(0, 0) == 0) {
+                    desired_brightness_param->setValue(0, 0, 100);
                 }
             }
         }
@@ -1364,6 +1374,11 @@ static void create_touch_feedback(int16_t x, int16_t y) {
 #endif
 }
 
+// XPT2046 touch interrupt handler (PENIRQ is active low)
+static void IRAM_ATTR touch_irq_handler(void* arg) {
+    touch_irq_triggered = true;
+}
+
 // LVGL input device read callback (static trampoline)
 void GUIComponent::lvgl_touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
     // Retrieve the GUIComponent instance from user_data
@@ -1375,53 +1390,97 @@ void GUIComponent::lvgl_touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data
 
 // Touch reading implementation (non-static member function)
 void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
+    // State machine states
+    enum TouchState {
+        IDLE,           // No touch, waiting for interrupt
+        TOUCHING,       // Actively tracking a touch
+        BLOCKED         // Touch started while screen off - ignore entire gesture
+    };
+    
+    static TouchState state = IDLE;
     static uint16_t touchpad_x[1] = {0};
     static uint16_t touchpad_y[1] = {0};
     static uint8_t touchpad_cnt = 0;
-    static bool was_pressed = false;
-    static bool touch_started_while_screen_off = false;  // Track invalid touches
+    static BoolParameter* lcd_screen_on_param = nullptr;
     
-    // Poll touch controller
-    esp_lcd_touch_read_data(touch_handle_ref);
-    bool touched = esp_lcd_touch_get_coordinates(touch_handle_ref, touchpad_x, touchpad_y, NULL, &touchpad_cnt, 1);
+    // Initialize screen on parameter once
+    if (!lcd_screen_on_param) {
+        lcd_screen_on_param = getBoolParam("lcd_screen_on");
+    }
     
-    if (touched && touchpad_cnt > 0) {
-        // Update the last time a touch was detected (only when actually touched!)
-        last_interaction_tick = xTaskGetTickCount();
-
-        static BoolParameter* lcd_screen_on_param = nullptr;
-        if (!lcd_screen_on_param) {
-            lcd_screen_on_param = getBoolParam("lcd_screen_on");
-        }
-        
-        // On NEW touch (transition from not-pressed to pressed), check if screen is off
-        if (!was_pressed) {
-            if (lcd_screen_on_param && !lcd_screen_on_param->getValue(0,0)) {
-                touch_started_while_screen_off = true;  // Mark this entire touch as invalid
+    // STATE MACHINE
+    switch (state) {
+        case IDLE: {
+            // Waiting for touch interrupt
+            if (touch_irq_triggered) {
+                touch_irq_triggered = false;  // Clear flag immediately
+                
+                // Read touch controller
+                esp_lcd_touch_read_data(touch_handle_ref);
+                bool touched = esp_lcd_touch_get_coordinates(touch_handle_ref, touchpad_x, touchpad_y, NULL, &touchpad_cnt, 1);
+                
+                if (touched && touchpad_cnt > 0) {
+                    // Check if screen is off
+                    if (lcd_screen_on_param && !lcd_screen_on_param->getValue(0, 0)) {
+                        // Screen off - wake it up and block this touch gesture
+                        ESP_LOGI(TAG, "Touch detected while screen off - waking screen, blocking gesture");
+                        last_interaction_tick = xTaskGetTickCount();  // Wake screen by updating interaction time
+                        state = BLOCKED;
+                        data->state = LV_INDEV_STATE_RELEASED;
+                    } else {
+                        // Screen on - start tracking touch
+                        ESP_LOGI(TAG, "Touch started - entering TOUCHING state");
+                        state = TOUCHING;
+                        last_interaction_tick = xTaskGetTickCount();
+                        data->state = LV_INDEV_STATE_PRESSED;
+                        data->point.x = touchpad_x[0];
+                        data->point.y = touchpad_y[0];
+                        create_touch_feedback(touchpad_x[0], touchpad_y[0]);
+                    }
+                } else {
+                    // False alarm - stay IDLE
+                    data->state = LV_INDEV_STATE_RELEASED;
+                }
+            } else {
+                // No interrupt, no touch
+                data->state = LV_INDEV_STATE_RELEASED;
             }
+            break;
         }
-        
-        // If this touch started while screen was off, block it for the entire duration
-        if (touch_started_while_screen_off) {
+            
+        case TOUCHING: {
+            // Continue tracking touch
+            esp_lcd_touch_read_data(touch_handle_ref);
+            bool touched = esp_lcd_touch_get_coordinates(touch_handle_ref, touchpad_x, touchpad_y, NULL, &touchpad_cnt, 1);
+            
+            if (touched && touchpad_cnt > 0) {
+                // Still touching - update position
+                last_interaction_tick = xTaskGetTickCount();
+                data->state = LV_INDEV_STATE_PRESSED;
+                data->point.x = touchpad_x[0];
+                data->point.y = touchpad_y[0];
+            } else {
+                // Touch released - return to IDLE
+                state = IDLE;
+                data->state = LV_INDEV_STATE_RELEASED;
+            }
+            break;
+        }
+            
+        case BLOCKED: {
+            // Touch started while screen off - keep checking if released
+            esp_lcd_touch_read_data(touch_handle_ref);
+            bool still_touched = esp_lcd_touch_get_coordinates(touch_handle_ref, touchpad_x, touchpad_y, NULL, &touchpad_cnt, 1);
+            
+            if (!still_touched || touchpad_cnt == 0) {
+                // Touch released - return to IDLE
+                ESP_LOGI(TAG, "Blocked touch released - returning to IDLE");
+                state = IDLE;
+            }
+            // Always report released to LVGL (touch blocked)
             data->state = LV_INDEV_STATE_RELEASED;
-            was_pressed = true;  // Track we're in a touch, but don't process it
-            return;
+            break;
         }
-        
-        // Screen was on when touch started - process touch normally
-        data->state = LV_INDEV_STATE_PRESSED;
-        data->point.x = touchpad_x[0];
-        data->point.y = touchpad_y[0];
-
-        // Create visual feedback on new press
-        if (!was_pressed) {
-            create_touch_feedback(touchpad_x[0], touchpad_y[0]);
-        }
-        was_pressed = true;
-    } else {
-        data->state = LV_INDEV_STATE_RELEASED;
-        was_pressed = false;
-        touch_started_while_screen_off = false;  // Clear flag when touch ends
     }
 }
 
@@ -1484,6 +1543,21 @@ void gui_init(GUIComponent* gui_component) {
     // Initialize hardware components
     panel_handle_ref = lcd_init();
     touch_handle_ref = touch_init();
+    
+    // Configure XPT2046 touch interrupt on GPIO 22 (PENIRQ - active low)
+    gpio_config_t io_conf = {};
+    io_conf.pin_bit_mask = (1ULL << TOUCH_IRQ_GPIO);
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;  // PENIRQ needs pull-up
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_NEGEDGE;  // Interrupt on falling edge (touch detected)
+    gpio_config(&io_conf);
+    
+    // Install GPIO ISR service and add handler
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(TOUCH_IRQ_GPIO, touch_irq_handler, NULL);
+    
+    ESP_LOGI(TAG, "XPT2046 touch IRQ configured on GPIO %d", TOUCH_IRQ_GPIO);
     
     // Initialize LVGL
     lv_init();
