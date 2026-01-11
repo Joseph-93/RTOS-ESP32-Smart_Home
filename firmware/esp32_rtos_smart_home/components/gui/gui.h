@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../component.h"
+#include "component.h"
 #include "lvgl.h"
 #include <vector>
 #include <map>
@@ -16,6 +16,7 @@ public:
     GUIComponent();
     ~GUIComponent() override;
     
+    void setUpDependencies() override;
     void initialize() override;
     
     // Component registry - GUI needs to know about all components
@@ -39,19 +40,49 @@ public:
 
     // LVGL touch callback (static trampoline)
     static void lvgl_touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data);
+    
+    // Create pending notification overlay (called from LVGL task only)
+    void createPendingNotification();
+    
+    // Helper to send notification from other components (without exposing NotificationQueueItem)
+    void sendNotification(const char* message, bool is_error, int priority = 2, uint32_t display_ms = 3000) override;
+
+    static constexpr const char* TAG = "GUI";
+
+    // Queue and task for showing Notifications on the GUI
+    struct NotificationQueueItem {
+        char message[128];  // Fixed-size buffer to avoid std::string issues in queues
+        enum class NotificationLevel {
+            INFO,
+            WARNING,
+            ERROR
+        } level;
+        TickType_t ticks_to_display;
+        int priority;  // Higher = more important
+    };
+    QueueHandle_t notification_queue;
+    TaskHandle_t notification_task_handle;
+    static void notificationTaskWrapper(void* pvParameters);
+    void notificationTask();
+
+    // Pending notification (set by notification task, consumed by LVGL task)
+    volatile bool pending_notification = false;
+    NotificationQueueItem pending_notification_item;
 
 private:
     // Menu tree root
     MenuNode* root_node;
     MenuNode* current_node;
     
-    // All registered components
-    std::vector<Component*> registered_components;
-
     IntParameter* light_sensor_current_light_level; // Pointer to light sensor param for brightness adjustment
     TaskHandle_t gui_status_task_handle = nullptr;
     TimerHandle_t gui_status_timer_handle = nullptr;
     TickType_t last_interaction_tick = 0;
+    
+    // Notification overlay tracking
+    lv_obj_t* notification_overlay = nullptr;
+    int current_notification_priority = -1;  // -1 = no notification
+    TickType_t notification_expire_tick = 0;
     
     // All menu nodes (for memory management)
     std::vector<MenuNode*> all_nodes;
@@ -76,6 +107,14 @@ private:
     static void action_button_event_cb(lv_event_t* e);
     static void param_edit_button_event_cb(lv_event_t* e);
     static void param_save_button_event_cb(lv_event_t* e);
+    
+    // Static helpers for LVGL callbacks and utilities
+    static void init_gaussian_lookup();
+    static void set_opa(void *obj, int32_t v);
+    static void create_touch_feedback(int16_t x, int16_t y);
+    static void IRAM_ATTR touch_irq_handler(void* arg);
+    static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map);
+    static void lvgl_timer_task(void *arg);
     
     // Touch reading implementation (non-static)
     void handleTouchRead(lv_indev_data_t *data);

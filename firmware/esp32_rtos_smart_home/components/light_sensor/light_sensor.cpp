@@ -1,11 +1,10 @@
 #include "light_sensor.h"
+#include "component_graph.h"
 #include "esp_log.h"
 #include "driver/adc.h"
 #include <cmath>
 
 #define LIGHT_SENSOR_PIN ADC1_CHANNEL_0 // GPIO36
-
-static const char *TAG = "LightSensor";
 
 LightSensorComponent::LightSensorComponent() 
     : Component("LightSensor") {
@@ -20,6 +19,23 @@ LightSensorComponent::~LightSensorComponent() {
     ESP_LOGI(TAG, "[ENTER/EXIT] ~LightSensorComponent");
 #endif
     ESP_LOGI(TAG, "LightSensorComponent destroyed");
+}
+
+void LightSensorComponent::setUpDependencies() {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[ENTER/EXIT] LightSensorComponent::setUpDependencies");
+#endif
+    // Get reference to GUI component
+    if (g_component_graph) {
+        gui_component = g_component_graph->getComponent("GUI");
+        if (gui_component) {
+            ESP_LOGI(TAG, "GUI component reference obtained");
+        } else {
+            ESP_LOGW(TAG, "GUI component not found");
+        }
+    } else {
+        ESP_LOGE(TAG, "ComponentGraph not available!");
+    }
 }
 
 void LightSensorComponent::initialize() {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../component.h"
+#include "component.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
@@ -13,14 +13,16 @@ public:
     LightSensorComponent();
     ~LightSensorComponent() override;
     
+    void setUpDependencies() override;
     void initialize() override;
-    void setGuiComponent(Component* gui) { gui_component = gui; }
     
     // Static task entry point for FreeRTOS
     static void lightSensorTaskWrapper(void* pvParameters);
     
     // Instance method that runs the task loop
     void lightSensorTask();
+
+    static constexpr const char* TAG = "LightSensor";
 
 private:
     // Add private members here as needed

@@ -1,4 +1,5 @@
 #include "gui.h"
+#include "component_graph.h"
 #include "lcd/lcd.h"
 #include "touch/touch.h"
 #include "lvgl.h"
@@ -10,8 +11,6 @@
 #include "driver/gpio.h"
 #include <math.h>
 #include <algorithm>
-
-static const char *TAG = "GUI";
 
 // XPT2046 touch interrupt configuration
 #define TOUCH_IRQ_GPIO  GPIO_NUM_22
@@ -29,9 +28,8 @@ static lv_indev_drv_t lvgl_indev_drv;
 static esp_lcd_panel_handle_t panel_handle_ref = NULL;
 static esp_lcd_touch_handle_t touch_handle_ref = NULL;
 
-// UI creation signaling (for LVGL task)
+// GUI component instance for LVGL task
 static GUIComponent* g_gui_component = NULL;
-static volatile bool g_create_ui_requested = false;
 
 // Track feedback objects for manual deletion
 #define MAX_FEEDBACK_OBJS 10
@@ -49,7 +47,7 @@ static uint8_t gaussian_lookup[GAUSSIAN_SIZE * GAUSSIAN_SIZE];
 static bool gaussian_initialized = false;
 
 // Initialize gaussian lookup table at startup
-static void init_gaussian_lookup() {
+void GUIComponent::init_gaussian_lookup() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] init_gaussian_lookup");
 #endif
@@ -117,6 +115,26 @@ GUIComponent::~GUIComponent() {
 #endif
 }
 
+void GUIComponent::setUpDependencies() {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[ENTER] GUIComponent::setUpDependencies");
+#endif
+    // Get reference to light sensor parameter for auto-brightness
+    if (g_component_graph) {
+        light_sensor_current_light_level = g_component_graph->getIntParam("LightSensor", "current_light_level");
+        if (light_sensor_current_light_level) {
+            ESP_LOGI(TAG, "Successfully linked to LightSensor parameter");
+        } else {
+            ESP_LOGW(TAG, "LightSensor parameter not found - auto-brightness disabled");
+        }
+    } else {
+        ESP_LOGE(TAG, "ComponentGraph not available!");
+    }
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[EXIT] GUIComponent::setUpDependencies");
+#endif
+}
+
 void GUIComponent::initialize() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] GUIComponent::initialize");
@@ -179,10 +197,203 @@ void GUIComponent::initialize() {
         ESP_LOGI(TAG, "GUI status timer started successfully");
     }
 
+    // Initialize Notification Queue and Task
+    notification_queue = xQueueCreate(10, sizeof(NotificationQueueItem));
+    if (notification_queue == nullptr) {
+        ESP_LOGE(TAG, "Failed to create notification queue");
+        assert(false && "Queue creation failed");
+    }
+    result = xTaskCreate(
+        notificationTaskWrapper,
+        "notification_task",
+        4096, // Stack depth
+        this, // Pass 'this' pointer
+        tskIDLE_PRIORITY + 1,
+        &notification_task_handle
+    );
+    if (result != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create notification task");
+        assert(false && "Task creation failed");
+    }
+
+    // Initialize hardware components
+    panel_handle_ref = lcd_init();
+    touch_handle_ref = touch_init();
+    
+    // Configure XPT2046 touch interrupt on GPIO 22 (PENIRQ - active low)
+    gpio_config_t io_conf = {};
+    io_conf.pin_bit_mask = (1ULL << TOUCH_IRQ_GPIO);
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;  // PENIRQ needs pull-up
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_NEGEDGE;  // Interrupt on falling edge (touch detected)
+    gpio_config(&io_conf);
+    
+    // Install GPIO ISR service and add handler
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(TOUCH_IRQ_GPIO, GUIComponent::touch_irq_handler, NULL);
+    
+    ESP_LOGI(TAG, "XPT2046 touch IRQ configured on GPIO %d", TOUCH_IRQ_GPIO);
+    
+    // Initialize LVGL
+    lv_init();
+    
+    // Allocate LVGL draw buffers
+    size_t buffer_size = LCD_H_RES * 50; // 50 lines buffer
+    lv_color_t *buf1 = (lv_color_t *)heap_caps_malloc(buffer_size * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    lv_color_t *buf2 = (lv_color_t *)heap_caps_malloc(buffer_size * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    lv_disp_draw_buf_init(&lvgl_disp_buf, buf1, buf2, buffer_size);
+    
+    // Initialize gaussian lookup table
+    GUIComponent::init_gaussian_lookup();
+    
+    // Initialize LVGL display driver
+    lv_disp_drv_init(&lvgl_disp_drv);
+    lvgl_disp_drv.hor_res = LCD_H_RES;
+    lvgl_disp_drv.ver_res = LCD_V_RES;
+    lvgl_disp_drv.flush_cb = GUIComponent::lvgl_flush_cb;
+    lvgl_disp_drv.draw_buf = &lvgl_disp_buf;
+    lv_disp_drv_register(&lvgl_disp_drv);
+    
+    // Initialize LVGL input device driver (touch)
+    lv_indev_drv_init(&lvgl_indev_drv);
+    lvgl_indev_drv.type = LV_INDEV_TYPE_POINTER;
+    lvgl_indev_drv.read_cb = GUIComponent::lvgl_touch_read_cb;
+    lvgl_indev_drv.user_data = this; // Store GUIComponent instance for callback
+    lv_indev_drv_register(&lvgl_indev_drv);
+    
+    ESP_LOGI(TAG, "LVGL initialized");
+    ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
+    
+    // Create LVGL timer task with larger stack
+    xTaskCreate(GUIComponent::lvgl_timer_task, "lvgl_timer", 8192, NULL, 5, NULL);
+
+    // Store the component instance for the LVGL task
+    g_gui_component = this;
+
     initialized = true;
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] GUIComponent::initialize");
 #endif
+}
+
+void GUIComponent::notificationTask() {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "Notification task started");
+#endif
+    ESP_LOGI(TAG, "Notification task running - waiting for notifications...");
+    while (true) {
+        NotificationQueueItem item;
+        ESP_LOGI(TAG, "Waiting to receive from notification queue...");
+        if (xQueueReceive(notification_queue, &item, portMAX_DELAY) == pdTRUE) {
+            ESP_LOGI(TAG, "Received notification from queue: '%s', priority=%d, display_time=%lu ticks",
+                     item.message, item.priority, item.ticks_to_display);
+            
+            if (!isInitialized()) {
+                ESP_LOGW(TAG, "GUI not initialized yet - skipping notification");
+                continue;
+            }
+            
+            // Only process if higher or equal priority than current notification
+            if (current_notification_priority > item.priority) {
+                ESP_LOGI(TAG, "Skipping notification (priority %d < %d): %s", 
+                         item.priority, current_notification_priority, item.message);
+                continue;
+            }
+            
+            // Store notification data for LVGL task to process
+            // (LVGL objects can only be created from LVGL task - not thread-safe!)
+            pending_notification_item = item;
+            pending_notification = true;
+            ESP_LOGI(TAG, "Notification queued for display by LVGL task");
+        } else {
+            ESP_LOGE(TAG, "xQueueReceive failed unexpectedly");
+        }
+    }
+}
+
+void GUIComponent::notificationTaskWrapper(void* pvParameters) {
+    GUIComponent* gui_component = static_cast<GUIComponent*>(pvParameters);
+    gui_component->notificationTask();
+}
+
+void GUIComponent::createPendingNotification() {
+    if (!pending_notification) {
+        return;
+    }
+    
+    NotificationQueueItem item = pending_notification_item;
+    pending_notification = false;  // Clear flag
+    
+    ESP_LOGI(TAG, "LVGL task creating notification overlay...");
+    
+    // Delete existing notification if present
+    if (notification_overlay) {
+        ESP_LOGI(TAG, "Deleting existing notification overlay");
+        lv_obj_del(notification_overlay);
+        notification_overlay = nullptr;
+    }
+    
+    // Create notification overlay
+    notification_overlay = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(notification_overlay, 280, 80);
+    lv_obj_align(notification_overlay, LV_ALIGN_TOP_MID, 0, 20);
+    
+    // Set color based on notification level
+    lv_color_t bg_color;
+    switch (item.level) {
+        case NotificationQueueItem::NotificationLevel::ERROR:
+            bg_color = lv_color_make(150, 30, 30);  // Red
+            break;
+        case NotificationQueueItem::NotificationLevel::WARNING:
+            bg_color = lv_color_make(150, 100, 0);  // Orange
+            break;
+        case NotificationQueueItem::NotificationLevel::INFO:
+        default:
+            bg_color = lv_color_make(40, 40, 100);  // Blue
+            break;
+    }
+    
+    lv_obj_set_style_bg_color(notification_overlay, bg_color, 0);
+    lv_obj_set_style_border_color(notification_overlay, lv_color_white(), 0);
+    lv_obj_set_style_border_width(notification_overlay, 2, 0);
+    lv_obj_set_style_radius(notification_overlay, 10, 0);
+    lv_obj_clear_flag(notification_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    
+    // Add notification text
+    lv_obj_t* label = lv_label_create(notification_overlay);
+    lv_label_set_text(label, item.message);
+    lv_obj_set_style_text_color(label, lv_color_white(), 0);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(label, 260);
+    lv_obj_center(label);
+    
+    // Set expiration and priority
+    notification_expire_tick = xTaskGetTickCount() + item.ticks_to_display;
+    current_notification_priority = item.priority;
+    
+    ESP_LOGI(TAG, "✓ Notification displayed successfully (priority %d, expires in %lu ticks): %s", 
+             item.priority, item.ticks_to_display, item.message);
+}
+
+void GUIComponent::sendNotification(const char* message, bool is_error, int priority, uint32_t display_ms) {
+    if (!notification_queue) {
+        ESP_LOGW(TAG, "Notification queue not initialized");
+        return;
+    }
+    
+    NotificationQueueItem notif;
+    strncpy(notif.message, message, sizeof(notif.message) - 1);
+    notif.message[sizeof(notif.message) - 1] = '\0';
+    
+    notif.level = is_error ? 
+        NotificationQueueItem::NotificationLevel::ERROR :
+        NotificationQueueItem::NotificationLevel::INFO;
+    
+    notif.ticks_to_display = pdMS_TO_TICKS(display_ms);
+    notif.priority = priority;
+    
+    xQueueSend(notification_queue, &notif, 0);
 }
 
 void GUIComponent::guiStatusTaskWrapper(void* pvParameters) {
@@ -279,6 +490,14 @@ void GUIComponent::guiStatusTask() {
             }
         }
 
+        // Clean up expired notification
+        if (notification_overlay && xTaskGetTickCount() >= notification_expire_tick) {
+            lv_obj_del(notification_overlay);
+            notification_overlay = nullptr;
+            current_notification_priority = -1;
+            ESP_LOGI(TAG, "Notification expired");
+        }
+        
         // Update the current brightness parameter to get closer to desired brightness
         // NOTE: This should ALWAYS be triggered, as it is no longer CONTROL-LAW, but rather a CONTROL LOOP for smooth transitions!
         int current_brightness = current_brightness_param->getValue(0, 0);
@@ -308,27 +527,6 @@ void GUIComponent::guiStatusTask() {
     }
 }
 
-void GUIComponent::registerComponent(Component* component) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] GUIComponent::registerComponent - component: %p", component);
-#endif
-    if (!component) {
-        ESP_LOGE(TAG, "Attempted to register null component");
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] GUIComponent::registerComponent - null component");
-#endif
-        return;
-    }
-    if (component->getName() == "LightSensor") {
-        light_sensor_current_light_level = component->getIntParam("current_light_level");
-    }
-    registered_components.push_back(component);
-    ESP_LOGI(TAG, "Registered component: %s", component->getName().c_str());
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] GUIComponent::registerComponent");
-#endif
-}
-
 void GUIComponent::buildMenuTree() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] GUIComponent::buildMenuTree");
@@ -341,10 +539,21 @@ void GUIComponent::buildMenuTree() {
     all_nodes.push_back(root_node);
     current_node = root_node;
     
-    // For each registered component, create its menu subtree
-    for (Component* comp : registered_components) {
-        MenuNode* comp_node = createComponentNode(comp, root_node);
-        root_node->children.push_back(comp_node);
+    // Get all components from ComponentGraph
+    if (!g_component_graph) {
+        ESP_LOGE(TAG, "ComponentGraph not available!");
+        return;
+    }
+    
+    std::vector<std::string> component_names = g_component_graph->getComponentNames();
+    
+    // For each component in graph, create its menu subtree
+    for (const std::string& comp_name : component_names) {
+        Component* comp = g_component_graph->getComponent(comp_name);
+        if (comp) {
+            MenuNode* comp_node = createComponentNode(comp, root_node);
+            root_node->children.push_back(comp_node);
+        }
     }
     
     // Now create home screen with all component buttons
@@ -392,6 +601,13 @@ MenuNode* GUIComponent::createParametersNode(Component* component, MenuNode* par
     MenuNode* node = new MenuNode("Parameters", parent, this);
     node->associated_component = component;
     all_nodes.push_back(node);
+    
+    ESP_LOGI(TAG, "Component %s has %zu int, %zu float, %zu bool, %zu string params",
+             component->getName().c_str(),
+             component->getIntParams().size(),
+             component->getFloatParams().size(),
+             component->getBoolParams().size(),
+             component->getStringParams().size());
     
     // Create child nodes for each parameter (structure only, no screens yet)
     for (auto& param : component->getIntParams()) {
@@ -1319,12 +1535,12 @@ void GUIComponent::createActionsScreen(MenuNode* node, Component* component) {
 // ============================================================================
 
 // Custom animation setter for opacity
-static void set_opa(void *obj, int32_t v) {
+void GUIComponent::set_opa(void *obj, int32_t v) {
     lv_obj_set_style_opa((lv_obj_t *)obj, (lv_opa_t)v, 0);
 }
 
 // Create visual touch feedback at the given position
-static void create_touch_feedback(int16_t x, int16_t y) {
+void GUIComponent::create_touch_feedback(int16_t x, int16_t y) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] create_touch_feedback - x: %d, y: %d", x, y);
 #endif
@@ -1367,7 +1583,7 @@ static void create_touch_feedback(int16_t x, int16_t y) {
     lv_anim_set_var(&anim, canvas);
     lv_anim_set_values(&anim, LV_OPA_COVER, LV_OPA_TRANSP);
     lv_anim_set_time(&anim, 125);
-    lv_anim_set_exec_cb(&anim, set_opa);
+    lv_anim_set_exec_cb(&anim, GUIComponent::set_opa);
     lv_anim_start(&anim);
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] create_touch_feedback");
@@ -1375,7 +1591,7 @@ static void create_touch_feedback(int16_t x, int16_t y) {
 }
 
 // XPT2046 touch interrupt handler (PENIRQ is active low)
-static void IRAM_ATTR touch_irq_handler(void* arg) {
+void IRAM_ATTR GUIComponent::touch_irq_handler(void* arg) {
     touch_irq_triggered = true;
 }
 
@@ -1435,7 +1651,7 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
                         data->state = LV_INDEV_STATE_PRESSED;
                         data->point.x = touchpad_x[0];
                         data->point.y = touchpad_y[0];
-                        create_touch_feedback(touchpad_x[0], touchpad_y[0]);
+                        GUIComponent::create_touch_feedback(touchpad_x[0], touchpad_y[0]);
                     }
                 } else {
                     // False alarm - stay IDLE
@@ -1485,7 +1701,7 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
 }
 
 // LVGL flush callback
-static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map) {
+void GUIComponent::lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map) {
     int x1 = area->x1;
     int y1 = area->y1;
     int x2 = area->x2 + 1;
@@ -1496,21 +1712,19 @@ static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t 
 }
 
 // LVGL timer task
-static void lvgl_timer_task(void *arg) {
+void GUIComponent::lvgl_timer_task(void *arg) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] lvgl_timer_task");
 #endif
     ESP_LOGI(TAG, "LVGL timer task started");
     
+    // Main LVGL timer loop
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(10));
-
-        // Check if UI creation has been requested
-        if (g_create_ui_requested && g_gui_component) {
-            ESP_LOGI(TAG, "Creating UI from LVGL task...");
-            g_gui_component->buildMenuTree();
-            g_create_ui_requested = false;
-            ESP_LOGI(TAG, "UI creation complete");
+        
+        // Check if there's a pending notification to create
+        if (g_gui_component->pending_notification) {
+            g_gui_component->createPendingNotification();
         }
 
         // Increment LVGL tick by 10ms
@@ -1534,86 +1748,4 @@ static void lvgl_timer_task(void *arg) {
             }
         }
     }
-}
-
-void gui_init(GUIComponent* gui_component) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] gui_init");
-#endif
-    // Initialize hardware components
-    panel_handle_ref = lcd_init();
-    touch_handle_ref = touch_init();
-    
-    // Configure XPT2046 touch interrupt on GPIO 22 (PENIRQ - active low)
-    gpio_config_t io_conf = {};
-    io_conf.pin_bit_mask = (1ULL << TOUCH_IRQ_GPIO);
-    io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;  // PENIRQ needs pull-up
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    io_conf.intr_type = GPIO_INTR_NEGEDGE;  // Interrupt on falling edge (touch detected)
-    gpio_config(&io_conf);
-    
-    // Install GPIO ISR service and add handler
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(TOUCH_IRQ_GPIO, touch_irq_handler, NULL);
-    
-    ESP_LOGI(TAG, "XPT2046 touch IRQ configured on GPIO %d", TOUCH_IRQ_GPIO);
-    
-    // Initialize LVGL
-    lv_init();
-    
-    // Allocate LVGL draw buffers
-    size_t buffer_size = LCD_H_RES * 50; // 50 lines buffer
-    lv_color_t *buf1 = (lv_color_t *)heap_caps_malloc(buffer_size * sizeof(lv_color_t), MALLOC_CAP_DMA);
-    lv_color_t *buf2 = (lv_color_t *)heap_caps_malloc(buffer_size * sizeof(lv_color_t), MALLOC_CAP_DMA);
-    lv_disp_draw_buf_init(&lvgl_disp_buf, buf1, buf2, buffer_size);
-    
-    // Initialize gaussian lookup table
-    init_gaussian_lookup();
-    
-    // Initialize LVGL display driver
-    lv_disp_drv_init(&lvgl_disp_drv);
-    lvgl_disp_drv.hor_res = LCD_H_RES;
-    lvgl_disp_drv.ver_res = LCD_V_RES;
-    lvgl_disp_drv.flush_cb = lvgl_flush_cb;
-    lvgl_disp_drv.draw_buf = &lvgl_disp_buf;
-    lv_disp_drv_register(&lvgl_disp_drv);
-    
-    // Initialize LVGL input device driver (touch)
-    lv_indev_drv_init(&lvgl_indev_drv);
-    lvgl_indev_drv.type = LV_INDEV_TYPE_POINTER;
-    lvgl_indev_drv.read_cb = GUIComponent::lvgl_touch_read_cb;
-    lvgl_indev_drv.user_data = gui_component; // Store GUIComponent instance for callback
-    lv_indev_drv_register(&lvgl_indev_drv);
-    
-    ESP_LOGI(TAG, "LVGL initialized");
-    ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
-    
-    // Create LVGL timer task with larger stack
-    xTaskCreate(lvgl_timer_task, "lvgl_timer", 8192, NULL, 5, NULL);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] gui_init");
-#endif
-}
-
-void gui_create_ui(GUIComponent* gui_component) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] gui_create_ui - gui_component: %p", gui_component);
-#endif
-    if (!gui_component) {
-        ESP_LOGE(TAG, "gui_create_ui called with null GUIComponent");
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] gui_create_ui - null component");
-#endif
-        return;
-    }
-    
-    // Store the component and signal LVGL task to create UI
-    g_gui_component = gui_component;
-    g_create_ui_requested = true;
-    
-    ESP_LOGI(TAG, "UI creation requested (will be created by LVGL task)");
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] gui_create_ui");
-#endif
 }

@@ -15,6 +15,21 @@ static const char *TAG = "WiFi";
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
+static wifi_status_callback_t s_status_callback = NULL;
+static void* s_callback_user_data = NULL;
+
+void wifi_set_status_callback(wifi_status_callback_t callback, void* user_data) {
+    s_status_callback = callback;
+    s_callback_user_data = user_data;
+}
+
+bool wifi_is_connected(void) {
+    if (!s_wifi_event_group) {
+        return false;
+    }
+    EventBits_t bits = xEventGroupGetBits(s_wifi_event_group);
+    return (bits & WIFI_CONNECTED_BIT) != 0;
+}
 
 static void event_handler(void* arg, esp_event_base_t event_base,
                          int32_t event_id, void* event_data)
@@ -30,11 +45,21 @@ static void event_handler(void* arg, esp_event_base_t event_base,
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
         ESP_LOGI(TAG, "Connection to AP failed");
+        
+        // Notify callback of disconnection
+        if (s_status_callback) {
+            s_status_callback(false, s_callback_user_data);
+        };
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        
+        // Notify callback of connection
+        if (s_status_callback) {
+            s_status_callback(true, s_callback_user_data);
+        }
     }
 }
 

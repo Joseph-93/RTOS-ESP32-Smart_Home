@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../component.h"
+#include "component.h"
 #include "tcp_client.h"
 #include "http_client.h"
 #include "ws_client.h"
@@ -14,6 +14,7 @@ public:
     NetworkActionsComponent();
     ~NetworkActionsComponent() override;
     
+    void setUpDependencies() override;
     void initialize() override;
     
     // Send methods - return true on success, false on failure
@@ -40,6 +41,8 @@ public:
     const std::vector<TcpMessage>& getTcpMessages() const { return tcp_messages; }
     const std::vector<HttpMessage>& getHttpMessages() const { return http_messages; }
     const std::vector<WsMessage>& getWsMessages() const { return ws_messages; }
+
+    static constexpr const char* TAG = "NetworkActions";
 
 private:
     struct NetworkActionQueueItem {
@@ -73,8 +76,14 @@ private:
 
     static void network_actions_task(void* pvParameters);
     void send_next_from_queue();
+    
+    // WiFi event callback
+    static void wifi_event_callback(bool connected, void* user_data);
 
     // Action registration
     void registerActions();
+    
+    // Reference to GUI component for notifications (stored as base Component*)
+    Component* gui_component = nullptr;
 };
 #endif

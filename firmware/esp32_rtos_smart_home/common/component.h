@@ -14,7 +14,6 @@
 #include "freertos/semphr.h"
 
 // Inline to avoid multiple definition errors when included in multiple .cpp files
-inline const char *PARAM_TAG = "Parameter";
 
 // Template Parameter class - must be fully defined in header
 template<typename T>
@@ -29,7 +28,7 @@ public:
         size_t free_heap = esp_get_free_heap_size();
         
         if (total_bytes > free_heap / 2) {
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Allocation too large! Requested %zu bytes, only %zu free", 
+            ESP_LOGE(TAG, "Parameter '%s': Allocation too large! Requested %zu bytes, only %zu free", 
                      name.c_str(), total_bytes, free_heap);
             assert(false && "Parameter allocation would exhaust heap");
         }
@@ -39,7 +38,7 @@ public:
         // Create mutex for thread-safe access
         mutex = xSemaphoreCreateMutex();
         if (mutex == nullptr) {
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Failed to create mutex!", name.c_str());
+            ESP_LOGE(TAG, "Parameter '%s': Failed to create mutex!", name.c_str());
             assert(false && "Mutex creation failed");
         }
 
@@ -48,7 +47,7 @@ public:
             data[i] = default_val;
         }
         
-        ESP_LOGI(PARAM_TAG, "Parameter '%s' allocated: %zux%zu (%zu bytes)", 
+        ESP_LOGI(TAG, "Parameter '%s' allocated: %zux%zu (%zu bytes)", 
                  name.c_str(), rows, cols, total_bytes);
     }
     
@@ -68,13 +67,13 @@ public:
     
     T getValue(size_t row, size_t col) const { 
         if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Failed to take mutex for getValue", name.c_str());
+            ESP_LOGE(TAG, "Parameter '%s': Failed to take mutex for getValue", name.c_str());
             assert(false && "Mutex take failed");
         }
         
         if (row >= rows || col >= cols) {
             xSemaphoreGive(mutex);
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Out of bounds access [%zu,%zu] (size: %zux%zu)", 
+            ESP_LOGE(TAG, "Parameter '%s': Out of bounds access [%zu,%zu] (size: %zux%zu)", 
                      name.c_str(), row, col, rows, cols);
             assert(false && "Parameter getValue out of bounds");
         }
@@ -86,13 +85,13 @@ public:
     
     void setValue(size_t row, size_t col, T val) {
         if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Failed to take mutex for setValue", name.c_str());
+            ESP_LOGE(TAG, "Parameter '%s': Failed to take mutex for setValue", name.c_str());
             assert(false && "Mutex take failed");
         }
         
         if (row >= rows || col >= cols) {
             xSemaphoreGive(mutex);
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Out of bounds write [%zu,%zu] (size: %zux%zu)", 
+            ESP_LOGE(TAG, "Parameter '%s': Out of bounds write [%zu,%zu] (size: %zux%zu)", 
                      name.c_str(), row, col, rows, cols);
             assert(false && "Parameter setValue out of bounds");
         }
@@ -128,12 +127,12 @@ public:
         size_t new_row = 0;
         
         if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Failed to take mutex for appendValue", name.c_str());
+            ESP_LOGE(TAG, "Parameter '%s': Failed to take mutex for appendValue", name.c_str());
             assert(false && "Mutex take failed");
         }
         
 #ifdef DEBUG
-        ESP_LOGI(PARAM_TAG, "Parameter '%s': Appending value, growing from %zu rows to %zu rows", 
+        ESP_LOGI(TAG, "Parameter '%s': Appending value, growing from %zu rows to %zu rows", 
                  name.c_str(), rows, rows + 1);
 #endif
         data.push_back(value);
@@ -150,7 +149,7 @@ public:
     // Callback management
     void setOnChange(std::function<void(size_t, size_t, T)> callback) {
         if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Failed to take mutex for setOnChange", name.c_str());
+            ESP_LOGE(TAG, "Parameter '%s': Failed to take mutex for setOnChange", name.c_str());
             return;
         }
         onChange = callback;
@@ -167,13 +166,13 @@ public:
     
     std::vector<T> getRegion(size_t startRow, size_t startCol, size_t numRows, size_t numCols) const {
         if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Failed to take mutex for getRegion", name.c_str());
+            ESP_LOGE(TAG, "Parameter '%s': Failed to take mutex for getRegion", name.c_str());
             return std::vector<T>();
         }
         
         if (startRow + numRows > rows || startCol + numCols > cols) {
             xSemaphoreGive(mutex);
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Region out of bounds [%zu,%zu]+[%zu,%zu] (size: %zux%zu)", 
+            ESP_LOGE(TAG, "Parameter '%s': Region out of bounds [%zu,%zu]+[%zu,%zu] (size: %zux%zu)", 
                      name.c_str(), startRow, startCol, numRows, numCols, rows, cols);
             assert(false && "Parameter getRegion out of bounds");
         }
@@ -192,20 +191,20 @@ public:
     
     void setRegion(size_t startRow, size_t startCol, size_t numRows, size_t numCols, const std::vector<T>& values) {
         if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Failed to take mutex for setRegion", name.c_str());
+            ESP_LOGE(TAG, "Parameter '%s': Failed to take mutex for setRegion", name.c_str());
             assert(false && "Mutex take failed");
         }
         
         if (startRow + numRows > rows || startCol + numCols > cols) {
             xSemaphoreGive(mutex);
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Region out of bounds [%zu,%zu]+[%zu,%zu] (size: %zux%zu)", 
+            ESP_LOGE(TAG, "Parameter '%s': Region out of bounds [%zu,%zu]+[%zu,%zu] (size: %zux%zu)", 
                      name.c_str(), startRow, startCol, numRows, numCols, rows, cols);
             assert(false && "Parameter setRegion out of bounds");
         }
         
         if (values.size() != numRows * numCols) {
             xSemaphoreGive(mutex);
-            ESP_LOGE(PARAM_TAG, "Parameter '%s': Value count mismatch. Expected %zu, got %zu", 
+            ESP_LOGE(TAG, "Parameter '%s': Value count mismatch. Expected %zu, got %zu", 
                      name.c_str(), numRows * numCols, values.size());
             assert(false && "Parameter setRegion value count mismatch");
         }
@@ -235,6 +234,7 @@ public:
     }
 
 private:
+    static constexpr const char *TAG = "Parameter";
     std::string name;
     size_t rows, cols;
     std::vector<T> data;
@@ -279,6 +279,10 @@ public:
     
     virtual void initialize() = 0;
     
+    // Set up inter-component dependencies (called before initialize, after all components registered)
+    // Override this to get references to other components or their parameters
+    virtual void setUpDependencies() {}
+    
     std::string getName() const;
     bool isInitialized() const;
     
@@ -300,8 +304,14 @@ public:
     // Action management
     const std::vector<ComponentAction>& getActions() const;
     void invokeAction(const std::string& actionName);
+    
+    // Notification interface - override in GUI component to handle notifications
+    virtual void sendNotification(const char* message, bool is_error, int priority = 2, uint32_t display_ms = 3000) {
+        // Default implementation does nothing - only GUI implements this
+    }
 
 protected:
+    static constexpr const char *TAG = "Component";
     std::string name;
     bool initialized;
     std::vector<ComponentAction> actions;

@@ -4,19 +4,23 @@
  * Modular architecture with separate components:
  * - GUI: LVGL graphics library integration and UI (owns LCD and Touch)
  * - Network Actions: Network-related functionality
+ * - Light Sensor: Ambient light detection for auto-brightness
+ * 
+ * Uses ComponentGraph for centralized component management and inter-component communication
  */
 
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "component_graph.h"
 #include "gui.h"
 #include "network_actions.h"
 #include "light_sensor.h"
 #include "wifi_init.h"
 #include <vector>
 
-static const char *TAG = "SmartHome";
+static const char *TAG = "main";
 
 // TODO: Change these to your WiFi credentials
 #define WIFI_SSID      "its getting hotspot in here"
@@ -43,26 +47,24 @@ extern "C" void app_main(void)
         ESP_LOGI(TAG, "WiFi connected successfully!");
     }
     
-    // Initialize components
-    ESP_LOGI(TAG, "Initializing components...");
-    network_component.initialize();
-    gui_component.initialize();
-    light_sensor_component.initialize();
+    // Create ComponentGraph
+    ESP_LOGI(TAG, "Creating component graph...");
+    g_component_graph = new ComponentGraph();
     
-    // Connect light sensor to GUI so it can adjust brightness
-    light_sensor_component.setGuiComponent(&gui_component);
+    // Register all components with graph
+    ESP_LOGI(TAG, "Registering components with graph...");
+    g_component_graph->registerComponent(&gui_component);
+    g_component_graph->registerComponent(&network_component);
+    g_component_graph->registerComponent(&light_sensor_component);
     
-    // Register components with GUI
-    ESP_LOGI(TAG, "Registering components with GUI...");
-    gui_component.registerComponent(&gui_component);
-    gui_component.registerComponent(&network_component);
-    gui_component.registerComponent(&light_sensor_component);
+    // Initialize all components (graph handles setUpDependencies + initialize)
+    ESP_LOGI(TAG, "Initializing all components...");
+    g_component_graph->initializeAll();
     
-    // Initialize GUI hardware system (includes lcd and touch)
-    gui_init(&gui_component);
-    
-    // Request UI creation (will be done by LVGL task)
-    gui_create_ui(&gui_component);
+    // Now that ALL components are initialized, build the GUI menu tree
+    ESP_LOGI(TAG, "Building GUI menu tree...");
+    gui_component.buildMenuTree();
+    ESP_LOGI(TAG, "GUI menu tree built successfully");
     
     ESP_LOGI(TAG, "System initialized - ready!");
     

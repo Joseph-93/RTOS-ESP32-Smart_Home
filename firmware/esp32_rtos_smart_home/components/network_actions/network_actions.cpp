@@ -1,10 +1,13 @@
 #include "network_actions.h"
+#include "component_graph.h"
 #include "message_examples.h"
+#include "wifi_init.h"
 #include "esp_log.h"
 #include "cJSON.h"
 #include <algorithm>
 
-static const char *TAG = "NetworkActions";
+// Forward declaration to avoid including gui.h (which includes lvgl.h)
+class GUIComponent;
 
 // NetworkActionsComponent implementation
 
@@ -23,11 +26,32 @@ NetworkActionsComponent::~NetworkActionsComponent() {
     ESP_LOGI(TAG, "NetworkActionsComponent destroyed");
 }
 
+void NetworkActionsComponent::setUpDependencies() {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[ENTER/EXIT] NetworkActionsComponent::setUpDependencies");
+#endif
+    // Get reference to GUI component for sending notifications
+    if (g_component_graph) {
+        gui_component = g_component_graph->getComponent("GUI");
+        if (gui_component) {
+            ESP_LOGI(TAG, "GUI component reference obtained");
+        } else {
+            ESP_LOGW(TAG, "GUI component not found - notifications disabled");
+        }
+    } else {
+        ESP_LOGE(TAG, "ComponentGraph not available!");
+    }
+}
+
 void NetworkActionsComponent::initialize() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] NetworkActionsComponent::initialize");
 #endif
     ESP_LOGI(TAG, "Initializing NetworkActionsComponent...");
+    
+    // Add WiFi connection status parameter
+    addBoolParam("wifi_connected", 1, 1, false);
+    ESP_LOGI(TAG, "Added wifi_connected parameter");
     
     // Create EMPTY parameters (0 rows) with 1 column - will grow as we append messages
     // Need at least 1 column for appendValue to work (it divides by cols)
@@ -76,6 +100,16 @@ void NetworkActionsComponent::initialize() {
         assert(false && "Task creation failed");
     }
     
+    // Register WiFi event callback
+    wifi_set_status_callback(wifi_event_callback, this);
+    
+    // Check if WiFi is already connected (callback only fires on state changes)
+    // If we registered after WiFi already connected, manually invoke callback
+    if (wifi_is_connected()) {
+        ESP_LOGI(TAG, "WiFi already connected - updating parameter and sending notification");
+        wifi_event_callback(true, this);
+    }
+    
     // Register actions for each message type
     registerActions();
     
@@ -95,28 +129,66 @@ void NetworkActionsComponent::send_next_from_queue() {
     while (true) {
         if (xQueueReceive(network_actions_queue, &item, portMAX_DELAY) == pdTRUE) {
             bool result = false;
+            std::string protocol_name;
+            std::string message_name;
+            
             switch (item.protocol) {
                 case NetworkActionQueueItem::NetworkProtocol::TCP:
                     if (item.message_index < tcp_messages.size()) {
                         result = tcp_client.send(tcp_messages[item.message_index]);
+                        protocol_name = "TCP";
+                        message_name = tcp_messages[item.message_index].name;
                     }
                     break;
                 case NetworkActionQueueItem::NetworkProtocol::HTTP:
                     if (item.message_index < http_messages.size()) {
                         result = http_client.send(http_messages[item.message_index]);
+                        protocol_name = "HTTP";
+                        message_name = http_messages[item.message_index].name;
                     }
                     break;
                 case NetworkActionQueueItem::NetworkProtocol::WebSocket:
                     if (item.message_index < ws_messages.size()) {
                         result = ws_client.send(ws_messages[item.message_index]);
+                        protocol_name = "WebSocket";
+                        message_name = ws_messages[item.message_index].name;
                     }
                     break;
             }
             ESP_LOGI(TAG, "Sent network action (protocol: %d, index: %zu) - result: %d",
                      static_cast<int>(item.protocol), item.message_index, result);
+            
+            // Send notification to GUI directly
+            if (gui_component) {
+                // Create notification message
+                std::string msg = protocol_name + ": " + message_name + (result ? " ✓" : " ✗");
+                gui_component->sendNotification(msg.c_str(), !result, 2, 3000);
+            }
         }
         else {
             ESP_LOGE(TAG, "Failed to receive from network actions queue");
+        }
+    }
+}
+
+void NetworkActionsComponent::wifi_event_callback(bool connected, void* user_data) {
+    NetworkActionsComponent* self = static_cast<NetworkActionsComponent*>(user_data);
+    if (!self) return;
+    
+    // Update wifi_connected parameter
+    auto* wifi_param = self->getBoolParam("wifi_connected");
+    if (wifi_param) {
+        wifi_param->setValue(0, 0, connected);
+    }
+    
+    // Send notification to GUI
+    if (self->gui_component) {
+        if (connected) {
+            self->gui_component->sendNotification("WiFi Connected", false, 3, 3000);
+            ESP_LOGI(TAG, "WiFi connected - notification sent");
+        } else {
+            self->gui_component->sendNotification("WiFi Disconnected", true, 5, 5000);
+            ESP_LOGW(TAG, "WiFi disconnected - notification sent");
         }
     }
 }
