@@ -82,8 +82,6 @@ private:
 
     // Action registration
     void registerActions();
-    
-    // Reference to GUI component for notifications (stored as base Component*)
-    Component* gui_component = nullptr;
 };
-#endif
+#endif // __cplusplus
+

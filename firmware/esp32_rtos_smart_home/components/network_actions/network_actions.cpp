@@ -30,17 +30,7 @@ void NetworkActionsComponent::setUpDependencies() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER/EXIT] NetworkActionsComponent::setUpDependencies");
 #endif
-    // Get reference to GUI component for sending notifications
-    if (g_component_graph) {
-        gui_component = g_component_graph->getComponent("GUI");
-        if (gui_component) {
-            ESP_LOGI(TAG, "GUI component reference obtained");
-        } else {
-            ESP_LOGW(TAG, "GUI component not found - notifications disabled");
-        }
-    } else {
-        ESP_LOGE(TAG, "ComponentGraph not available!");
-    }
+    // No dependencies needed - notifications go through ComponentGraph
 }
 
 void NetworkActionsComponent::initialize() {
@@ -158,11 +148,10 @@ void NetworkActionsComponent::send_next_from_queue() {
             ESP_LOGI(TAG, "Sent network action (protocol: %d, index: %zu) - result: %d",
                      static_cast<int>(item.protocol), item.message_index, result);
             
-            // Send notification to GUI directly
-            if (gui_component) {
-                // Create notification message
-                std::string msg = protocol_name + ": " + message_name + (result ? " ✓" : " ✗");
-                gui_component->sendNotification(msg.c_str(), !result, 2, 3000);
+            // Send notification via ComponentGraph
+            if (g_component_graph) {
+                std::string msg = protocol_name + ": " + message_name + (result ? " OK" : " FAIL");
+                g_component_graph->sendNotification(msg.c_str(), !result, 2, 3000);
             }
         }
         else {
@@ -181,13 +170,13 @@ void NetworkActionsComponent::wifi_event_callback(bool connected, void* user_dat
         wifi_param->setValue(0, 0, connected);
     }
     
-    // Send notification to GUI
-    if (self->gui_component) {
+    // Send notification via ComponentGraph
+    if (g_component_graph) {
         if (connected) {
-            self->gui_component->sendNotification("WiFi Connected", false, 3, 3000);
+            g_component_graph->sendNotification("WiFi Connected", false, 3, 3000);
             ESP_LOGI(TAG, "WiFi connected - notification sent");
         } else {
-            self->gui_component->sendNotification("WiFi Disconnected", true, 5, 5000);
+            g_component_graph->sendNotification("WiFi Disconnected", true, 5, 5000);
             ESP_LOGW(TAG, "WiFi disconnected - notification sent");
         }
     }

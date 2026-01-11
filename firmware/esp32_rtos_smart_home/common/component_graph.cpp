@@ -6,10 +6,29 @@ ComponentGraph* g_component_graph = nullptr;
 
 ComponentGraph::ComponentGraph() {
     ESP_LOGI(TAG, "ComponentGraph created");
+    
+    // Create notification queues
+    notification_queue_gui = xQueueCreate(10, sizeof(NotificationQueueItem));
+    notification_queue_uart = xQueueCreate(20, sizeof(NotificationQueueItem));  // Larger queue for UART (no consumer yet)
+    
+    if (!notification_queue_gui || !notification_queue_uart) {
+        ESP_LOGE(TAG, "Failed to create notification queues");
+    } else {
+        ESP_LOGI(TAG, "Notification queues created (GUI: 10 items, UART: 20 items)");
+    }
 }
 
 ComponentGraph::~ComponentGraph() {
     ESP_LOGI(TAG, "ComponentGraph destroyed");
+    
+    // Delete notification queues
+    if (notification_queue_gui) {
+        vQueueDelete(notification_queue_gui);
+    }
+    if (notification_queue_uart) {
+        vQueueDelete(notification_queue_uart);
+    }
+    
     // Don't delete components - they're owned externally
     components.clear();
 }
@@ -101,4 +120,30 @@ std::vector<std::string> ComponentGraph::getComponentNames() const {
 
 bool ComponentGraph::hasComponent(const std::string& name) const {
     return components.find(name) != components.end();
+}
+
+void ComponentGraph::sendNotification(const char* message, bool is_error, int priority, uint32_t display_ms) {
+    if (!notification_queue_gui || !notification_queue_uart) {
+        ESP_LOGW(TAG, "Notification queues not initialized");
+        return;
+    }
+    
+    NotificationQueueItem notif;
+    strncpy(notif.message, message, sizeof(notif.message) - 1);
+    notif.message[sizeof(notif.message) - 1] = '\0';
+    
+    notif.level = is_error ? 
+        NotificationQueueItem::NotificationLevel::ERROR :
+        NotificationQueueItem::NotificationLevel::INFO;
+    
+    notif.ticks_to_display = pdMS_TO_TICKS(display_ms);
+    notif.priority = priority;
+    
+    // Send to GUI queue (blocking if full)
+    xQueueSend(notification_queue_gui, &notif, 0);
+    
+    // Send to UART queue (non-blocking, drop if full to prevent overflow since no consumer yet)
+    if (xQueueSend(notification_queue_uart, &notif, 0) != pdTRUE) {
+        // Queue full - silently drop (UART consumer doesn't exist yet)
+    }
 }

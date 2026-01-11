@@ -304,11 +304,6 @@ public:
     // Action management
     const std::vector<ComponentAction>& getActions() const;
     void invokeAction(const std::string& actionName);
-    
-    // Notification interface - override in GUI component to handle notifications
-    virtual void sendNotification(const char* message, bool is_error, int priority = 2, uint32_t display_ms = 3000) {
-        // Default implementation does nothing - only GUI implements this
-    }
 
 protected:
     static constexpr const char *TAG = "Component";

@@ -197,12 +197,7 @@ void GUIComponent::initialize() {
         ESP_LOGI(TAG, "GUI status timer started successfully");
     }
 
-    // Initialize Notification Queue and Task
-    notification_queue = xQueueCreate(10, sizeof(NotificationQueueItem));
-    if (notification_queue == nullptr) {
-        ESP_LOGE(TAG, "Failed to create notification queue");
-        assert(false && "Queue creation failed");
-    }
+    // Initialize Notification Task (reads from ComponentGraph notification queue)
     result = xTaskCreate(
         notificationTaskWrapper,
         "notification_task",
@@ -282,10 +277,22 @@ void GUIComponent::notificationTask() {
     ESP_LOGI(TAG, "Notification task started");
 #endif
     ESP_LOGI(TAG, "Notification task running - waiting for notifications...");
+    
+    if (!g_component_graph) {
+        ESP_LOGE(TAG, "ComponentGraph not available - notification task exiting");
+        return;
+    }
+    
+    QueueHandle_t queue = g_component_graph->getGuiNotificationQueue();
+    if (!queue) {
+        ESP_LOGE(TAG, "GUI notification queue not available - task exiting");
+        return;
+    }
+    
     while (true) {
-        NotificationQueueItem item;
+        ComponentGraph::NotificationQueueItem item;
         ESP_LOGI(TAG, "Waiting to receive from notification queue...");
-        if (xQueueReceive(notification_queue, &item, portMAX_DELAY) == pdTRUE) {
+        if (xQueueReceive(queue, &item, portMAX_DELAY) == pdTRUE) {
             ESP_LOGI(TAG, "Received notification from queue: '%s', priority=%d, display_time=%lu ticks",
                      item.message, item.priority, item.ticks_to_display);
             
@@ -322,7 +329,7 @@ void GUIComponent::createPendingNotification() {
         return;
     }
     
-    NotificationQueueItem item = pending_notification_item;
+    ComponentGraph::NotificationQueueItem item = pending_notification_item;
     pending_notification = false;  // Clear flag
     
     ESP_LOGI(TAG, "LVGL task creating notification overlay...");
@@ -342,15 +349,15 @@ void GUIComponent::createPendingNotification() {
     // Set color based on notification level
     lv_color_t bg_color;
     switch (item.level) {
-        case NotificationQueueItem::NotificationLevel::ERROR:
+        case ComponentGraph::NotificationQueueItem::NotificationLevel::ERROR:
             bg_color = lv_color_make(150, 30, 30);  // Red
             break;
-        case NotificationQueueItem::NotificationLevel::WARNING:
+        case ComponentGraph::NotificationQueueItem::NotificationLevel::WARNING:
             bg_color = lv_color_make(150, 100, 0);  // Orange
             break;
-        case NotificationQueueItem::NotificationLevel::INFO:
+        case ComponentGraph::NotificationQueueItem::NotificationLevel::INFO:
         default:
-            bg_color = lv_color_make(40, 40, 100);  // Blue
+            bg_color = lv_color_make(40, 100, 40);  // Blue
             break;
     }
     
@@ -371,29 +378,6 @@ void GUIComponent::createPendingNotification() {
     // Set expiration and priority
     notification_expire_tick = xTaskGetTickCount() + item.ticks_to_display;
     current_notification_priority = item.priority;
-    
-    ESP_LOGI(TAG, "✓ Notification displayed successfully (priority %d, expires in %lu ticks): %s", 
-             item.priority, item.ticks_to_display, item.message);
-}
-
-void GUIComponent::sendNotification(const char* message, bool is_error, int priority, uint32_t display_ms) {
-    if (!notification_queue) {
-        ESP_LOGW(TAG, "Notification queue not initialized");
-        return;
-    }
-    
-    NotificationQueueItem notif;
-    strncpy(notif.message, message, sizeof(notif.message) - 1);
-    notif.message[sizeof(notif.message) - 1] = '\0';
-    
-    notif.level = is_error ? 
-        NotificationQueueItem::NotificationLevel::ERROR :
-        NotificationQueueItem::NotificationLevel::INFO;
-    
-    notif.ticks_to_display = pdMS_TO_TICKS(display_ms);
-    notif.priority = priority;
-    
-    xQueueSend(notification_queue, &notif, 0);
 }
 
 void GUIComponent::guiStatusTaskWrapper(void* pvParameters) {

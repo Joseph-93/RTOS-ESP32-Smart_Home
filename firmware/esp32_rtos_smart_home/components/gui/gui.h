@@ -1,6 +1,7 @@
 #pragma once
 
 #include "component.h"
+#include "component_graph.h"
 #include "lvgl.h"
 #include <vector>
 #include <map>
@@ -43,31 +44,17 @@ public:
     
     // Create pending notification overlay (called from LVGL task only)
     void createPendingNotification();
-    
-    // Helper to send notification from other components (without exposing NotificationQueueItem)
-    void sendNotification(const char* message, bool is_error, int priority = 2, uint32_t display_ms = 3000) override;
 
     static constexpr const char* TAG = "GUI";
 
-    // Queue and task for showing Notifications on the GUI
-    struct NotificationQueueItem {
-        char message[128];  // Fixed-size buffer to avoid std::string issues in queues
-        enum class NotificationLevel {
-            INFO,
-            WARNING,
-            ERROR
-        } level;
-        TickType_t ticks_to_display;
-        int priority;  // Higher = more important
-    };
-    QueueHandle_t notification_queue;
+    // Notification task for reading from ComponentGraph's notification queue
     TaskHandle_t notification_task_handle;
     static void notificationTaskWrapper(void* pvParameters);
     void notificationTask();
 
     // Pending notification (set by notification task, consumed by LVGL task)
     volatile bool pending_notification = false;
-    NotificationQueueItem pending_notification_item;
+    ComponentGraph::NotificationQueueItem pending_notification_item;
 
 private:
     // Menu tree root
