@@ -21,13 +21,14 @@ LightSensorComponent::~LightSensorComponent() {
     ESP_LOGI(TAG, "LightSensorComponent destroyed");
 }
 
-void LightSensorComponent::setUpDependencies() {
+void LightSensorComponent::setUpDependencies(ComponentGraph* graph) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER/EXIT] LightSensorComponent::setUpDependencies");
 #endif
     // Get reference to GUI component
-    if (g_component_graph) {
-        gui_component = g_component_graph->getComponent("GUI");
+    this->component_graph = graph;
+    if (component_graph) {
+        gui_component = component_graph->getComponent("GUI");
         if (gui_component) {
             ESP_LOGI(TAG, "GUI component reference obtained");
         } else {

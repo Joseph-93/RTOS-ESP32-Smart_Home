@@ -17,7 +17,7 @@ public:
     GUIComponent();
     ~GUIComponent() override;
     
-    void setUpDependencies() override;
+    void setUpDependencies(ComponentGraph* graph) override;
     void initialize() override;
     
     // Component registry - GUI needs to know about all components
@@ -60,8 +60,7 @@ private:
     // Menu tree root
     MenuNode* root_node;
     MenuNode* current_node;
-    
-    IntParameter* light_sensor_current_light_level; // Pointer to light sensor param for brightness adjustment
+
     TaskHandle_t gui_status_task_handle = nullptr;
     TimerHandle_t gui_status_timer_handle = nullptr;
     TickType_t last_interaction_tick = 0;

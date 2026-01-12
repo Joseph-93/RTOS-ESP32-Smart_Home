@@ -26,11 +26,11 @@ NetworkActionsComponent::~NetworkActionsComponent() {
     ESP_LOGI(TAG, "NetworkActionsComponent destroyed");
 }
 
-void NetworkActionsComponent::setUpDependencies() {
+void NetworkActionsComponent::setUpDependencies(ComponentGraph* graph) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER/EXIT] NetworkActionsComponent::setUpDependencies");
 #endif
-    // No dependencies needed - notifications go through ComponentGraph
+    this->component_graph = graph;
 }
 
 void NetworkActionsComponent::initialize() {
@@ -149,9 +149,9 @@ void NetworkActionsComponent::send_next_from_queue() {
                      static_cast<int>(item.protocol), item.message_index, result);
             
             // Send notification via ComponentGraph
-            if (g_component_graph) {
+            if (component_graph) {
                 std::string msg = protocol_name + ": " + message_name + (result ? " OK" : " FAIL");
-                g_component_graph->sendNotification(msg.c_str(), !result, 2, 3000);
+                component_graph->sendNotification(msg.c_str(), !result, 2, 3000);
             }
         }
         else {
@@ -171,12 +171,12 @@ void NetworkActionsComponent::wifi_event_callback(bool connected, void* user_dat
     }
     
     // Send notification via ComponentGraph
-    if (g_component_graph) {
+    if (self->component_graph) {
         if (connected) {
-            g_component_graph->sendNotification("WiFi Connected", false, 3, 3000);
+            self->component_graph->sendNotification("WiFi Connected", false, 3, 3000);
             ESP_LOGI(TAG, "WiFi connected - notification sent");
         } else {
-            g_component_graph->sendNotification("WiFi Disconnected", true, 5, 5000);
+            self->component_graph->sendNotification("WiFi Disconnected", true, 5, 5000);
             ESP_LOGW(TAG, "WiFi disconnected - notification sent");
         }
     }

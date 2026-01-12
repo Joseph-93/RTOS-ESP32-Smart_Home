@@ -5,6 +5,7 @@
 #include "lvgl.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/dac.h"
@@ -115,21 +116,12 @@ GUIComponent::~GUIComponent() {
 #endif
 }
 
-void GUIComponent::setUpDependencies() {
+void GUIComponent::setUpDependencies(ComponentGraph* graph) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] GUIComponent::setUpDependencies");
 #endif
-    // Get reference to light sensor parameter for auto-brightness
-    if (g_component_graph) {
-        light_sensor_current_light_level = g_component_graph->getIntParam("LightSensor", "current_light_level");
-        if (light_sensor_current_light_level) {
-            ESP_LOGI(TAG, "Successfully linked to LightSensor parameter");
-        } else {
-            ESP_LOGW(TAG, "LightSensor parameter not found - auto-brightness disabled");
-        }
-    } else {
-        ESP_LOGE(TAG, "ComponentGraph not available!");
-    }
+    // Store component graph reference (sensor parameters will be looked up later in guiStatusTask)
+    this->component_graph = graph;
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] GUIComponent::setUpDependencies");
 #endif
@@ -145,7 +137,8 @@ void GUIComponent::initialize() {
     addIntParam("desired_lcd_brightness", 1, 1, 0, 100, 100); // desired target brightness 0-100%
     addIntParam("current_lcd_brightness", 1, 1, 0, 100, 100); // Read-only current brightness 0-100%
     addIntParam("brighness_change_per_second", 1, 1, 10, 100, 50); // How fast to change brightness (0-100% per second)
-    addIntParam("lcd_screen_timeout_seconds", 1, 1, 10, 600, 20); // Screen timeout in seconds
+    addIntParam("lcd_screen_timeout_seconds", 1, 1, 10, 600, 10); // Screen timeout in seconds
+    addIntParam("motion_inactivity_screen_timeout_seconds", 1, 1, 10, 600, 10); // Motion inactivity screen timeout in seconds
     addBoolParam("lcd_screen_on", 1, 1, true); // If false, turn off screen (saves power)
     addBoolParam("override_auto_brightness", 1, 1, false); // If true, disable auto brightness adjustment
     addBoolParam("override_screen_timeout", 1, 1, false); // If true, disable screen timeout
@@ -278,12 +271,12 @@ void GUIComponent::notificationTask() {
 #endif
     ESP_LOGI(TAG, "Notification task running - waiting for notifications...");
     
-    if (!g_component_graph) {
+    if (!component_graph) {
         ESP_LOGE(TAG, "ComponentGraph not available - notification task exiting");
         return;
     }
     
-    QueueHandle_t queue = g_component_graph->getGuiNotificationQueue();
+    QueueHandle_t queue = component_graph->getGuiNotificationQueue();
     if (!queue) {
         ESP_LOGE(TAG, "GUI notification queue not available - task exiting");
         return;
@@ -392,10 +385,13 @@ void GUIComponent::guiStatusTask() {
     static IntParameter* desired_brightness_param = nullptr;
     static IntParameter* current_brightness_param = nullptr;
     static IntParameter* change_rate_param = nullptr;
-    static IntParameter* screen_timeout_param = nullptr;
+    static IntParameter* touch_inactivity_screen_timeout_param = nullptr;
+    static IntParameter* motion_inactivity_screen_timeout_param = nullptr;
     static BoolParameter* lcd_screen_on_param = nullptr;
     static BoolParameter* override_auto_brightness_param = nullptr;
     static BoolParameter* override_screen_timeout_param = nullptr;
+    static IntParameter* light_sensor_param = nullptr;
+    static IntParameter* motion_sensor_param = nullptr;
     static bool first_run = true;
     
     while (true) {
@@ -413,22 +409,66 @@ void GUIComponent::guiStatusTask() {
         }
 
         // Initialize parameter pointers on first run (AFTER component is initialized)
-        if (!(desired_brightness_param && current_brightness_param && change_rate_param &&
-            screen_timeout_param && lcd_screen_on_param && override_auto_brightness_param && override_screen_timeout_param)) {
+        if (!(desired_brightness_param && current_brightness_param && change_rate_param && motion_inactivity_screen_timeout_param &&
+            touch_inactivity_screen_timeout_param && lcd_screen_on_param && override_auto_brightness_param && override_screen_timeout_param)) {
             desired_brightness_param = this->getIntParam("desired_lcd_brightness");
             current_brightness_param = this->getIntParam("current_lcd_brightness");
             change_rate_param = this->getIntParam("brighness_change_per_second");
-            screen_timeout_param = this->getIntParam("lcd_screen_timeout_seconds");
+            touch_inactivity_screen_timeout_param = this->getIntParam("lcd_screen_timeout_seconds");
+            motion_inactivity_screen_timeout_param = this->getIntParam("motion_inactivity_screen_timeout_seconds");
             lcd_screen_on_param = this->getBoolParam("lcd_screen_on");
             override_auto_brightness_param = this->getBoolParam("override_auto_brightness");
             override_screen_timeout_param = this->getBoolParam("override_screen_timeout");
         }
+        
+        // Try to get sensor parameters once (they may not exist yet or at all)
+        if (component_graph && !(light_sensor_param && motion_sensor_param)) {
+            light_sensor_param = component_graph->getIntParam("LightSensor", "current_light_level");
+            if (light_sensor_param) {
+                ESP_LOGI(TAG, "Successfully linked to LightSensor parameter");
+            } else {
+                ESP_LOGW(TAG, "LightSensor parameter not found - auto-brightness disabled");
+            }
+            
+            motion_sensor_param = component_graph->getIntParam("MotionSensor", "last_motion_detected_seconds");
+            if (motion_sensor_param) {
+                ESP_LOGI(TAG, "Successfully linked to MotionSensor parameter");
+            } else {
+                ESP_LOGW(TAG, "MotionSensor/last_motion_detected_seconds parameter not found - motion-based screen timeout disabled");
+            }
+        }
 
         // Handle screen timeout
         if (override_screen_timeout_param && override_screen_timeout_param->getValue(0, 0) == false) {
+            // Check if the last motion detected time exceeds timeout
+            int current_time_seconds = (int)(esp_timer_get_time() / 1000000); // time in seconds
+            
+            bool recent_motion = true; // defaulting to true allows the screen to stay on if no motion sensor
+            if (motion_sensor_param) {
+                int last_motion_time = motion_sensor_param->getValue(0, 0);
+                if (current_time_seconds - last_motion_time < touch_inactivity_screen_timeout_param->getValue(0, 0) ) {
+                    // Recent motion detected
+                    recent_motion = true;
+                }
+                else {
+                    recent_motion = false;
+                }
+            }
+
+            // Check if the last interaction exceeds timeout
             TickType_t tick_delta = xTaskGetTickCount() - last_interaction_tick;
-            TickType_t timeout_ticks = pdMS_TO_TICKS(screen_timeout_param->getValue(0, 0) * 1000);
-            if (tick_delta >= timeout_ticks && lcd_screen_on_param) {
+            TickType_t timeout_ticks = pdMS_TO_TICKS(touch_inactivity_screen_timeout_param->getValue(0, 0) * 1000);
+            bool recent_touch = true; // defaulting to true allows the screen to stay on if we don't have knowledge of touch times.
+            if (tick_delta >= timeout_ticks && lcd_screen_on_param && touch_inactivity_screen_timeout_param) {
+                // Recent touch detected
+                recent_touch = false;
+            }
+            else {
+                recent_touch = true;
+            }
+
+            // We should turn off the screen if there was NOT recent touch AND NOT recent motion
+            if (!recent_touch && !recent_motion) {
                 // Timeout reached - turn off screen
                 lcd_screen_on_param->setValue(0, 0, false);
             }
@@ -446,9 +486,9 @@ void GUIComponent::guiStatusTask() {
         }
         else {
             // Screen is ON - set desired brightness
-            if (light_sensor_current_light_level && override_auto_brightness_param && override_auto_brightness_param->getValue(0, 0) == false) {
+            if (light_sensor_param && override_auto_brightness_param && override_auto_brightness_param->getValue(0, 0) == false) {
                 // Auto-brightness enabled - calculate from light sensor
-                int light_level = light_sensor_current_light_level->getValue(0, 0);
+                int light_level = light_sensor_param->getValue(0, 0);
                 
                 // QUADRATIC MAPPING:
                 // New nonlinear mapping: x^(1/4)*8.75+30
@@ -524,16 +564,16 @@ void GUIComponent::buildMenuTree() {
     current_node = root_node;
     
     // Get all components from ComponentGraph
-    if (!g_component_graph) {
+    if (!component_graph) {
         ESP_LOGE(TAG, "ComponentGraph not available!");
         return;
     }
     
-    std::vector<std::string> component_names = g_component_graph->getComponentNames();
+    std::vector<std::string> component_names = component_graph->getComponentNames();
     
     // For each component in graph, create its menu subtree
     for (const std::string& comp_name : component_names) {
-        Component* comp = g_component_graph->getComponent(comp_name);
+        Component* comp = component_graph->getComponent(comp_name);
         if (comp) {
             MenuNode* comp_node = createComponentNode(comp, root_node);
             root_node->children.push_back(comp_node);

@@ -1,9 +1,6 @@
 #include "component_graph.h"
 #include "esp_log.h"
 
-// Global component graph instance
-ComponentGraph* g_component_graph = nullptr;
-
 ComponentGraph::ComponentGraph() {
     ESP_LOGI(TAG, "ComponentGraph created");
     
@@ -95,7 +92,7 @@ void ComponentGraph::initializeAll() {
     // First pass: set up dependencies
     for (auto& pair : components) {
         ESP_LOGI(TAG, "Setting up dependencies for: %s", pair.first.c_str());
-        pair.second->setUpDependencies();
+        pair.second->setUpDependencies(this);
     }
     
     ESP_LOGI(TAG, "Initializing all components...");

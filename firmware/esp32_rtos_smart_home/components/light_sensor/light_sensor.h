@@ -13,7 +13,7 @@ public:
     LightSensorComponent();
     ~LightSensorComponent() override;
     
-    void setUpDependencies() override;
+    void setUpDependencies(ComponentGraph* graph) override;
     void initialize() override;
     
     // Static task entry point for FreeRTOS

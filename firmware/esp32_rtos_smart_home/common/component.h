@@ -13,6 +13,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
+// Forward declaration to avoid circular dependency
+class ComponentGraph;
+
 // Inline to avoid multiple definition errors when included in multiple .cpp files
 
 // Template Parameter class - must be fully defined in header
@@ -245,7 +248,7 @@ private:
 };
 
 // Type aliases
-using IntParameter = Parameter<int>;
+using IntParameter = Parameter<int32_t>;
 using FloatParameter = Parameter<float>;
 using BoolParameter = Parameter<uint8_t>;  // Use uint8_t instead of bool because std::vector<bool> is specialized and doesn't play nice with our usage
 using StringParameter = Parameter<std::string>;
@@ -281,7 +284,7 @@ public:
     
     // Set up inter-component dependencies (called before initialize, after all components registered)
     // Override this to get references to other components or their parameters
-    virtual void setUpDependencies() {}
+    virtual void setUpDependencies(ComponentGraph* graph) {}
     
     std::string getName() const;
     bool isInitialized() const;
@@ -307,6 +310,7 @@ public:
 
 protected:
     static constexpr const char *TAG = "Component";
+    ComponentGraph* component_graph = nullptr; // Pointer to the component graph
     std::string name;
     bool initialized;
     std::vector<ComponentAction> actions;

@@ -51,18 +51,18 @@ extern "C" void app_main(void)
     
     // Create ComponentGraph
     ESP_LOGI(TAG, "Creating component graph...");
-    g_component_graph = new ComponentGraph();
+    ComponentGraph* component_graph = new ComponentGraph();
     
     // Register all components with graph
     ESP_LOGI(TAG, "Registering components with graph...");
-    g_component_graph->registerComponent(&gui_component);
-    g_component_graph->registerComponent(&network_component);
-    g_component_graph->registerComponent(&light_sensor_component);
-    g_component_graph->registerComponent(&motion_sensor_component);
+    component_graph->registerComponent(&gui_component);
+    component_graph->registerComponent(&network_component);
+    component_graph->registerComponent(&light_sensor_component);
+    component_graph->registerComponent(&motion_sensor_component);
     
     // Initialize all components (graph handles setUpDependencies + initialize)
     ESP_LOGI(TAG, "Initializing all components...");
-    g_component_graph->initializeAll();
+    component_graph->initializeAll();
     
     // Now that ALL components are initialized, build the GUI menu tree
     ESP_LOGI(TAG, "Building GUI menu tree...");

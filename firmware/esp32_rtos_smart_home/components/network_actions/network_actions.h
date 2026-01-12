@@ -14,7 +14,7 @@ public:
     NetworkActionsComponent();
     ~NetworkActionsComponent() override;
     
-    void setUpDependencies() override;
+    void setUpDependencies(ComponentGraph* graph) override;
     void initialize() override;
     
     // Send methods - return true on success, false on failure

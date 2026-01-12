@@ -1,6 +1,7 @@
 #include "motion_sensor.h"
 #include "component_graph.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "rom/ets_sys.h"
 #include "driver/gpio.h"
 #include <cmath>
@@ -22,13 +23,14 @@ MotionSensorComponent::~MotionSensorComponent() {
     ESP_LOGI(TAG, "MotionSensorComponent destroyed");
 }
 
-void MotionSensorComponent::setUpDependencies() {
+void MotionSensorComponent::setUpDependencies(ComponentGraph* graph) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER/EXIT] MotionSensorComponent::setUpDependencies");
 #endif
     // Get reference to GUI component
-    if (g_component_graph) {
-        gui_component = g_component_graph->getComponent("GUI");
+    this->component_graph = graph;
+    if (component_graph) {
+        gui_component = component_graph->getComponent("GUI");
         if (gui_component) {
             ESP_LOGI(TAG, "GUI component reference obtained");
         } else {
@@ -52,8 +54,7 @@ void MotionSensorComponent::initialize() {
     ESP_LOGI(TAG, "[ENTER] MotionSensorComponent::initialize");
 #endif
 
-    // Example: addIntParam("motion", 1, 1, 0, 1023);
-    addBoolParam("motion_detected", 1, 1, false);
+    addIntParam("last_motion_detected_seconds", 1, 1, 0, INT32_MAX, 0);
 
     // Configure motion sensor GPIO pin
     gpio_config_t io_conf = {};
@@ -110,22 +111,20 @@ void MotionSensorComponent::motionSensorTaskWrapper(void* pvParameters) {
 void MotionSensorComponent::motionSensorTask() {
     ESP_LOGI(TAG, "Motion sensor task started");
     
-    auto* param = getBoolParam("motion_detected");
-
+    IntParameter* last_motion_detected_seconds_param = getIntParam("last_motion_detected_seconds");
+    
     while (1) {
         // Wait for notification from ISR (blocking)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         
-        ESP_LOGI(TAG, "Motion detected!");
-        
-        // Update parameter
-        if (param) {
-            param->setValue(0, 0, true);
+        // Update the last motion detected time
+        if (last_motion_detected_seconds_param) {
+            last_motion_detected_seconds_param->setValue(0, 0, esp_timer_get_time() / 1000000); // time in seconds
         }
         
         // Send notification via ComponentGraph
-        if (g_component_graph) {
-            g_component_graph->sendNotification("Motion Detected!", false, 4, 3000);
+        if (component_graph) {
+            component_graph->sendNotification("Motion Detected!", false, 4, 3000);
         }
     }
 }

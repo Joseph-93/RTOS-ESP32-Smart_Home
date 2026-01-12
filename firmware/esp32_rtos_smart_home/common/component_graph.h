@@ -64,7 +64,4 @@ public:
     static constexpr const char* TAG = "ComponentGraph";
 };
 
-// Global component graph instance (declared here, defined in component_graph.cpp)
-extern ComponentGraph* g_component_graph;
-
 #endif
