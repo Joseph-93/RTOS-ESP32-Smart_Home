@@ -1,0 +1,131 @@
+#include "motion_sensor.h"
+#include "component_graph.h"
+#include "esp_log.h"
+#include "rom/ets_sys.h"
+#include "driver/gpio.h"
+#include <cmath>
+
+#define MOTION_SENSOR_PIN 15 // GPIO15
+
+MotionSensorComponent::MotionSensorComponent() 
+    : Component("MotionSensor") {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[ENTER/EXIT] MotionSensorComponent constructor");
+#endif
+    ESP_LOGI(TAG, "MotionSensorComponent created");
+}
+
+MotionSensorComponent::~MotionSensorComponent() {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[ENTER/EXIT] ~MotionSensorComponent");
+#endif
+    ESP_LOGI(TAG, "MotionSensorComponent destroyed");
+}
+
+void MotionSensorComponent::setUpDependencies() {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[ENTER/EXIT] MotionSensorComponent::setUpDependencies");
+#endif
+    // Get reference to GUI component
+    if (g_component_graph) {
+        gui_component = g_component_graph->getComponent("GUI");
+        if (gui_component) {
+            ESP_LOGI(TAG, "GUI component reference obtained");
+        } else {
+            ESP_LOGW(TAG, "GUI component not found");
+        }
+    } else {
+        ESP_LOGE(TAG, "ComponentGraph not available!");
+    }
+}
+
+static void IRAM_ATTR motion_sensor_isr_handler(void* arg) {
+    MotionSensorComponent* component = static_cast<MotionSensorComponent*>(arg);
+    if (component && component->motion_sensor_task_handle) {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        vTaskNotifyGiveFromISR(component->motion_sensor_task_handle, &xHigherPriorityTaskWoken);
+    }
+}
+
+void MotionSensorComponent::initialize() {
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[ENTER] MotionSensorComponent::initialize");
+#endif
+
+    // Example: addIntParam("motion", 1, 1, 0, 1023);
+    addBoolParam("motion_detected", 1, 1, false);
+
+    // Configure motion sensor GPIO pin
+    gpio_config_t io_conf = {};
+    io_conf.pin_bit_mask = (1ULL << MOTION_SENSOR_PIN);
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;  // Pull-down so default is LOW
+    io_conf.intr_type = GPIO_INTR_POSEDGE;  // Trigger on rising edge (motion detected)
+    gpio_config(&io_conf);
+    
+    ESP_LOGI(TAG, "Motion sensor GPIO %d configured", MOTION_SENSOR_PIN);
+
+    // Install ISR service if not already installed (GUI might have already done this)
+    esp_err_t ret = gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "GPIO ISR service installed");
+    } else if (ret == ESP_ERR_INVALID_STATE) {
+        ESP_LOGI(TAG, "GPIO ISR service already installed (probably by GUI)");
+    } else {
+        ESP_ERROR_CHECK(ret);  // Fail on unexpected errors
+    }
+    
+    ESP_ERROR_CHECK(gpio_isr_handler_add((gpio_num_t)MOTION_SENSOR_PIN, motion_sensor_isr_handler, this));
+    ESP_LOGI(TAG, "Motion sensor ISR handler registered for GPIO %d", MOTION_SENSOR_PIN);
+
+
+    BaseType_t result = xTaskCreate(
+        MotionSensorComponent::motionSensorTaskWrapper,
+        "motion_sensor_task",
+        8192, // Stack depth - increased due to callback chain and logging
+        this, // Just send the pointer to this component
+        tskIDLE_PRIORITY + 1,
+        &motion_sensor_task_handle
+    );
+    if (result != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create motion sensor task");
+    } else {
+        ESP_LOGI(TAG, "Motion sensor task created successfully");
+    }
+
+    initialized = true;
+#ifdef DEBUG
+    ESP_LOGI(TAG, "[EXIT] MotionSensorComponent::initialize");
+#endif
+}
+
+// Static task entry point - required for FreeRTOS task creation
+void MotionSensorComponent::motionSensorTaskWrapper(void* pvParameters) {
+    MotionSensorComponent* sensor = static_cast<MotionSensorComponent*>(pvParameters);
+    sensor->motionSensorTask();
+}
+
+// Instance method containing the actual task loop and logic
+void MotionSensorComponent::motionSensorTask() {
+    ESP_LOGI(TAG, "Motion sensor task started");
+    
+    auto* param = getBoolParam("motion_detected");
+
+    while (1) {
+        // Wait for notification from ISR (blocking)
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        
+        ESP_LOGI(TAG, "Motion detected!");
+        
+        // Update parameter
+        if (param) {
+            param->setValue(0, 0, true);
+        }
+        
+        // Send notification via ComponentGraph
+        if (g_component_graph) {
+            g_component_graph->sendNotification("Motion Detected!", false, 4, 3000);
+        }
+    }
+}

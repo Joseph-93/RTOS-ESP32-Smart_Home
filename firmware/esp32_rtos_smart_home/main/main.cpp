@@ -17,6 +17,7 @@
 #include "gui.h"
 #include "network_actions.h"
 #include "light_sensor.h"
+#include "motion_sensor.h"
 #include "wifi_init.h"
 #include <vector>
 
@@ -30,6 +31,7 @@ static const char *TAG = "main";
 static GUIComponent gui_component;
 static NetworkActionsComponent network_component;
 static LightSensorComponent light_sensor_component;
+static MotionSensorComponent motion_sensor_component;
 
 extern "C" void app_main(void)
 {
@@ -56,6 +58,7 @@ extern "C" void app_main(void)
     g_component_graph->registerComponent(&gui_component);
     g_component_graph->registerComponent(&network_component);
     g_component_graph->registerComponent(&light_sensor_component);
+    g_component_graph->registerComponent(&motion_sensor_component);
     
     // Initialize all components (graph handles setUpDependencies + initialize)
     ESP_LOGI(TAG, "Initializing all components...");
