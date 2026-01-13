@@ -169,23 +169,26 @@ void Component::addAction(const std::string& name, const std::string& descriptio
 #endif
 }
 
-void Component::invokeAction(const std::string& actionName) {
+void Component::invokeAction(size_t actionIndex) {
 #ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] invokeAction() - actionName: %s", actionName.c_str());
+    ESP_LOGI("Component", "[ENTER] invokeAction() - actionIndex: %zu", actionIndex);
 #endif
-    for (auto& action : actions) {
-        if (action.name == actionName) {
-            ESP_LOGI("Component", "Invoking action '%s' on component '%s'", 
-                     actionName.c_str(), this->name.c_str());
-            bool success = action.callback(this);
-            ESP_LOGI("Component", "Action '%s' %s", actionName.c_str(), 
-                     success ? "succeeded" : "failed");
-            return;
-        }
-    }
-    ESP_LOGE("Component", "Action '%s' not found in component '%s'", 
-             actionName.c_str(), this->name.c_str());
+    if (actionIndex >= actions.size()) {
+        ESP_LOGE("Component", "Action index %zu out of range (max: %zu) in component '%s'", 
+                 actionIndex, actions.size(), this->name.c_str());
 #ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] invokeAction() - action not found");
+        ESP_LOGI("Component", "[EXIT] invokeAction() - index out of range");
+#endif
+        return;
+    }
+    
+    auto& action = actions[actionIndex];
+    ESP_LOGI("Component", "Invoking action[%zu] '%s' on component '%s'", 
+             actionIndex, action.name.c_str(), this->name.c_str());
+    bool success = action.callback(this);
+    ESP_LOGI("Component", "Action[%zu] '%s' %s", actionIndex, action.name.c_str(), 
+             success ? "succeeded" : "failed");
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] invokeAction() - success");
 #endif
 }

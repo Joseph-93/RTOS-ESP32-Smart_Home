@@ -80,7 +80,7 @@ void NetworkActionsComponent::initialize() {
     BaseType_t result = xTaskCreate(
         network_actions_task,
         "network_actions_task",
-        8192, // Stack depth
+        6144, // Stack depth - queue processing and network calls
         this, // Just send the pointer to this component
         tskIDLE_PRIORITY + 1,
         &network_actions_task_handle
@@ -428,69 +428,36 @@ void NetworkActionsComponent::parseWsMessage(size_t row, size_t col, const std::
 // Send methods - by index
 
 bool NetworkActionsComponent::sendTcp(size_t index) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] sendTcp - index: %zu", index);
-#endif
     if (index >= tcp_messages.size()) {
-        ESP_LOGE(TAG, "TCP message index %zu out of range", index);
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] sendTcp - out of range");
-#endif
         return false;
     }
     NetworkActionQueueItem item = {
         NetworkActionQueueItem::NetworkProtocol::TCP,
         index
     };
-    BaseType_t result = xQueueSend(network_actions_queue, &item, 0); // Non-blocking
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] sendTcp - result: %d", result);
-#endif
-    return result == pdTRUE;
+    return xQueueSend(network_actions_queue, &item, 0) == pdTRUE;
 }
 
 bool NetworkActionsComponent::sendHttp(size_t index) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] sendHttp - index: %zu", index);
-#endif
     if (index >= http_messages.size()) {
-        ESP_LOGE(TAG, "HTTP message index %zu out of range", index);
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] sendHttp - out of range");
-#endif
         return false;
     }
     NetworkActionQueueItem item = {
         NetworkActionQueueItem::NetworkProtocol::HTTP,
         index
     };
-    BaseType_t result = xQueueSend(network_actions_queue, &item, 0); // Non-blocking
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] sendHttp - result: %d", result);
-#endif
-    return result == pdTRUE;
+    return xQueueSend(network_actions_queue, &item, 0) == pdTRUE;
 }
 
 bool NetworkActionsComponent::sendWs(size_t index) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] sendWs - index: %zu", index);
-#endif
     if (index >= ws_messages.size()) {
-        ESP_LOGE(TAG, "WS message index %zu out of range", index);
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] sendWs - out of range");
-#endif
         return false;
     }
     NetworkActionQueueItem item = {
         NetworkActionQueueItem::NetworkProtocol::WebSocket,
         index
     };
-    BaseType_t result = xQueueSend(network_actions_queue, &item, 0); // Non-blocking
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] sendWs - result: %d", result);
-#endif
-    return result == pdTRUE;
+    return xQueueSend(network_actions_queue, &item, 0) == pdTRUE;
 }
 
 // Index lookup helpers

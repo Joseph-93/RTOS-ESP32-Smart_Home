@@ -18,14 +18,17 @@ public:
     
     // Static task entry point for FreeRTOS
     static void doorSensorTaskWrapper(void* pvParameters);
+    static void doorSensorStateTaskWrapper(void* pvParameters);
     
     // Instance method that runs the task loop
     void doorSensorTask();
+    void doorSensorStateTask();
 
     static constexpr const char* TAG = "DoorSensor";
     
     // Task handle needs to be public for ISR access
     TaskHandle_t door_sensor_task_handle = nullptr;
+    TaskHandle_t door_sensor_state_task_handle = nullptr;
 
 private:
     // Add private members here as needed
@@ -34,6 +37,13 @@ private:
     
     // Actions to execute when door is opened
     void executeDoorOpenedActions();
+
+    enum class DoorTrackingState {
+        CLOSED,
+        OPENED,
+        OPENED_TOO_LONG,
+    };
+    DoorTrackingState door_tracking_state = DoorTrackingState::CLOSED;
 };
 
 #endif

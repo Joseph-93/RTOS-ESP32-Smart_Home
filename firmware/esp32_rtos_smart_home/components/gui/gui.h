@@ -11,6 +11,12 @@
 // Forward declarations
 struct MenuNode;
 
+// Minimal context for action buttons (avoid full MenuNode allocation)
+struct ActionButtonContext {
+    Component* component;
+    size_t action_index;  // Index into Component's actions vector
+};
+
 // GUIComponent - manages the user interface and component menu system
 class GUIComponent : public Component {
 public:

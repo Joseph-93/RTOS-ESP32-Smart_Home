@@ -83,7 +83,7 @@ void MotionSensorComponent::initialize() {
     BaseType_t result = xTaskCreate(
         MotionSensorComponent::motionSensorTaskWrapper,
         "motion_sensor_task",
-        8192, // Stack depth - increased due to callback chain and logging
+        4096, // Stack depth - simple timestamp update
         this, // Just send the pointer to this component
         tskIDLE_PRIORITY + 1,
         &motion_sensor_task_handle
@@ -119,11 +119,6 @@ void MotionSensorComponent::motionSensorTask() {
         // Update the last motion detected time
         if (last_motion_detected_seconds_param) {
             last_motion_detected_seconds_param->setValue(0, 0, esp_timer_get_time() / 1000000); // time in seconds
-        }
-        
-        // Send notification via ComponentGraph
-        if (component_graph) {
-            component_graph->sendNotification("Motion Detected!", false, 4, 3000);
         }
     }
 }

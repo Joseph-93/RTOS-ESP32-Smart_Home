@@ -160,7 +160,7 @@ void GUIComponent::initialize() {
     BaseType_t result = xTaskCreate(
         GUIComponent::guiStatusTaskWrapper,
         "gui_status_task",
-        4096, // Stack depth
+        3072, // Stack depth - simple status updates
         this,
         tskIDLE_PRIORITY + 1,
         &gui_status_task_handle
@@ -194,7 +194,7 @@ void GUIComponent::initialize() {
     result = xTaskCreate(
         notificationTaskWrapper,
         "notification_task",
-        4096, // Stack depth
+        3072, // Stack depth - queue processing
         this, // Pass 'this' pointer
         tskIDLE_PRIORITY + 1,
         &notification_task_handle
@@ -243,6 +243,11 @@ void GUIComponent::initialize() {
     lvgl_disp_drv.draw_buf = &lvgl_disp_buf;
     lv_disp_drv_register(&lvgl_disp_drv);
     
+    // Initialize LVGL theme (must be done AFTER display registration)
+    lv_theme_t* theme = lv_theme_default_init(NULL, lv_palette_main(LV_PALETTE_BLUE), lv_palette_main(LV_PALETTE_RED), true, LV_FONT_DEFAULT);
+    lv_disp_set_theme(NULL, theme);  // NULL = use default display (now it exists!)
+    ESP_LOGI(TAG, "LVGL default theme initialized");
+    
     // Initialize LVGL input device driver (touch)
     lv_indev_drv_init(&lvgl_indev_drv);
     lvgl_indev_drv.type = LV_INDEV_TYPE_POINTER;
@@ -254,7 +259,7 @@ void GUIComponent::initialize() {
     ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
     
     // Create LVGL timer task with larger stack
-    xTaskCreate(GUIComponent::lvgl_timer_task, "lvgl_timer", 8192, NULL, 5, NULL);
+    xTaskCreate(GUIComponent::lvgl_timer_task, "lvgl_timer", 6144, NULL, 5, NULL);
 
     // Store the component instance for the LVGL task
     g_gui_component = this;
@@ -846,16 +851,16 @@ void GUIComponent::action_button_event_cb(lv_event_t* e) {
         return;
     }
     
-    MenuNode* node = (MenuNode*)lv_event_get_user_data(e);
-    if (!node || !node->associated_component || node->action_name.empty()) {
+    ActionButtonContext* ctx = (ActionButtonContext*)lv_event_get_user_data(e);
+    if (!ctx || !ctx->component) {
 #ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] action_button_event_cb - invalid node/component/action");
+        ESP_LOGI(TAG, "[EXIT] action_button_event_cb - invalid context");
 #endif
         return;
     }
     
-    ESP_LOGI(TAG, "Action button clicked: %s", node->action_name.c_str());
-    node->associated_component->invokeAction(node->action_name);
+    ESP_LOGI(TAG, "Action button clicked: index %zu", ctx->action_index);
+    ctx->component->invokeAction(ctx->action_index);
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] action_button_event_cb");
 #endif
@@ -944,7 +949,6 @@ void GUIComponent::createHomeScreen(MenuNode* node) {
                  esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
         return;
     }
-    lv_obj_clear_flag(node->screen, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(node->screen, lv_color_black(), 0);
     
     // Title
@@ -1517,6 +1521,10 @@ void GUIComponent::createActionsScreen(MenuNode* node, Component* component) {
     
     // Create scrollable list of action buttons
     lv_obj_t* list = lv_obj_create(node->screen);
+    if (!list) {
+        ESP_LOGE(TAG, "Failed to create action list container - out of memory?");
+        return;
+    }
     lv_obj_set_size(list, 300, 160);
     lv_obj_set_pos(list, 10, 60);
     lv_obj_set_style_bg_color(list, lv_color_make(20, 20, 20), 0);
@@ -1526,27 +1534,37 @@ void GUIComponent::createActionsScreen(MenuNode* node, Component* component) {
     
     const auto& actions = component->getActions();
     
+    ESP_LOGI(TAG, "Creating actions screen with %zu actions", actions.size());
+    
     if (actions.empty()) {
         lv_obj_t* empty_label = lv_label_create(list);
         lv_label_set_text(empty_label, "No actions available");
         lv_obj_set_style_text_color(empty_label, lv_color_make(128, 128, 128), 0);
     } else {
-        for (const auto& action : actions) {
-            // Create a child node for this action (for event callback context)
-            MenuNode* action_node = new MenuNode(action.name, node, this);
-            action_node->associated_component = component;
-            action_node->action_name = action.name;
-            all_nodes.push_back(action_node);
+        for (size_t i = 0; i < actions.size(); i++) {
+            // Allocate minimal context (just pointer + size_t)
+            ActionButtonContext* ctx = new ActionButtonContext{component, i};
             
             lv_obj_t* action_btn = lv_btn_create(list);
+            if (!action_btn) {
+                ESP_LOGE(TAG, "Failed to create action button %zu/%zu - stopping", i, actions.size());
+                delete ctx;
+                break;
+            }
             lv_obj_set_size(action_btn, 280, 40);
             lv_obj_set_style_bg_color(action_btn, lv_color_make(0, 100, 200), 0);
             
             lv_obj_t* action_label = lv_label_create(action_btn);
-            lv_label_set_text(action_label, action.name.c_str());
+            if (!action_label) {
+                ESP_LOGE(TAG, "Failed to create action label %zu/%zu", i, actions.size());
+                delete ctx;
+                // Button already created, continue with next
+                continue;
+            }
+            lv_label_set_text(action_label, actions[i].name.c_str());
             lv_obj_center(action_label);
             
-            lv_obj_add_event_cb(action_btn, action_button_event_cb, LV_EVENT_CLICKED, action_node);
+            lv_obj_add_event_cb(action_btn, action_button_event_cb, LV_EVENT_CLICKED, ctx);
         }
     }
 #ifdef DEBUG

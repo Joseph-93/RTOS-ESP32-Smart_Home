@@ -51,11 +51,15 @@ namespace MessageExamples {
     EXAMPLE(SHELLY_DESK_ELECTRONICS_ON, R"([{"name":"Desk Electronics On","url":"http://10.0.0.239:80/relay/0?turn=on","method":"GET","body":"","headers":[],"timeout_ms":10000}])") \
     EXAMPLE(SHELLY_DESK_ELECTRONICS_OFF, R"([{"name":"Desk Electronics Off","url":"http://10.0.0.239:80/relay/0?turn=off","method":"GET","body":"","headers":[],"timeout_ms":10000}])") \
     /* Atmosphere (10.0.0.156) - JSON-RPC 2.0 */ \
-    EXAMPLE(ATMOSPHERE_ZONE_MUTE_TCP, R"([{"name":"Zone Mute","host":"10.0.0.156","port":5321,"data":"{\"jsonrpc\":\"2.0\",\"method\":\"set\",\"params\":{\"param\":\"ZoneMute_0\",\"val\":1},\"id\":1}\n\n","timeout_ms":5000}])") \
-    EXAMPLE(ATMOSPHERE_BEDROOM_BT_WS, R"([{"name":"Hit the Bluetooth Button","url":"ws://10.0.0.156:1235","message":"{\"jsonrpc\":\"2.0\",\"method\":\"set\",\"params\":{\"obj\":\"Control Wallplate\",\"param\":\"Bluetooth Button\",\"device\":3,\"val\":1},\"id\":1}\n\n","timeout_ms":10000}])") \
-    EXAMPLE(ATMOSPHERE_PEGASUS_BT_WS, R"([{"name":"Activate Pegasus BT Source","url":"ws://10.0.0.156:1235","message":"{\"jsonrpc\":\"2.0\",\"method\":\"set\",\"params\":{\"obj\":\"Control Wallplate\",\"param\":\"Bluetooth Button\",\"device\":2,\"val\":1},\"id\":1}\n\n","timeout_ms":10000}])")
+    EXAMPLE(AZM_ZONE_MUTE_TCP, R"([{"name":"Zone Mute","host":"10.0.0.156","port":5321,"data":"{\"jsonrpc\":\"2.0\",\"method\":\"set\",\"params\":{\"param\":\"ZoneMute_0\",\"val\":1},\"id\":1}\n\n","timeout_ms":5000}])") \
+    EXAMPLE(AZM_ZONE_UNMUTE_TCP, R"([{"name":"Zone Unmute","host":"10.0.0.156","port":5321,"data":"{\"jsonrpc\":\"2.0\",\"method\":\"set\",\"params\":{\"param\":\"ZoneMute_0\",\"val\":0},\"id\":1}\n\n","timeout_ms":5000}])") \
+    EXAMPLE(AZM_MSG_DOOR_DIRTY_TCP, R"([{"name":"Shut The Front Door NOT Dirty","host":"10.0.0.156","port":5321,"data":"{\"jsonrpc\":\"2.0\",\"method\":\"set\",\"params\":{\"param\":\"PlayMessage_3\",\"val\":1},\"id\":1}\n\n","timeout_ms":5000}])") \
+    EXAMPLE(AZM_MSG_DOOR_MARK_TCP, R"([{"name":"Shut The Front Door Mark Ruffalo","host":"10.0.0.156","port":5321,"data":"{\"jsonrpc\":\"2.0\",\"method\":\"set\",\"params\":{\"param\":\"PlayMessage_2\",\"val\":1},\"id\":1}\n\n","timeout_ms":5000}])") \
+    EXAMPLE(AZM_MSG_DOOR_CLOSE_COMEDIAN_TCP, R"([{"name":"Door Closed Comedian","host":"10.0.0.156","port":5321,"data":"{\"jsonrpc\":\"2.0\",\"method\":\"set\",\"params\":{\"param\":\"PlayMessage_4\",\"val\":1},\"id\":1}\n\n","timeout_ms":5000}])") \
+    EXAMPLE(AZM_BEDROOM_BT_WS, R"([{"name":"Hit the Bluetooth Button","url":"ws://10.0.0.156:1235","message":"{\"jsonrpc\":\"2.0\",\"method\":\"set\",\"params\":{\"obj\":\"Control Wallplate\",\"param\":\"Bluetooth Button\",\"device\":3,\"val\":1},\"id\":1}\n\n","timeout_ms":10000}])") \
+    EXAMPLE(AZM_PEGASUS_BT_WS, R"([{"name":"Activate Pegasus BT Source","url":"ws://10.0.0.156:1235","message":"{\"jsonrpc\":\"2.0\",\"method\":\"set\",\"params\":{\"obj\":\"Control Wallplate\",\"param\":\"Bluetooth Button\",\"device\":2,\"val\":1},\"id\":1}\n\n","timeout_ms":10000}])")
 
-// Generate constexpr constants from the macro list
+    // Generate constexpr constants from the macro list
 #define EXAMPLE(name, value) constexpr const char* name = value;
 MESSAGE_EXAMPLE_LIST
 #undef EXAMPLE

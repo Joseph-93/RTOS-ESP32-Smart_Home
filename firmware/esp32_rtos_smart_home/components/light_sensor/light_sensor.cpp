@@ -54,7 +54,7 @@ void LightSensorComponent::initialize() {
     BaseType_t result = xTaskCreate(
         LightSensorComponent::lightSensorTaskWrapper,
         "light_sensor_task",
-        8192, // Stack depth - increased due to callback chain and logging
+        4096, // Stack depth - simple ADC read and parameter update
         this, // Just send the pointer to this component
         tskIDLE_PRIORITY + 1,
         &light_sensor_task_handle

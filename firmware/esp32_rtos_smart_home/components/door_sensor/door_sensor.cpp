@@ -56,6 +56,7 @@ void DoorSensorComponent::initialize() {
 
     addIntParam("last_door_event_seconds", 1, 1, 0, INT32_MAX, 0);
     addIntParam("door_state", 1, 1, 0, 1, 0); // 0 = closed, 1 = open
+    addIntParam("door_open_too_long_threshold_seconds", 1, 1, 10, 3600, 10);
 
     // Configure door sensor GPIO pin
     gpio_config_t io_conf = {};
@@ -96,6 +97,21 @@ void DoorSensorComponent::initialize() {
         ESP_LOGI(TAG, "Door sensor task created successfully");
     }
 
+    // Create doorSensorState task (low priority, 1Hz)
+    result = xTaskCreate(
+        DoorSensorComponent::doorSensorStateTaskWrapper,
+        "door_state_task",
+        3072,  // Minimal stack - no logging, just conditionals and queue sends
+        this,
+        tskIDLE_PRIORITY,  // Low priority
+        &door_sensor_state_task_handle
+    );
+    if (result != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create door sensor state task");
+    } else {
+        ESP_LOGI(TAG, "Door sensor state task created successfully");
+    }
+
     initialized = true;
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] DoorSensorComponent::initialize");
@@ -114,6 +130,7 @@ void DoorSensorComponent::doorSensorTask() {
     
     IntParameter* last_door_event_seconds_param = getIntParam("last_door_event_seconds");
     IntParameter* door_state_param = getIntParam("door_state");
+    int previous_state = -1;  // Track previous state to detect transitions
     
     while (1) {
         // Wait for notification from ISR (blocking)
@@ -121,21 +138,18 @@ void DoorSensorComponent::doorSensorTask() {
         
         // Read the current state of the door sensor
         int current_state = gpio_get_level((gpio_num_t)DOOR_SENSOR_PIN);
-                
+
         // Update door state
         if (door_state_param) {
             door_state_param->setValue(0, 0, current_state);
         }
         
-        // Send notification via ComponentGraph
-        if (component_graph) {
-            if (current_state == 1) {
-                component_graph->sendNotification("Door Opened!", false, 4, 3000);
-                this->executeDoorOpenedActions();
-            } else {
-                component_graph->sendNotification("Door Closed!", false, 4, 3000);
-            }
+        // Update the last door event time
+        if (last_door_event_seconds_param) {
+            last_door_event_seconds_param->setValue(0, 0, esp_timer_get_time() / 1000000);
         }
+        
+        previous_state = current_state;
     }
 }
 
@@ -159,6 +173,97 @@ void DoorSensorComponent::executeDoorOpenedActions() {
             }
             else {
                 ESP_LOGI(TAG, "Door classified as ENTRY (no recent motion before door)");
+            }
+        }
+    }
+}
+
+// Static task entry point for doorSensorState task
+void DoorSensorComponent::doorSensorStateTaskWrapper(void* pvParameters) {
+    DoorSensorComponent* sensor = static_cast<DoorSensorComponent*>(pvParameters);
+    sensor->doorSensorStateTask();
+}
+
+// Instance method for the doorSensorState task loop - runs at 1Hz
+void DoorSensorComponent::doorSensorStateTask() {
+    ESP_LOGI(TAG, "Door sensor state task started (1Hz)");
+    
+    IntParameter* door_state_param = nullptr;
+    IntParameter* door_open_too_long_thresh_param = nullptr;
+    Component* network_actions_component = nullptr;
+    int door_opened_too_long_action = -1;
+    int door_finally_closed_action = -1;
+    uint64_t door_opened_timestamp = 0;
+    
+    while (1) {
+        // Run at 1Hz (1000ms delay)
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        if (!isInitialized()) {
+            continue;
+        }
+
+        if (!network_actions_component && component_graph) {
+            network_actions_component = component_graph->getComponent("NetworkActions");
+            continue;
+        }
+
+        if (door_opened_too_long_action == -1 && door_finally_closed_action == -1) {
+            const auto& actions = network_actions_component->getActions();
+            for (size_t i = 0; i < actions.size(); i++) {
+                if (actions[i].name == "Send TCP: Shut The Front Door Mark Ruffalo") {
+                    door_opened_too_long_action = i;
+                }
+                else if (actions[i].name == "Send TCP: Door Closed Comedian") {
+                    door_finally_closed_action = i;
+                }
+            }
+        }
+
+        if (door_state_param == nullptr) {
+            door_state_param = getIntParam("door_state");
+            continue;
+        }
+
+        if (door_open_too_long_thresh_param == nullptr) {
+            door_open_too_long_thresh_param = getIntParam("door_open_too_long_threshold_seconds");
+            continue;
+        }
+
+        // ACTUAL POST-SETUP LOGIC:
+
+        // Read current door state
+        int current_state = door_state_param->getValue(0, 0);
+
+        if (door_tracking_state == DoorTrackingState::CLOSED) {
+            if (current_state == 0) {
+                // Still closed
+                continue;
+            } else {
+                // Just opened
+                door_tracking_state = DoorTrackingState::OPENED;
+                door_opened_timestamp = esp_timer_get_time();
+            }
+        }
+        if (door_tracking_state == DoorTrackingState::OPENED) {
+            if (current_state == 1) {
+                // Still opened - check duration
+                uint64_t now = esp_timer_get_time();
+                uint64_t elapsed_sec = (now - door_opened_timestamp) / 1000000;
+                if (elapsed_sec >= door_open_too_long_thresh_param->getValue(0, 0)) {
+                    door_tracking_state = DoorTrackingState::OPENED_TOO_LONG;
+                    network_actions_component->invokeAction(door_opened_too_long_action);
+                }
+            } else {
+                // Door closed again
+                door_tracking_state = DoorTrackingState::CLOSED;
+            }
+        }
+        if (door_tracking_state == DoorTrackingState::OPENED_TOO_LONG) {
+            if (current_state == 0) {
+                // Door finally closed
+                door_tracking_state = DoorTrackingState::CLOSED;
+                network_actions_component->invokeAction(door_finally_closed_action);
             }
         }
     }

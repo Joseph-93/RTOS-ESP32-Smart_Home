@@ -306,7 +306,7 @@ public:
     
     // Action management
     const std::vector<ComponentAction>& getActions() const;
-    void invokeAction(const std::string& actionName);
+    void invokeAction(size_t actionIndex);
 
 protected:
     static constexpr const char *TAG = "Component";
