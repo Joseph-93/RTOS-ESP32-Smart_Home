@@ -8,7 +8,7 @@
  * 
  * Uses ComponentGraph for centralized component management and inter-component communication
  */
-
+    
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -18,6 +18,7 @@
 #include "network_actions.h"
 #include "light_sensor.h"
 #include "motion_sensor.h"
+#include "door_sensor.h"
 #include "wifi_init.h"
 #include <vector>
 
@@ -32,6 +33,7 @@ static GUIComponent gui_component;
 static NetworkActionsComponent network_component;
 static LightSensorComponent light_sensor_component;
 static MotionSensorComponent motion_sensor_component;
+static DoorSensorComponent door_sensor_component;
 
 extern "C" void app_main(void)
 {
@@ -59,6 +61,7 @@ extern "C" void app_main(void)
     component_graph->registerComponent(&network_component);
     component_graph->registerComponent(&light_sensor_component);
     component_graph->registerComponent(&motion_sensor_component);
+    component_graph->registerComponent(&door_sensor_component);
     
     // Initialize all components (graph handles setUpDependencies + initialize)
     ESP_LOGI(TAG, "Initializing all components...");

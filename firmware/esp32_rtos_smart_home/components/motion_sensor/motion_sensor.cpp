@@ -63,7 +63,7 @@ void MotionSensorComponent::initialize() {
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;  // Pull-down so default is LOW
     io_conf.intr_type = GPIO_INTR_POSEDGE;  // Trigger on rising edge (motion detected)
-    gpio_config(&io_conf);
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
     
     ESP_LOGI(TAG, "Motion sensor GPIO %d configured", MOTION_SENSOR_PIN);
 
@@ -79,7 +79,6 @@ void MotionSensorComponent::initialize() {
     
     ESP_ERROR_CHECK(gpio_isr_handler_add((gpio_num_t)MOTION_SENSOR_PIN, motion_sensor_isr_handler, this));
     ESP_LOGI(TAG, "Motion sensor ISR handler registered for GPIO %d", MOTION_SENSOR_PIN);
-
 
     BaseType_t result = xTaskCreate(
         MotionSensorComponent::motionSensorTaskWrapper,
