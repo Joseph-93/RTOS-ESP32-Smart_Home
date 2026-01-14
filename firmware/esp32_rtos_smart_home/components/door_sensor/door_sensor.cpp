@@ -57,6 +57,7 @@ void DoorSensorComponent::initialize() {
     addIntParam("last_door_event_seconds", 1, 1, 0, INT32_MAX, 0);
     addIntParam("door_state", 1, 1, 0, 1, 0); // 0 = closed, 1 = open
     addIntParam("door_open_too_long_threshold_seconds", 1, 1, 10, 3600, 10);
+    addIntParam("entry_departure_motion_threshold_seconds", 1, 1, 0, 300, 30); // Time window to classify as departure
 
     // Configure door sensor GPIO pin
     gpio_config_t io_conf = {};
@@ -149,30 +150,60 @@ void DoorSensorComponent::doorSensorTask() {
             last_door_event_seconds_param->setValue(0, 0, esp_timer_get_time() / 1000000);
         }
         
+        // Detect door opened transition (0->1) and execute entry/departure actions
+        if (previous_state == 0 && current_state == 1) {
+            executeDoorOpenedActions();
+        }
+        
         previous_state = current_state;
     }
 }
 
 void DoorSensorComponent::executeDoorOpenedActions() {
     // Set the time of last-door-opened event
-    static IntParameter* last_door_event_seconds_param = getIntParam("last_door_event_seconds");
+    IntParameter* last_door_event_seconds_param = getIntParam("last_door_event_seconds");
     if (last_door_event_seconds_param) {
         last_door_event_seconds_param->setValue(0, 0, esp_timer_get_time() / 1000000); // time in seconds
     }
 
     // Check if this is an entry or departure event based on the motion sensor's last motion time
     if (component_graph) {
-        static IntParameter* last_motion_seconds_param = component_graph->getIntParam("MotionSensor", "last_motion_detected_seconds");
+        Component* net_component = component_graph->getComponent("NetworkActions");
+        if (!net_component) {
+            ESP_LOGW(TAG, "NetworkActions component not found");
+            return;
+        }
+        
+        IntParameter* last_motion_seconds_param = component_graph->getIntParam("MotionSensor", "last_motion_detected_seconds");
         if (last_motion_seconds_param && last_door_event_seconds_param) {
             int last_motion = last_motion_seconds_param->getValue(0, 0);
             int last_door_open = last_door_event_seconds_param->getValue(0, 0);
             int time_diff = last_door_open - last_motion;
-            if (time_diff >= 0 && time_diff <= 30) {
+            
+            static IntParameter* threshold_param = getIntParam("entry_departure_motion_threshold_seconds");
+            int threshold = threshold_param ? threshold_param->getValue(0, 0) : 30;
+            
+            const auto& actions = net_component->getActions();
+            
+            if (time_diff >= 0 && time_diff <= threshold) {
+                // DEPARTURE - turn lights off
                 ESP_LOGI(TAG, "Door classified as DEPARTURE (motion %d s before door)", time_diff);
-                return;
+                for (size_t i = 0; i < actions.size(); i++) {
+                    if (actions[i].name == "Send HTTP: Living Room Off") {
+                        net_component->invokeAction(i);
+                        break;
+                    }
+                }
             }
             else {
+                // ENTRY - turn lights to cool bright
                 ESP_LOGI(TAG, "Door classified as ENTRY (no recent motion before door)");
+                for (size_t i = 0; i < actions.size(); i++) {
+                    if (actions[i].name == "Send HTTP: Living Room Cool Bright") {
+                        net_component->invokeAction(i);
+                        break;
+                    }
+                }
             }
         }
     }
