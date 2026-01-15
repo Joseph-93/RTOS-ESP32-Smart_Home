@@ -8,7 +8,6 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "driver/dac.h"
 #include "driver/gpio.h"
 #include <math.h>
 #include <algorithm>
@@ -142,15 +141,12 @@ void GUIComponent::initialize() {
     addBoolParam("lcd_screen_on", 1, 1, true); // If false, turn off screen (saves power)
     addBoolParam("override_auto_brightness", 1, 1, false); // If true, disable auto brightness adjustment
     addBoolParam("override_screen_timeout", 1, 1, false); // If true, disable screen timeout
+    
     auto* brightness_param = getIntParam("current_lcd_brightness");
     if (brightness_param) {
         brightness_param->setOnChange([this](size_t row, size_t col, int val) {
             int brightness = val;
-            // Map 0-100% to useful DAC range (26-64)
-            // Below 40% (DAC 26) was too dim, so start there
-            uint8_t dac_value = 26 + (brightness * 38) / 100;
-            // Set DAC output on GPIO 25 (DAC channel 1)
-            dac_output_voltage(DAC_CHANNEL_1, dac_value);
+            lcd_set_brightness(brightness);
         });
         // Set initial brightness to 100%
         brightness_param->setValue(0, 0, 100);
@@ -495,7 +491,12 @@ void GUIComponent::guiStatusTask() {
                 // Auto-brightness enabled - calculate from light sensor
                 int light_level = light_sensor_param->getValue(0, 0);
                 
-                // QUADRATIC MAPPING:
+                // QUADRATIC MAPPING (x^2 normalized to 0-100%):
+                // Normalize input to 0-1, square it, then scale to 0-100
+                float normalized = (float)light_level / 4095.0f;
+                int brightness = (int)(pow(normalized, 2.0f) * 100);
+
+                // INVERSE-QUADRATIC MAPPING:
                 // New nonlinear mapping: x^(1/4)*8.75+30
                 // 30 is baseline brightness. 8.75 scales to 100. x^1/4 is for response curve.
                 // int brightness = static_cast<int>(pow(light_level, 0.25) * 8.75 + 30);
@@ -504,8 +505,8 @@ void GUIComponent::guiStatusTask() {
                 // int brightness = (light_level * 100) / 4095;
 
                 // LINEAR MAPPING WITH BASELINE:
-                int baseline = 30; // Minimum brightness
-                int brightness = baseline + (light_level * (100 - baseline)) / 4095;
+                // int baseline = 30; // Minimum brightness
+                // int brightness = baseline + (light_level * (100 - baseline)) / 4095;
                 
                 // Update GUI brightness parameter
                 if (desired_brightness_param) {

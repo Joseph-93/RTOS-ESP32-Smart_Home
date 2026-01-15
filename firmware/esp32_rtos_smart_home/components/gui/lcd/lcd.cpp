@@ -1,7 +1,7 @@
 #include "lcd.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
-#include "driver/dac.h"
+#include "driver/ledc.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_ili9341.h"
@@ -9,6 +9,14 @@
 
 static const char *TAG = "LCD";
 static uint8_t current_brightness = 100; // Default 100%
+
+// LCD backlight PWM configuration
+#define LCD_BACKLIGHT_GPIO  GPIO_NUM_33
+#define LCD_PWM_FREQ_HZ     10000
+#define LCD_PWM_RESOLUTION  LEDC_TIMER_8_BIT
+#define LCD_PWM_SPEED_MODE  LEDC_LOW_SPEED_MODE
+#define LCD_PWM_TIMER       LEDC_TIMER_0
+#define LCD_PWM_CHANNEL     LEDC_CHANNEL_0
 
 esp_lcd_panel_handle_t lcd_init(void) {
     // Initialize SPI bus (VSPI)
@@ -54,11 +62,29 @@ esp_lcd_panel_handle_t lcd_init(void) {
     
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
     
-    // Initialize DAC for backlight control on GPIO 25 (DAC1)
-    ESP_ERROR_CHECK(dac_output_enable(DAC_CHANNEL_1)); // GPIO 25 is DAC1
+    // Initialize PWM for backlight control on GPIO 33
+    ledc_timer_config_t ledc_timer = {
+        .speed_mode       = LCD_PWM_SPEED_MODE,
+        .duty_resolution  = LCD_PWM_RESOLUTION,
+        .timer_num        = LCD_PWM_TIMER,
+        .freq_hz          = LCD_PWM_FREQ_HZ,
+        .clk_cfg          = LEDC_AUTO_CLK
+    };
+    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+    
+    ledc_channel_config_t ledc_channel = {
+        .gpio_num       = LCD_BACKLIGHT_GPIO,
+        .speed_mode     = LCD_PWM_SPEED_MODE,
+        .channel        = LCD_PWM_CHANNEL,
+        .intr_type      = LEDC_INTR_DISABLE,
+        .timer_sel      = LCD_PWM_TIMER,
+        .duty           = 0,
+        .hpoint         = 0
+    };
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
     lcd_set_brightness(100); // Set to full brightness initially
     
-    ESP_LOGI(TAG, "LCD initialized with DAC backlight control");
+    ESP_LOGI(TAG, "LCD initialized with PWM backlight control on GPIO %d at %d Hz", LCD_BACKLIGHT_GPIO, LCD_PWM_FREQ_HZ);
     return panel_handle;
 }
 
@@ -67,13 +93,13 @@ void lcd_set_brightness(uint8_t brightness) {
         brightness = 100;
     }
     
-    // DAC outputs 0-255, map brightness 0-100 to DAC value
-    uint8_t dac_value = (brightness * 255) / 100;
+    // Map brightness 0-100 to PWM duty cycle (0-255 for 8-bit resolution)
+    uint32_t duty = (brightness * 255) / 100;
     
-    ESP_ERROR_CHECK(dac_output_voltage(DAC_CHANNEL_1, dac_value));
+    ledc_set_duty(LCD_PWM_SPEED_MODE, LCD_PWM_CHANNEL, duty);
+    ledc_update_duty(LCD_PWM_SPEED_MODE, LCD_PWM_CHANNEL);
     current_brightness = brightness;
     
-    ESP_LOGI(TAG, "Backlight brightness set to %d%% (DAC: %d)", brightness, dac_value);
 }
 
 uint8_t lcd_get_brightness(void) {
