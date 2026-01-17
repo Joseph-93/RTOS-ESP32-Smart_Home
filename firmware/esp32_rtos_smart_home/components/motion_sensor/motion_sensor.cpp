@@ -6,7 +6,7 @@
 #include "driver/gpio.h"
 #include <cmath>
 
-#define MOTION_SENSOR_PIN 15 // GPIO15
+#define MOTION_SENSOR_PIN 13 // GPIO13
 
 MotionSensorComponent::MotionSensorComponent() 
     : Component("MotionSensor") {
@@ -116,9 +116,13 @@ void MotionSensorComponent::motionSensorTask() {
         // Wait for notification from ISR (blocking)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         
+        ESP_LOGI(TAG, "*** MOTION DETECTED *** (GPIO %d triggered)", MOTION_SENSOR_PIN);
+        
         // Update the last motion detected time
         if (last_motion_detected_seconds_param) {
-            last_motion_detected_seconds_param->setValue(0, 0, esp_timer_get_time() / 1000000); // time in seconds
+            int current_time = esp_timer_get_time() / 1000000;
+            last_motion_detected_seconds_param->setValue(0, 0, current_time); // time in seconds
+            ESP_LOGI(TAG, "Motion timestamp updated: %d seconds", current_time);
         }
     }
 }

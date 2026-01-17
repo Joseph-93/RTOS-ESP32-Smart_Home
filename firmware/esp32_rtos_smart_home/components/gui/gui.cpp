@@ -139,8 +139,8 @@ void GUIComponent::initialize() {
     addIntParam("lcd_screen_timeout_seconds", 1, 1, 10, 600, 10); // Screen timeout in seconds
     addIntParam("motion_inactivity_screen_timeout_seconds", 1, 1, 10, 600, 10); // Motion inactivity screen timeout in seconds
     addBoolParam("lcd_screen_on", 1, 1, true); // If false, turn off screen (saves power)
-    addBoolParam("override_auto_brightness", 1, 1, false); // If true, disable auto brightness adjustment
-    addBoolParam("override_screen_timeout", 1, 1, false); // If true, disable screen timeout
+    addBoolParam("override_auto_brightness", 1, 1, true); // If true, disable auto brightness adjustment
+    addBoolParam("override_screen_timeout", 1, 1, true); // If true, disable screen timeout
     
     auto* brightness_param = getIntParam("current_lcd_brightness");
     if (brightness_param) {

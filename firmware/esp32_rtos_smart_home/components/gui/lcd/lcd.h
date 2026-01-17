@@ -9,7 +9,7 @@ extern "C" {
 // LCD Display pins
 #define LCD_PIN_DC   2   // Data/Command
 #define LCD_PIN_RST  4   // Reset
-#define LCD_PIN_BL   25  // Backlight (DAC1)
+// Note: Backlight is on GPIO 33 (PWM), configured in lcd.cpp
 
 // VSPI pins
 #define PIN_NUM_MISO 19

@@ -137,8 +137,12 @@ void DoorSensorComponent::doorSensorTask() {
         // Wait for notification from ISR (blocking)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         
+        ESP_LOGI(TAG, "*** DOOR SENSOR TRIGGERED *** (GPIO %d ISR fired)", DOOR_SENSOR_PIN);
+        
         // Read the current state of the door sensor
         int current_state = gpio_get_level((gpio_num_t)DOOR_SENSOR_PIN);
+        
+        ESP_LOGI(TAG, "Door state: %s (GPIO level = %d)", current_state ? "OPEN" : "CLOSED", current_state);
 
         // Update door state
         if (door_state_param) {
@@ -147,12 +151,17 @@ void DoorSensorComponent::doorSensorTask() {
         
         // Update the last door event time
         if (last_door_event_seconds_param) {
-            last_door_event_seconds_param->setValue(0, 0, esp_timer_get_time() / 1000000);
+            int current_time = esp_timer_get_time() / 1000000;
+            last_door_event_seconds_param->setValue(0, 0, current_time);
+            ESP_LOGI(TAG, "Door event timestamp updated: %d seconds", current_time);
         }
         
         // Detect door opened transition (0->1) and execute entry/departure actions
         if (previous_state == 0 && current_state == 1) {
+            ESP_LOGI(TAG, "Door OPENED (transition 0->1) - executing door opened actions");
             executeDoorOpenedActions();
+        } else if (previous_state == 1 && current_state == 0) {
+            ESP_LOGI(TAG, "Door CLOSED (transition 1->0)");
         }
         
         previous_state = current_state;
