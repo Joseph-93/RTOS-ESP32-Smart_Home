@@ -67,10 +67,10 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Initializing all components...");
     component_graph->initializeAll();
     
-    // Now that ALL components are initialized, build the GUI menu tree
-    ESP_LOGI(TAG, "Building GUI menu tree...");
-    gui_component.buildMenuTree();
-    ESP_LOGI(TAG, "GUI menu tree built successfully");
+    // Create simple button grid GUI
+    ESP_LOGI(TAG, "Creating simple button grid...");
+    gui_component.createSimpleButtonGrid();
+    ESP_LOGI(TAG, "GUI created successfully");
     
     ESP_LOGI(TAG, "System initialized - ready!");
     

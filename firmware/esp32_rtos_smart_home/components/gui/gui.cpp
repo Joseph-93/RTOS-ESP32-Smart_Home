@@ -93,7 +93,7 @@ void GUIComponent::init_gaussian_lookup() {
 // ============================================================================
 
 GUIComponent::GUIComponent() 
-    : Component("GUI"), root_node(nullptr), current_node(nullptr) {
+    : Component("GUI"), main_screen(nullptr) {
     ESP_LOGI(TAG, "GUIComponent created");
 }
 
@@ -101,15 +101,7 @@ GUIComponent::~GUIComponent() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] ~GUIComponent");
 #endif
-    // Clean up menu tree
-    if (root_node) {
-        delete root_node;
-    }
-    for (auto* node : all_nodes) {
-        if (node != root_node) {
-            delete node;
-        }
-    }
+    // LVGL cleans up screens automatically
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] ~GUIComponent");
 #endif
@@ -557,1019 +549,119 @@ void GUIComponent::guiStatusTask() {
     }
 }
 
-void GUIComponent::buildMenuTree() {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] GUIComponent::buildMenuTree");
-#endif
-    ESP_LOGI(TAG, "Building menu tree...");
-    ESP_LOGI(TAG, "Free heap before building tree: %lu bytes", esp_get_free_heap_size());
-    
-    // Create root node (home screen) - will be populated after components are added
-    root_node = new MenuNode("Home", nullptr, this);
-    all_nodes.push_back(root_node);
-    current_node = root_node;
-    
-    // Get all components from ComponentGraph
-    if (!component_graph) {
-        ESP_LOGE(TAG, "ComponentGraph not available!");
-        return;
-    }
-    
-    std::vector<std::string> component_names = component_graph->getComponentNames();
-    
-    // For each component in graph, create its menu subtree
-    for (const std::string& comp_name : component_names) {
-        Component* comp = component_graph->getComponent(comp_name);
-        if (comp) {
-            MenuNode* comp_node = createComponentNode(comp, root_node);
-            root_node->children.push_back(comp_node);
-        }
-    }
-    
-    // Now create home screen with all component buttons
-    createHomeScreen(root_node);
-    
-    ESP_LOGI(TAG, "Menu tree built with %zu top-level components", root_node->children.size());
-    
-    // Display the home screen
-    lv_scr_load(root_node->screen);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] GUIComponent::buildMenuTree");
-#endif
-}
+// ============================================================================
+// Simple Button Grid (3x2 = 6 buttons)
+// ============================================================================
 
-MenuNode* GUIComponent::createComponentNode(Component* component, MenuNode* parent) {
+void GUIComponent::createSimpleButtonGrid() {
 #ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] GUIComponent::createComponentNode - component: %s", 
-             component ? component->getName().c_str() : "null");
+    ESP_LOGI(TAG, "[ENTER] createSimpleButtonGrid");
 #endif
-    MenuNode* node = new MenuNode(component->getName(), parent, this);
-    node->associated_component = component;
-    all_nodes.push_back(node);
+    ESP_LOGI(TAG, "Creating simple 3x2 button grid...");
+    ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
     
-    // Create Parameters submenu (just structure, no screen yet)
-    MenuNode* params_node = createParametersNode(component, node);
-    node->children.push_back(params_node);
-    
-    // Create Actions submenu (just structure, no screen yet)
-    MenuNode* actions_node = createActionsNode(component, node);
-    node->children.push_back(actions_node);
-    
-    // Don't create screen yet - will be created on-demand when navigated to
-    
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] GUIComponent::createComponentNode");
-#endif
-    return node;
-}
-
-MenuNode* GUIComponent::createParametersNode(Component* component, MenuNode* parent) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] GUIComponent::createParametersNode - component: %s",
-             component ? component->getName().c_str() : "null");
-#endif
-    MenuNode* node = new MenuNode("Parameters", parent, this);
-    node->associated_component = component;
-    all_nodes.push_back(node);
-    
-    ESP_LOGI(TAG, "Component %s has %zu int, %zu float, %zu bool, %zu string params",
-             component->getName().c_str(),
-             component->getIntParams().size(),
-             component->getFloatParams().size(),
-             component->getBoolParams().size(),
-             component->getStringParams().size());
-    
-    // Create child nodes for each parameter (structure only, no screens yet)
-    for (auto& param : component->getIntParams()) {
-        MenuNode* param_node = new MenuNode(param->getName(), node, this);
-        param_node->associated_component = component;
-        param_node->param_name = param->getName();
-        param_node->param_type = "int";
-        all_nodes.push_back(param_node);
-        node->children.push_back(param_node);
-    }
-    
-    for (auto& param : component->getFloatParams()) {
-        MenuNode* param_node = new MenuNode(param->getName(), node, this);
-        param_node->associated_component = component;
-        param_node->param_name = param->getName();
-        param_node->param_type = "float";
-        all_nodes.push_back(param_node);
-        node->children.push_back(param_node);
-    }
-    
-    for (auto& param : component->getBoolParams()) {
-        MenuNode* param_node = new MenuNode(param->getName(), node, this);
-        param_node->associated_component = component;
-        param_node->param_name = param->getName();
-        param_node->param_type = "bool";
-        all_nodes.push_back(param_node);
-        node->children.push_back(param_node);
-    }
-    
-    for (auto& param : component->getStringParams()) {
-        MenuNode* param_node = new MenuNode(param->getName(), node, this);
-        param_node->associated_component = component;
-        param_node->param_name = param->getName();
-        param_node->param_type = "string";
-        all_nodes.push_back(param_node);
-        node->children.push_back(param_node);
-    }
-    
-    // Don't create screens yet - will be created on-demand when navigated to
-    
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] GUIComponent::createParametersNode");
-#endif
-    return node;
-}
-
-MenuNode* GUIComponent::createActionsNode(Component* component, MenuNode* parent) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] GUIComponent::createActionsNode - component: %s",
-             component ? component->getName().c_str() : "null");
-#endif
-    MenuNode* node = new MenuNode("Actions", parent, this);
-    node->associated_component = component;
-    all_nodes.push_back(node);
-    
-    // Don't create screen yet - will be created on-demand
-    
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] GUIComponent::createActionsNode");
-#endif
-    return node;
-}
-
-void GUIComponent::navigateToNode(MenuNode* node) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] GUIComponent::navigateToNode - node: %s", 
-             node ? node->name.c_str() : "null");
-#endif
-    if (!node) {
-        ESP_LOGE(TAG, "Cannot navigate to null node");
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] GUIComponent::navigateToNode - null node");
-#endif
-        return;
-    }
-    
-    // If navigating to a parameter detail screen, delete any existing screen to force refresh
-    if (node->screen && !node->param_name.empty() && node->param_type != "") {
-        ESP_LOGI(TAG, "Deleting cached parameter detail screen to force refresh");
-        lv_obj_del(node->screen);
-        node->screen = nullptr;
-    }
-    
-    // Create screen on-demand if it doesn't exist yet
-    ensureScreenCreated(node);
-    
-    if (!node->screen) {
-        ESP_LOGE(TAG, "Failed to create screen for node: %s", node->name.c_str());
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] GUIComponent::navigateToNode - screen creation failed");
-#endif
-        return;
-    }
-    
-    current_node = node;
-    lv_scr_load(node->screen);
-    ESP_LOGI(TAG, "Navigated to: %s", node->name.c_str());
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] GUIComponent::navigateToNode");
-#endif
-}
-
-void GUIComponent::ensureScreenCreated(MenuNode* node) {
-    if (!node || node->screen) return; // Already created or invalid
-    
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] ensureScreenCreated - node: %s", node->name.c_str());
-#endif
-    
-    // Determine what type of screen to create based on node properties
-    if (node == root_node) {
-        // Home screen
-        createHomeScreen(node);
-    } else if (node->associated_component) {
-        if (node->name == "Parameters") {
-            createParametersScreen(node, node->associated_component);
-        } else if (node->name == "Actions") {
-            createActionsScreen(node, node->associated_component);
-        } else if (!node->param_name.empty()) {
-            // Check if this is a parameter edit screen (has row/col set) or detail screen
-#ifdef DEBUG
-            ESP_LOGI(TAG, "ensureScreenCreated: checking node name='%s' for '_edit'", node->name.c_str());
-#endif
-            if (node->name.find("_edit") != std::string::npos) {
-                // Parameter edit screen
-#ifdef DEBUG
-                ESP_LOGI(TAG, "ensureScreenCreated: calling createParameterEditScreen");
-#endif
-                createParameterEditScreen(node, node->associated_component);
-            } else {
-                // Parameter detail screen
-#ifdef DEBUG
-                ESP_LOGI(TAG, "ensureScreenCreated: calling createParameterDetailScreen");
-#endif
-                createParameterDetailScreen(node, node->associated_component, 
-                                           node->param_name, node->param_type);
-            }
-        } else {
-            // Component detail screen
-            createComponentScreen(node, node->associated_component);
-        }
-    }
-    
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] ensureScreenCreated - screen: %p", node->screen);
-#endif
-}
-
-// Event handlers
-
-void GUIComponent::menu_button_event_cb(lv_event_t* e) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] menu_button_event_cb");
-#endif
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code != LV_EVENT_CLICKED) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] menu_button_event_cb - not clicked");
-#endif
-        return;
-    }
-    
-    MenuNode* target_node = (MenuNode*)lv_event_get_user_data(e);
-    if (!target_node || !target_node->gui_instance) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] menu_button_event_cb - invalid node");
-#endif
-        return;
-    }
-    
-    target_node->gui_instance->navigateToNode(target_node);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] menu_button_event_cb");
-#endif
-}
-
-void GUIComponent::back_button_event_cb(lv_event_t* e) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] back_button_event_cb");
-#endif
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code != LV_EVENT_CLICKED) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] back_button_event_cb - not clicked");
-#endif
-        return;
-    }
-    
-    MenuNode* current = (MenuNode*)lv_event_get_user_data(e);
-    if (!current || !current->parent || !current->gui_instance) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] back_button_event_cb - invalid node");
-#endif
-        return;
-    }
-    
-    current->gui_instance->navigateToNode(current->parent);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] back_button_event_cb");
-#endif
-}
-
-void GUIComponent::action_button_event_cb(lv_event_t* e) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] action_button_event_cb");
-#endif
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code != LV_EVENT_CLICKED) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] action_button_event_cb - not clicked");
-#endif
-        return;
-    }
-    
-    ActionButtonContext* ctx = (ActionButtonContext*)lv_event_get_user_data(e);
-    if (!ctx || !ctx->component) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] action_button_event_cb - invalid context");
-#endif
-        return;
-    }
-    
-    ESP_LOGI(TAG, "Action button clicked: index %zu", ctx->action_index);
-    ctx->component->invokeAction(ctx->action_index);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] action_button_event_cb");
-#endif
-}
-
-void GUIComponent::param_edit_button_event_cb(lv_event_t* e) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] param_edit_button_event_cb");
-#endif
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code != LV_EVENT_CLICKED) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] param_edit_button_event_cb - not clicked");
-#endif
-        return;
-    }
-    
-    MenuNode* node = (MenuNode*)lv_event_get_user_data(e);
-    if (!node || !node->associated_component || !node->gui_instance) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] param_edit_button_event_cb - invalid node");
-#endif
-        return;
-    }
-    
-    ESP_LOGI(TAG, "Edit parameter: %s[%zu,%zu]", node->param_name.c_str(), node->param_row, node->param_col);
-    node->gui_instance->navigateToNode(node);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] param_edit_button_event_cb");
-#endif
-}
-
-void GUIComponent::param_save_button_event_cb(lv_event_t* e) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] param_save_button_event_cb");
-#endif
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code != LV_EVENT_CLICKED) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] param_save_button_event_cb - not clicked");
-#endif
-        return;
-    }
-    
-    MenuNode* node = (MenuNode*)lv_event_get_user_data(e);
-    if (!node || !node->associated_component || !node->gui_instance) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] param_save_button_event_cb - invalid node");
-#endif
-        return;
-    }
-    
-    // The slider value was already saved during slider change event
-    // Just navigate back to parent
-    ESP_LOGI(TAG, "Saving parameter: %s[%zu,%zu]", node->param_name.c_str(), node->param_row, node->param_col);
-    if (node->parent) {
-        node->gui_instance->navigateToNode(node->parent);
-    }
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] param_save_button_event_cb");
-#endif
-}
-
-// LVGL screen creation functions
-
-void GUIComponent::createHomeScreen(MenuNode* node) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] createHomeScreen - node: %s", node ? node->name.c_str() : "null");
-#endif
-    if (!node) {
-        ESP_LOGE("GUI", "createHomeScreen: null node");
-        return;
-    }
-    
-    ESP_LOGI(TAG, "Creating home screen - Free heap: %lu bytes", esp_get_free_heap_size());
-    
-    // Delete old screen if it exists
-    if (node->screen) {
-        lv_obj_del(node->screen);
-    }
-    
-    node->screen = lv_obj_create(NULL);
-    if (!node->screen) {
-        ESP_LOGE(TAG, "Failed to create screen for home - Out of memory?");
+    // Create main screen
+    main_screen = lv_obj_create(NULL);
+    if (!main_screen) {
+        ESP_LOGE(TAG, "Failed to create main screen - Out of memory?");
         ESP_LOGE(TAG, "Free heap: %lu bytes, Minimum ever: %lu bytes", 
                  esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
         return;
     }
-    lv_obj_set_style_bg_color(node->screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(main_screen, lv_color_black(), 0);
     
     // Title
-    lv_obj_t* title = lv_label_create(node->screen);
-    ESP_LOGI(TAG, "Created title label - Free heap: %lu bytes", esp_get_free_heap_size());
-    lv_label_set_text(title, "Smart Home");
+    lv_obj_t* title = lv_label_create(main_screen);
+    lv_label_set_text(title, "Smart Home Controls");
     lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(title, lv_color_white(), 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
     
-    // Create component buttons
-    int y_pos = 60;
-    ESP_LOGI(TAG, "Creating %zu component buttons - Free heap: %lu bytes", 
-             node->children.size(), esp_get_free_heap_size());
-    for (MenuNode* child : node->children) {
-        ESP_LOGI(TAG, "Creating button for: %s on screen %p", 
-                 child ? child->name.c_str() : "null", node->screen);
-        lv_obj_t* comp_btn = lv_btn_create(node->screen);
-        ESP_LOGI(TAG, "Button %p created - Free heap: %lu bytes", comp_btn, esp_get_free_heap_size());
-        lv_obj_set_size(comp_btn, 280, 50);
-        lv_obj_set_pos(comp_btn, 20, y_pos);
+    // Button labels
+    const char* button_labels[6] = {
+        "Button 1",
+        "Button 2",
+        "Button 3",
+        "Button 4",
+        "Button 5",
+        "Button 6"
+    };
+    
+    // Create 3x2 grid of buttons
+    const int btn_width = 90;
+    const int btn_height = 60;
+    const int h_spacing = 10;
+    const int v_spacing = 15;
+    const int start_y = 50;
+    
+    for (int i = 0; i < 6; i++) {
+        int row = i / 3;  // 0 or 1
+        int col = i % 3;  // 0, 1, or 2
         
-        lv_obj_t* comp_label = lv_label_create(comp_btn);
-        lv_label_set_text(comp_label, child->name.c_str());
-        lv_obj_center(comp_label);
+        lv_obj_t* btn = lv_btn_create(main_screen);
+        lv_obj_set_size(btn, btn_width, btn_height);
         
-        lv_obj_add_event_cb(comp_btn, menu_button_event_cb, LV_EVENT_CLICKED, child);
+        // Calculate position
+        int x = 10 + col * (btn_width + h_spacing);
+        int y = start_y + row * (btn_height + v_spacing);
+        lv_obj_set_pos(btn, x, y);
         
-        y_pos += 60;
+        // Set button color (different colors for visual distinction)
+        lv_color_t colors[6] = {
+            lv_color_make(0, 100, 200),   // Blue
+            lv_color_make(200, 100, 0),   // Orange
+            lv_color_make(0, 150, 100),   // Teal
+            lv_color_make(150, 0, 150),   // Purple
+            lv_color_make(200, 0, 0),     // Red
+            lv_color_make(0, 200, 0)      // Green
+        };
+        lv_obj_set_style_bg_color(btn, colors[i], 0);
+        
+        // Button label
+        lv_obj_t* label = lv_label_create(btn);
+        lv_label_set_text(label, button_labels[i]);
+        lv_obj_center(label);
+        
+        // Add click event with button index as user data
+        lv_obj_add_event_cb(btn, simple_button_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i);
     }
     
-    ESP_LOGI(TAG, "Home screen created with %zu component buttons", node->children.size());
+    // Load the screen
+    lv_scr_load(main_screen);
+    
+    ESP_LOGI(TAG, "Simple button grid created successfully");
+    ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
 #ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] createHomeScreen");
+    ESP_LOGI(TAG, "[EXIT] createSimpleButtonGrid");
 #endif
 }
 
-void GUIComponent::createComponentScreen(MenuNode* node, Component* component) {
+void GUIComponent::simple_button_event_cb(lv_event_t* e) {
 #ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] createComponentScreen - node: %s, component: %s",
-             node ? node->name.c_str() : "null",
-             component ? component->getName().c_str() : "null");
+    ESP_LOGI(TAG, "[ENTER] simple_button_event_cb");
 #endif
-    if (!node) {
-        ESP_LOGE(TAG, "createComponentScreen: null node");
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code != LV_EVENT_CLICKED) {
 #ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createComponentScreen - null node");
-#endif
-        return;
-    }
-    if (!component) {
-        ESP_LOGE(TAG, "createComponentScreen: null component");
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createComponentScreen - null component");
+        ESP_LOGI(TAG, "[EXIT] simple_button_event_cb - not clicked");
 #endif
         return;
     }
     
-    node->screen = lv_obj_create(NULL);
-    if (!node->screen) {
-        ESP_LOGE(TAG, "Failed to create screen for component %s", component->getName().c_str());
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createComponentScreen - screen creation failed");
-#endif
-        return;
-    }
-    lv_obj_set_style_bg_color(node->screen, lv_color_black(), 0);
+    // Get button index from user data
+    int button_index = (int)(intptr_t)lv_event_get_user_data(e);
     
-    // Title
-    lv_obj_t* title = lv_label_create(node->screen);
-    lv_label_set_text(title, component->getName().c_str());
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(title, lv_color_white(), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+    ESP_LOGI(TAG, "Button %d clicked!", button_index + 1);
     
-    // Back button
-    lv_obj_t* back_btn = lv_btn_create(node->screen);
-    lv_obj_set_size(back_btn, 80, 40);
-    lv_obj_set_pos(back_btn, 10, 10);
-    lv_obj_t* back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, "< Back");
-    lv_obj_center(back_label);
-    lv_obj_add_event_cb(back_btn, back_button_event_cb, LV_EVENT_CLICKED, node);
-    
-    // Parameters button (only if params child exists)
-    if (node->children.size() > 0 && node->children[0]) {
-        lv_obj_t* params_btn = lv_btn_create(node->screen);
-        lv_obj_set_size(params_btn, 280, 50);
-        lv_obj_set_pos(params_btn, 20, 80);
-        lv_obj_t* params_label = lv_label_create(params_btn);
-        lv_label_set_text(params_label, "Parameters");
-        lv_obj_center(params_label);
-        lv_obj_add_event_cb(params_btn, menu_button_event_cb, LV_EVENT_CLICKED, node->children[0]);
-    }
-    
-    // Actions button (only if actions child exists)
-    if (node->children.size() > 1 && node->children[1]) {
-        lv_obj_t* actions_btn = lv_btn_create(node->screen);
-        lv_obj_set_size(actions_btn, 280, 50);
-        lv_obj_set_pos(actions_btn, 20, 150);
-        lv_obj_t* actions_label = lv_label_create(actions_btn);
-        lv_label_set_text(actions_label, "Actions");
-        lv_obj_center(actions_label);
-        lv_obj_add_event_cb(actions_btn, menu_button_event_cb, LV_EVENT_CLICKED, node->children[1]);
-    }
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] createComponentScreen");
-#endif
-}
-
-void GUIComponent::createParametersScreen(MenuNode* node, Component* component) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] createParametersScreen - node: %s, component: %s",
-             node ? node->name.c_str() : "null",
-             component ? component->getName().c_str() : "null");
-#endif
-    if (!node) {
-        ESP_LOGE(TAG, "createParametersScreen: null node");
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createParametersScreen - null node");
-#endif
-        return;
-    }
-    if (!component) {
-        ESP_LOGE(TAG, "createParametersScreen: null component");
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createParametersScreen - null component");
-#endif
-        return;
-    }
-    
-    node->screen = lv_obj_create(NULL);
-    if (!node->screen) {
-        ESP_LOGE(TAG, "Failed to create parameters screen for %s", component->getName().c_str());
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createParametersScreen - screen creation failed");
-#endif
-        return;
-    }
-    lv_obj_set_style_bg_color(node->screen, lv_color_black(), 0);
-    
-    // Title
-    lv_obj_t* title = lv_label_create(node->screen);
-    std::string title_text = component->getName() + " - Parameters";
-    lv_label_set_text(title, title_text.c_str());
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(title, lv_color_white(), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
-    
-    // Back button
-    lv_obj_t* back_btn = lv_btn_create(node->screen);
-    lv_obj_set_size(back_btn, 80, 40);
-    lv_obj_set_pos(back_btn, 10, 10);
-    lv_obj_t* back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, "< Back");
-    lv_obj_center(back_label);
-    lv_obj_add_event_cb(back_btn, back_button_event_cb, LV_EVENT_CLICKED, node);
-    
-    // Create scrollable list of parameter buttons
-    lv_obj_t* list = lv_obj_create(node->screen);
-    lv_obj_set_size(list, 300, 160);
-    lv_obj_set_pos(list, 10, 60);
-    lv_obj_set_style_bg_color(list, lv_color_make(20, 20, 20), 0);
-    lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_scroll_dir(list, LV_DIR_VER);
-    lv_obj_set_style_pad_row(list, 5, 0);  // Add spacing between rows    lv_obj_set_flex_align(list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    
-    // Add buttons for each parameter from child nodes
-    if (node->children.empty()) {
-        lv_obj_t* empty_label = lv_label_create(list);
-        lv_label_set_text(empty_label, "No parameters");
-        lv_obj_set_style_text_color(empty_label, lv_color_make(128, 128, 128), 0);
-    } else {
-        for (MenuNode* param_child : node->children) {
-            lv_obj_t* param_btn = lv_btn_create(list);
-            lv_obj_set_size(param_btn, 280, 40);
-            lv_obj_set_style_bg_color(param_btn, lv_color_make(50, 50, 150), 0);
-            
-            lv_obj_t* param_label = lv_label_create(param_btn);
-            lv_label_set_text(param_label, param_child->name.c_str());
-            lv_obj_center(param_label);
-            
-            lv_obj_add_event_cb(param_btn, menu_button_event_cb, LV_EVENT_CLICKED, param_child);
-        }
-    }
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] createParametersScreen - %zu parameter buttons", node->children.size());
-#endif
-}
-
-void GUIComponent::createParameterDetailScreen(MenuNode* node, Component* component,
-                                               const std::string& param_name, const std::string& param_type) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] createParameterDetailScreen - param: %s, type: %s",
-             param_name.c_str(), param_type.c_str());
-#endif
-    if (!node || !component) {
-        ESP_LOGE(TAG, "createParameterDetailScreen: null node or component");
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createParameterDetailScreen - null input");
-#endif
-        return;
-    }
-    
-    node->screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(node->screen, lv_color_black(), 0);
-    
-    // Title
-    lv_obj_t* title = lv_label_create(node->screen);
-    lv_label_set_text(title, param_name.c_str());
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(title, lv_color_white(), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
-    
-    // Back button
-    lv_obj_t* back_btn = lv_btn_create(node->screen);
-    lv_obj_set_size(back_btn, 80, 40);
-    lv_obj_set_pos(back_btn, 10, 10);
-    lv_obj_t* back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, "< Back");
-    lv_obj_center(back_label);
-    lv_obj_add_event_cb(back_btn, back_button_event_cb, LV_EVENT_CLICKED, node);
-    
-    // Create scrollable list
-    lv_obj_t* list = lv_obj_create(node->screen);
-    lv_obj_set_size(list, 300, 160);
-    lv_obj_set_pos(list, 10, 60);
-    lv_obj_set_style_bg_color(list, lv_color_make(20, 20, 20), 0);
-    lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_scroll_dir(list, LV_DIR_VER);
-    
-    // Get parameter and display all [row, col] values as buttons (for numeric) or labels (for string)
-    if (param_type == "int") {
-        IntParameter* param = component->getIntParam(param_name);
-        if (param) {
-            for (size_t row = 0; row < param->getRows(); row++) {
-                for (size_t col = 0; col < param->getCols(); col++) {
-                    // Create button for editing
-                    lv_obj_t* value_btn = lv_btn_create(list);
-                    lv_obj_set_width(value_btn, 280);
-                    lv_obj_set_height(value_btn, 40);
-                    lv_obj_set_style_pad_all(value_btn, 5, 0);
-                    
-                    lv_obj_t* value_label = lv_label_create(value_btn);
-                    std::string text = "[" + std::to_string(row) + "," + std::to_string(col) + "]: " + 
-                                      std::to_string(param->getValue(row, col));
-                    lv_label_set_text(value_label, text.c_str());
-                    lv_obj_center(value_label);
-                    
-                    // Create child node for editing this value
-                    MenuNode* edit_node = new MenuNode(param_name + "_edit", node, this);
-                    edit_node->associated_component = component;
-                    edit_node->param_name = param_name;
-                    edit_node->param_type = param_type;
-                    edit_node->param_row = row;
-                    edit_node->param_col = col;
-                    all_nodes.push_back(edit_node);
-                    
-                    lv_obj_add_event_cb(value_btn, param_edit_button_event_cb, LV_EVENT_CLICKED, edit_node);
-                }
-            }
-        }
-    } else if (param_type == "float") {
-        FloatParameter* param = component->getFloatParam(param_name);
-        if (param) {
-            for (size_t row = 0; row < param->getRows(); row++) {
-                for (size_t col = 0; col < param->getCols(); col++) {
-                    // Create button for editing
-                    lv_obj_t* value_btn = lv_btn_create(list);
-                    lv_obj_set_width(value_btn, 280);
-                    lv_obj_set_height(value_btn, 40);
-                    lv_obj_set_style_pad_all(value_btn, 5, 0);
-                    
-                    lv_obj_t* value_label = lv_label_create(value_btn);
-                    std::string text = "[" + std::to_string(row) + "," + std::to_string(col) + "]: " + 
-                                      std::to_string(param->getValue(row, col));
-                    lv_label_set_text(value_label, text.c_str());
-                    lv_obj_center(value_label);
-                    
-                    // Create child node for editing this value
-                    MenuNode* edit_node = new MenuNode(param_name + "_edit", node, this);
-                    edit_node->associated_component = component;
-                    edit_node->param_name = param_name;
-                    edit_node->param_type = param_type;
-                    edit_node->param_row = row;
-                    edit_node->param_col = col;
-                    all_nodes.push_back(edit_node);
-                    
-                    lv_obj_add_event_cb(value_btn, param_edit_button_event_cb, LV_EVENT_CLICKED, edit_node);
-                }
-            }
-        }
-    } else if (param_type == "bool") {
-        BoolParameter* param = component->getBoolParam(param_name);
-        if (param) {
-            for (size_t row = 0; row < param->getRows(); row++) {
-                for (size_t col = 0; col < param->getCols(); col++) {
-                    // Create button for toggling
-                    lv_obj_t* value_btn = lv_btn_create(list);
-                    lv_obj_set_width(value_btn, 280);
-                    lv_obj_set_height(value_btn, 40);
-                    lv_obj_set_style_pad_all(value_btn, 5, 0);
-                    
-                    lv_obj_t* value_label = lv_label_create(value_btn);
-                    std::string text = "[" + std::to_string(row) + "," + std::to_string(col) + "]: " + 
-                                      (param->getValue(row, col) ? "true" : "false");
-                    lv_label_set_text(value_label, text.c_str());
-                    lv_obj_center(value_label);
-                    
-                    // Create child node for editing this value
-                    MenuNode* edit_node = new MenuNode(param_name + "_edit", node, this);
-                    edit_node->associated_component = component;
-                    edit_node->param_name = param_name;
-                    edit_node->param_type = param_type;
-                    edit_node->param_row = row;
-                    edit_node->param_col = col;
-                    all_nodes.push_back(edit_node);
-                    
-                    lv_obj_add_event_cb(value_btn, param_edit_button_event_cb, LV_EVENT_CLICKED, edit_node);
-                }
-            }
-        }
-    } else if (param_type == "string") {
-        StringParameter* param = component->getStringParam(param_name);
-        if (param) {
-            for (size_t row = 0; row < param->getRows(); row++) {
-                for (size_t col = 0; col < param->getCols(); col++) {
-                    lv_obj_t* value_label = lv_label_create(list);
-                    const std::string& val = param->getValue(row, col);
-                    std::string text = "[" + std::to_string(row) + "," + std::to_string(col) + "]: " + val;
-                    lv_label_set_text(value_label, text.c_str());
-                    lv_obj_set_style_text_color(value_label, lv_color_white(), 0);
-                    lv_label_set_long_mode(value_label, LV_LABEL_LONG_WRAP);
-                    lv_obj_set_width(value_label, 280);
-                }
-            }
-        }
+    // Send notification via ComponentGraph
+    if (g_gui_component && g_gui_component->component_graph) {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "Button %d clicked", button_index + 1);
+        g_gui_component->component_graph->sendNotification(msg, false, 5, 2000);
     }
     
 #ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] createParameterDetailScreen");
-#endif
-}
-
-void GUIComponent::createParameterEditScreen(MenuNode* node, Component* component) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] createParameterEditScreen - param: %s[%zu,%zu] type: %s",
-             node ? node->param_name.c_str() : "null", node ? node->param_row : 0,
-             node ? node->param_col : 0, node ? node->param_type.c_str() : "null");
-#endif
-    if (!node || !component) {
-        ESP_LOGE(TAG, "createParameterEditScreen: null input");
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createParameterEditScreen - null input");
-#endif
-        return;
-    }
-    
-    node->screen = lv_obj_create(NULL);
-    if (!node->screen) {
-        ESP_LOGE(TAG, "Failed to create parameter edit screen");
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createParameterEditScreen - screen creation failed");
-#endif
-        return;
-    }
-    
-    lv_obj_set_style_bg_color(node->screen, lv_color_black(), 0);
-    lv_obj_clear_flag(node->screen, LV_OBJ_FLAG_SCROLLABLE);
-    
-    // Title
-    lv_obj_t* title = lv_label_create(node->screen);
-    std::string title_text = "Edit " + node->param_name + "[" + 
-                             std::to_string(node->param_row) + "," + 
-                             std::to_string(node->param_col) + "]";
-    lv_label_set_text(title, title_text.c_str());
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(title, lv_color_white(), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
-    
-    // Back button
-    lv_obj_t* back_btn = lv_btn_create(node->screen);
-    lv_obj_set_size(back_btn, 80, 40);
-    lv_obj_set_pos(back_btn, 10, 10);
-    lv_obj_t* back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, "< Back");
-    lv_obj_center(back_label);
-    lv_obj_add_event_cb(back_btn, back_button_event_cb, LV_EVENT_CLICKED, node);
-    
-    // Create edit controls based on parameter type
-    if (node->param_type == "int") {
-        IntParameter* param = component->getIntParam(node->param_name);
-        if (param) {
-            int current_value = param->getValue(node->param_row, node->param_col);
-            int min_val = param->getMin();
-            int max_val = param->getMax();
-            
-            // Value label
-            lv_obj_t* value_label = lv_label_create(node->screen);
-            lv_label_set_text_fmt(value_label, "Value: %d", current_value);
-            lv_obj_set_style_text_color(value_label, lv_color_white(), 0);
-            lv_obj_align(value_label, LV_ALIGN_CENTER, 0, -40);
-            
-            // Slider
-            lv_obj_t* slider = lv_slider_create(node->screen);
-            lv_obj_set_width(slider, 260);
-            lv_slider_set_range(slider, min_val, max_val);
-            lv_slider_set_value(slider, current_value, LV_ANIM_OFF);
-            lv_obj_align(slider, LV_ALIGN_CENTER, 0, 0);
-            
-            // Store label pointer in slider's user_data for callback access
-            lv_obj_set_user_data(slider, value_label);
-            
-            lv_obj_add_event_cb(slider, [](lv_event_t* e) {
-                MenuNode* node = (MenuNode*)lv_event_get_user_data(e);
-                lv_obj_t* slider = lv_event_get_target(e);
-                int value = lv_slider_get_value(slider);
-                
-                // Update the label in real-time
-                lv_obj_t* label = (lv_obj_t*)lv_obj_get_user_data(slider);
-                if (label) {
-                    lv_label_set_text_fmt(label, "Value: %d", value);
-                }
-                
-                IntParameter* param = node->associated_component->getIntParam(node->param_name);
-                if (param) {
-                    param->setValue(node->param_row, node->param_col, value);
-                    ESP_LOGI(TAG, "Updated %s[%zu,%zu] = %d", 
-                             node->param_name.c_str(), node->param_row, node->param_col, value);
-                }
-            }, LV_EVENT_VALUE_CHANGED, node);
-        }
-    } else if (node->param_type == "float") {
-        FloatParameter* param = component->getFloatParam(node->param_name);
-        if (param) {
-            float current_value = param->getValue(node->param_row, node->param_col);
-            float min_val = param->getMin();
-            float max_val = param->getMax();
-            
-            // Value label
-            lv_obj_t* value_label = lv_label_create(node->screen);
-            lv_label_set_text_fmt(value_label, "Value: %.2f", current_value);
-            lv_obj_set_style_text_color(value_label, lv_color_white(), 0);
-            lv_obj_align(value_label, LV_ALIGN_CENTER, 0, -40);
-            
-            // Slider
-            lv_obj_t* slider = lv_slider_create(node->screen);
-            lv_obj_set_width(slider, 260);
-            lv_slider_set_range(slider, (int)(min_val * 100), (int)(max_val * 100));
-            lv_slider_set_value(slider, (int)(current_value * 100), LV_ANIM_OFF);
-            lv_obj_align(slider, LV_ALIGN_CENTER, 0, 0);
-            
-            // Store label pointer in slider's user_data for callback access
-            lv_obj_set_user_data(slider, value_label);
-            
-            lv_obj_add_event_cb(slider, [](lv_event_t* e) {
-                MenuNode* node = (MenuNode*)lv_event_get_user_data(e);
-                lv_obj_t* slider = lv_event_get_target(e);
-                float value = lv_slider_get_value(slider) / 100.0f;
-                
-                // Update the label in real-time
-                lv_obj_t* label = (lv_obj_t*)lv_obj_get_user_data(slider);
-                if (label) {
-                    lv_label_set_text_fmt(label, "Value: %.2f", value);
-                }
-                
-                FloatParameter* param = node->associated_component->getFloatParam(node->param_name);
-                if (param) {
-                    param->setValue(node->param_row, node->param_col, value);
-                    ESP_LOGI(TAG, "Updated %s[%zu,%zu] = %.2f", 
-                             node->param_name.c_str(), node->param_row, node->param_col, value);
-                }
-            }, LV_EVENT_VALUE_CHANGED, node);
-        }
-    } else if (node->param_type == "bool") {
-        BoolParameter* param = component->getBoolParam(node->param_name);
-        if (param) {
-            bool current_value = param->getValue(node->param_row, node->param_col);
-            
-            // Toggle switch
-            lv_obj_t* sw = lv_switch_create(node->screen);
-            if (current_value) {
-                lv_obj_add_state(sw, LV_STATE_CHECKED);
-            }
-            lv_obj_align(sw, LV_ALIGN_CENTER, 0, 0);
-            
-            // Label
-            lv_obj_t* value_label = lv_label_create(node->screen);
-            lv_label_set_text(value_label, current_value ? "true" : "false");
-            lv_obj_set_style_text_color(value_label, lv_color_white(), 0);
-            lv_obj_align(value_label, LV_ALIGN_CENTER, 0, -40);
-            
-            // Store label pointer in switch's user_data for callback access
-            lv_obj_set_user_data(sw, value_label);
-            
-            lv_obj_add_event_cb(sw, [](lv_event_t* e) {
-                MenuNode* node = (MenuNode*)lv_event_get_user_data(e);
-                lv_obj_t* sw = lv_event_get_target(e);
-                bool value = lv_obj_has_state(sw, LV_STATE_CHECKED);
-                
-                // Update the label in real-time
-                lv_obj_t* label = (lv_obj_t*)lv_obj_get_user_data(sw);
-                if (label) {
-                    lv_label_set_text(label, value ? "true" : "false");
-                }
-                
-                BoolParameter* param = node->associated_component->getBoolParam(node->param_name);
-                if (param) {
-                    param->setValue(node->param_row, node->param_col, value);
-                    ESP_LOGI(TAG, "Updated %s[%zu,%zu] = %s", 
-                             node->param_name.c_str(), node->param_row, node->param_col,
-                             value ? "true" : "false");
-                }
-            }, LV_EVENT_VALUE_CHANGED, node);
-        }
-    }
-    
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] createParameterEditScreen");
-#endif
-}
-
-void GUIComponent::createActionsScreen(MenuNode* node, Component* component) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] createActionsScreen - node: %s, component: %s",
-             node ? node->name.c_str() : "null",
-             component ? component->getName().c_str() : "null");
-#endif
-    if (!node) {
-        ESP_LOGE(TAG, "createActionsScreen: null node");
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createActionsScreen - null node");
-#endif
-        return;
-    }
-    if (!component) {
-        ESP_LOGE(TAG, "createActionsScreen: null component");
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createActionsScreen - null component");
-#endif
-        return;
-    }
-    
-    node->screen = lv_obj_create(NULL);
-    if (!node->screen) {
-        ESP_LOGE(TAG, "Failed to create actions screen for %s", component->getName().c_str());
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] createActionsScreen - screen creation failed");
-#endif
-        return;
-    }
-    lv_obj_set_style_bg_color(node->screen, lv_color_black(), 0);
-    
-    // Title
-    lv_obj_t* title = lv_label_create(node->screen);
-    std::string title_text = component->getName() + " - Actions";
-    lv_label_set_text(title, title_text.c_str());
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(title, lv_color_white(), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
-    
-    // Back button
-    lv_obj_t* back_btn = lv_btn_create(node->screen);
-    lv_obj_set_size(back_btn, 80, 40);
-    lv_obj_set_pos(back_btn, 10, 10);
-    lv_obj_t* back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, "< Back");
-    lv_obj_center(back_label);
-    lv_obj_add_event_cb(back_btn, back_button_event_cb, LV_EVENT_CLICKED, node);
-    
-    // Create scrollable list of action buttons
-    lv_obj_t* list = lv_obj_create(node->screen);
-    if (!list) {
-        ESP_LOGE(TAG, "Failed to create action list container - out of memory?");
-        return;
-    }
-    lv_obj_set_size(list, 300, 160);
-    lv_obj_set_pos(list, 10, 60);
-    lv_obj_set_style_bg_color(list, lv_color_make(20, 20, 20), 0);
-    lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_scroll_dir(list, LV_DIR_VER);
-    lv_obj_set_flex_align(list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    
-    const auto& actions = component->getActions();
-    
-    ESP_LOGI(TAG, "Creating actions screen with %zu actions", actions.size());
-    
-    if (actions.empty()) {
-        lv_obj_t* empty_label = lv_label_create(list);
-        lv_label_set_text(empty_label, "No actions available");
-        lv_obj_set_style_text_color(empty_label, lv_color_make(128, 128, 128), 0);
-    } else {
-        for (size_t i = 0; i < actions.size(); i++) {
-            // Allocate minimal context (just pointer + size_t)
-            ActionButtonContext* ctx = new ActionButtonContext{component, i};
-            
-            lv_obj_t* action_btn = lv_btn_create(list);
-            if (!action_btn) {
-                ESP_LOGE(TAG, "Failed to create action button %zu/%zu - stopping", i, actions.size());
-                delete ctx;
-                break;
-            }
-            lv_obj_set_size(action_btn, 280, 40);
-            lv_obj_set_style_bg_color(action_btn, lv_color_make(0, 100, 200), 0);
-            
-            lv_obj_t* action_label = lv_label_create(action_btn);
-            if (!action_label) {
-                ESP_LOGE(TAG, "Failed to create action label %zu/%zu", i, actions.size());
-                delete ctx;
-                // Button already created, continue with next
-                continue;
-            }
-            lv_label_set_text(action_label, actions[i].name.c_str());
-            lv_obj_center(action_label);
-            
-            lv_obj_add_event_cb(action_btn, action_button_event_cb, LV_EVENT_CLICKED, ctx);
-        }
-    }
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] createActionsScreen - %zu actions", actions.size());
+    ESP_LOGI(TAG, "[EXIT] simple_button_event_cb");
 #endif
 }
 
