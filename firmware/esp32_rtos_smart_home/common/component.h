@@ -306,6 +306,7 @@ public:
     
     // Action management
     const std::vector<ComponentAction>& getActions() const;
+    std::vector<std::string> getActionNames() const;
     void invokeAction(size_t actionIndex);
 
 protected:
@@ -314,6 +315,7 @@ protected:
     std::string name;
     bool initialized;
     std::vector<ComponentAction> actions;
+    std::vector<std::string> actionNames;  // Store names separately to avoid std::function corruption
     
     // Parameter storage - using unique_ptr for stable heap addresses
     std::vector<std::unique_ptr<IntParameter>> intParams;

@@ -117,10 +117,6 @@ void LightSensorComponent::lightSensorTask() {
         // Change it so that higher light results in higher value
         int inverted_value = 4095 - raw_value;
         
-        // Log every 20th sample (once per second at 50ms interval) to avoid spam
-        if (sample_count % 20 == 0) {
-            ESP_LOGI(TAG, "Light sensor reading - ADC raw: %d, inverted: %d (GPIO36)", raw_value, inverted_value);
-        }
         sample_count++;
         
         // Update the parameter

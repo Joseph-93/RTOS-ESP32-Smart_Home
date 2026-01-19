@@ -1,0 +1,66 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Smart Home Hub</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏠 ESP32 Smart Home Control Hub</h1>
+            <p class="subtitle">Intelligent Device Management System</p>
+        </header>
+        
+        <main>
+            <!-- Add Device Form -->
+            <div class="add-device-section">
+                <h2>➕ Add ESP32 Device</h2>
+                <form method="post" action="{% url 'add_device' %}" class="add-device-form">
+                    {% csrf_token %}
+                    <div class="form-row">
+                        <input type="text" name="name" placeholder="Device Name (e.g., esp32-main)" required>
+                        <input type="text" name="host" placeholder="IP Address (from LCD display)" required>
+                        <input type="number" name="port" value="80" placeholder="Port" required>
+                        <button type="submit" class="btn btn-primary">Add Device</button>
+                    </div>
+                </form>
+            </div>
+            
+            <h2 style="margin-top: 2rem;">Connected Devices</h2>
+            <div class="device-grid">
+                {% for name, device in devices.items %}
+                <div class="device-card">
+                    <div class="device-header">
+                        <h2>{{ name }}</h2>
+                    </div>
+                    <div class="device-info">
+                        <p><strong>Host:</strong> {{ device.host }}</p>
+                        <p><strong>Port:</strong> {{ device.port }}</p>
+                    </div>
+                    <div class="device-actions">
+                        <a href="{% url 'device' name %}" class="btn btn-primary">Manage Device</a>
+                        <form method="post" action="{% url 'delete_device' name %}" style="display:inline;" onsubmit="return confirm('Delete {{ name }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger">🗑️ Delete</button>
+                        </form>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="empty-state">
+                    <h3>No ESP32 Devices Configured</h3>
+                    <p>Add devices in <code>dashboard/apps.py</code></p>
+                    <pre>esp32_manager.add_device('esp32-main', '192.168.1.100', 8888)</pre>
+                </div>
+                {% endfor %}
+            </div>
+        </main>
+        
+        <footer>
+            <p>ESP32 RTOS Smart Home System | Django Web Interface</p>
+        </footer>
+    </div>
+</body>
+</html>

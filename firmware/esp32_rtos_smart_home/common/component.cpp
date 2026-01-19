@@ -16,7 +16,11 @@ Component::~Component() {
 
 std::string Component::getName() const {
 #ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER/EXIT] getName() - returning: %s", name.c_str());
+    // Log with backtrace to see caller
+    void* trace[10];
+    int trace_size = 0;
+    ESP_LOGI("Component", "getName() called for '%s' from task '%s'", 
+             name.c_str(), pcTaskGetName(NULL));
 #endif
     return name;
 }
@@ -158,12 +162,17 @@ const std::vector<ComponentAction>& Component::getActions() const {
     return actions;
 }
 
+std::vector<std::string> Component::getActionNames() const {
+    return actionNames;  // Return the separate names vector, not touching ComponentAction objects
+}
+
 void Component::addAction(const std::string& name, const std::string& description,
                          std::function<bool(Component*)> callback) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addAction() - name: %s, desc: %s", name.c_str(), description.c_str());
 #endif
     actions.emplace_back(name, description, callback);
+    actionNames.push_back(name);  // Store name separately to avoid std::function corruption
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addAction() - name: %s, desc: %s", name.c_str(), description.c_str());
 #endif

@@ -1,0 +1,65 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ component_name }} - {{ device_name }}</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="{% static 'js/notifications.js' %}"></script>
+    <script src="{% static 'js/websocket.js' %}"></script>
+    <script src="{% static 'js/debug.js' %}"></script>
+    <script src="{% static 'js/component.js' %}"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="breadcrumb">
+                <a href="{% url 'index' %}">← Devices</a> / 
+                <a href="{% url 'device' device_name %}">{{ device_name }}</a>
+            </div>
+            <h1>{{ component_name }}</h1>
+            <p class="subtitle">{{ device_name }} - Component Details</p>
+        </header>
+        
+        <main>
+            <div id="error-banner" class="error-banner" style="display:none;"></div>
+            
+            <!-- Actions Accordion -->
+            <div class="accordion">
+                <button class="accordion-header" onclick="toggleAccordion(this)">
+                    <span class="accordion-title">⚡ Actions</span>
+                    <span class="accordion-icon">▼</span>
+                </button>
+                <div class="accordion-content">
+                    <div id="actions-container">
+                        <div class="loading">Loading actions...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Parameters Accordion -->
+            <div class="accordion">
+                <button class="accordion-header" onclick="toggleAccordion(this)">
+                    <span class="accordion-title">⚙️ Parameters</span>
+                    <span class="accordion-icon">▼</span>
+                </button>
+                <div class="accordion-content">
+                    <div id="params-container">
+                        <div class="loading">Loading parameters...</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script src="{% static 'js/component.js' %}"></script>
+    <script>
+        const deviceName = '{{ device_name }}';
+        const componentName = '{{ component_name }}';
+        const esp32Host = '{{ device.host }}';  // ESP32 IP address for WebSocket
+        window.esp32Host = esp32Host;
+        initComponent(deviceName, componentName);
+    </script>
+</body>
+</html>

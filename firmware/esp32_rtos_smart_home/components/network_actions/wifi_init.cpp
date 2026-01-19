@@ -128,3 +128,26 @@ bool wifi_init_sta(const char* ssid, const char* password)
         return false;
     }
 }
+
+bool wifi_get_ip_string(char* ip_str, size_t max_len) {
+    if (!ip_str || max_len < 16) {
+        return false;
+    }
+    
+    esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (!netif) {
+        strncpy(ip_str, "No IP", max_len - 1);
+        ip_str[max_len - 1] = '\0';
+        return false;
+    }
+    
+    esp_netif_ip_info_t ip_info;
+    if (esp_netif_get_ip_info(netif, &ip_info) == ESP_OK) {
+        snprintf(ip_str, max_len, IPSTR, IP2STR(&ip_info.ip));
+        return true;
+    }
+    
+    strncpy(ip_str, "No IP", max_len - 1);
+    ip_str[max_len - 1] = '\0';
+    return false;
+}

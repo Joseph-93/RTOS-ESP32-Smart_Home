@@ -1,0 +1,65 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ device_name }} - Components</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="{% static 'js/notifications.js' %}"></script>
+    <script src="{% static 'js/websocket.js' %}"></script>
+    <script src="{% static 'js/debug.js' %}"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="breadcrumb">
+                <a href="{% url 'index' %}">← Back to Devices</a>
+            </div>
+            <h1>{{ device_name }} - Components</h1>
+            <p class="subtitle">{{ device.host }}:{{ device.port }}</p>
+        </header>
+        
+        <main>
+            <div id="component-list" class="component-grid">
+                <p>Loading components...</p>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        const esp32Host = '{{ device.host }}';
+        
+        // Initialize WebSocket and get components
+        const deviceWs = new ESP32WebSocket(esp32Host);
+        
+        deviceWs.connect().then(async () => {
+            try {
+                const components = await deviceWs.getComponents();
+                const container = document.getElementById('component-list');
+                
+                if (components && components.length > 0) {
+                    container.innerHTML = '';
+                    components.forEach(comp => {
+                        const card = document.createElement('div');
+                        card.className = 'component-card';
+                        card.innerHTML = `
+                            <h3>${comp}</h3>
+                            <a href="/device/{{ device_name }}/${comp}/" class="btn btn-primary">View Details</a>
+                        `;
+                        container.appendChild(card);
+                    });
+                } else {
+                    container.innerHTML = '<div class="empty-state"><h3>No components found</h3></div>';
+                }
+            } catch (err) {
+                document.getElementById('component-list').innerHTML = 
+                    `<div class="empty-state"><h3>Error loading components</h3><p>${err.message}</p></div>`;
+            }
+        }).catch(err => {
+            document.getElementById('component-list').innerHTML = 
+                `<div class="empty-state"><h3>Connection failed</h3><p>${err.message}</p></div>`;
+        });
+    </script>
+</body>
+</html>

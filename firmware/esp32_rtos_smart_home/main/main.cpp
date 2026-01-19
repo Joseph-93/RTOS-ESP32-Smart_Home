@@ -19,6 +19,7 @@
 #include "light_sensor.h"
 #include "motion_sensor.h"
 #include "door_sensor.h"
+#include "web_server.h"
 #include "wifi_init.h"
 #include <vector>
 
@@ -34,6 +35,7 @@ static NetworkActionsComponent network_component;
 static LightSensorComponent light_sensor_component;
 static MotionSensorComponent motion_sensor_component;
 static DoorSensorComponent door_sensor_component;
+static WebServerComponent web_server_component;
 
 extern "C" void app_main(void)
 {
@@ -62,6 +64,7 @@ extern "C" void app_main(void)
     component_graph->registerComponent(&light_sensor_component);
     component_graph->registerComponent(&motion_sensor_component);
     component_graph->registerComponent(&door_sensor_component);
+    component_graph->registerComponent(&web_server_component);
     
     // Initialize all components (graph handles setUpDependencies + initialize)
     ESP_LOGI(TAG, "Initializing all components...");

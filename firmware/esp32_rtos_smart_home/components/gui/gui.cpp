@@ -2,6 +2,7 @@
 #include "component_graph.h"
 #include "lcd/lcd.h"
 #include "touch/touch.h"
+#include "wifi_init.h"
 #include "lvgl.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -124,15 +125,18 @@ void GUIComponent::initialize() {
 #endif
     ESP_LOGI(TAG, "Initializing GUIComponent...");
 
-    // Add a brightness parameter to control LCD backlight
-    addIntParam("desired_lcd_brightness", 1, 1, 0, 100, 100); // desired target brightness 0-100%
-    addIntParam("current_lcd_brightness", 1, 1, 0, 100, 100); // Read-only current brightness 0-100%
-    addIntParam("brighness_change_per_second", 1, 1, 10, 100, 50); // How fast to change brightness (0-100% per second)
-    addIntParam("lcd_screen_timeout_seconds", 1, 1, 10, 600, 10); // Screen timeout in seconds
-    addIntParam("motion_inactivity_screen_timeout_seconds", 1, 1, 10, 600, 10); // Motion inactivity screen timeout in seconds
-    addBoolParam("lcd_screen_on", 1, 1, true); // If false, turn off screen (saves power)
-    addBoolParam("override_auto_brightness", 1, 1, true); // If true, disable auto brightness adjustment
-    addBoolParam("override_screen_timeout", 1, 1, true); // If true, disable screen timeout
+    // Brightness parameters
+    addIntParam("user_set_brightness", 1, 1, 0, 100, 100); // User-controlled manual brightness (never touched by code)
+    addIntParam("auto_set_brightness", 1, 1, 0, 100, 100); // Auto-brightness from light sensor (never touched elsewhere)
+    addIntParam("desired_lcd_brightness", 1, 1, 0, 100, 100); // Final target brightness (what current chases)
+    addIntParam("current_lcd_brightness", 1, 1, 0, 100, 100); // Actual current brightness (read-only)
+    addIntParam("brighness_change_per_second", 1, 1, 10, 100, 50); // Rate at which current chases desired (0-100% per second)
+    addIntParam("lcd_screen_timeout_seconds", 1, 1, 10, 600, 10); // Touch inactivity timeout in seconds
+    addIntParam("motion_inactivity_screen_timeout_seconds", 1, 1, 10, 600, 10); // Motion inactivity timeout in seconds
+    addBoolParam("lcd_screen_on", 1, 1, true); // When false, forces desired to 0. When true, relinquishes control
+    addBoolParam("override_auto_brightness", 1, 1, true); // When true, use user_set. When false, use auto_set
+    addBoolParam("override_screen_timeout", 1, 1, true); // When false, touch timeout can zero desired. When true, relinquishes
+    addBoolParam("override_motion_inactivity_screen_timeout", 1, 1, true); // When false, motion timeout can zero desired. When true, relinquishes
     
     auto* brightness_param = getIntParam("current_lcd_brightness");
     if (brightness_param) {
@@ -375,6 +379,8 @@ void GUIComponent::guiStatusTask() {
     ESP_LOGI(TAG, "GUI status task started");
     
     // Declare static param pointers (will be initialized on first run AFTER component is initialized)
+    static IntParameter* user_set_brightness_param = nullptr;
+    static IntParameter* auto_set_brightness_param = nullptr;
     static IntParameter* desired_brightness_param = nullptr;
     static IntParameter* current_brightness_param = nullptr;
     static IntParameter* change_rate_param = nullptr;
@@ -383,9 +389,12 @@ void GUIComponent::guiStatusTask() {
     static BoolParameter* lcd_screen_on_param = nullptr;
     static BoolParameter* override_auto_brightness_param = nullptr;
     static BoolParameter* override_screen_timeout_param = nullptr;
+    static BoolParameter* override_motion_inactivity_screen_timeout_param = nullptr;
     static IntParameter* light_sensor_param = nullptr;
     static IntParameter* motion_sensor_param = nullptr;
     static bool first_run = true;
+    static bool touch_timeout_was_active_last_cycle = false;
+    static bool motion_timeout_was_active_last_cycle = false;
     
     while (true) {
         // Wait for notification from timer
@@ -402,8 +411,12 @@ void GUIComponent::guiStatusTask() {
         }
 
         // Initialize parameter pointers on first run (AFTER component is initialized)
-        if (!(desired_brightness_param && current_brightness_param && change_rate_param && motion_inactivity_screen_timeout_param &&
-            touch_inactivity_screen_timeout_param && lcd_screen_on_param && override_auto_brightness_param && override_screen_timeout_param)) {
+        if (!(user_set_brightness_param && auto_set_brightness_param && desired_brightness_param && current_brightness_param && 
+            change_rate_param && touch_inactivity_screen_timeout_param && motion_inactivity_screen_timeout_param &&
+            lcd_screen_on_param && override_auto_brightness_param && override_screen_timeout_param && 
+            override_motion_inactivity_screen_timeout_param)) {
+            user_set_brightness_param = this->getIntParam("user_set_brightness");
+            auto_set_brightness_param = this->getIntParam("auto_set_brightness");
             desired_brightness_param = this->getIntParam("desired_lcd_brightness");
             current_brightness_param = this->getIntParam("current_lcd_brightness");
             change_rate_param = this->getIntParam("brighness_change_per_second");
@@ -412,6 +425,7 @@ void GUIComponent::guiStatusTask() {
             lcd_screen_on_param = this->getBoolParam("lcd_screen_on");
             override_auto_brightness_param = this->getBoolParam("override_auto_brightness");
             override_screen_timeout_param = this->getBoolParam("override_screen_timeout");
+            override_motion_inactivity_screen_timeout_param = this->getBoolParam("override_motion_inactivity_screen_timeout");
         }
         
         // Try to get sensor parameters once (they may not exist yet or at all)
@@ -431,86 +445,103 @@ void GUIComponent::guiStatusTask() {
             }
         }
 
-        // Handle screen timeout
-        if (override_screen_timeout_param && override_screen_timeout_param->getValue(0, 0) == false) {
-            // Check if the last motion detected time exceeds timeout
-            int current_time_seconds = (int)(esp_timer_get_time() / 1000000); // time in seconds
+        // ===========================================
+        // BRIGHTNESS CONTROL FLOW (as specified)
+        // ===========================================
+        
+        // STEP 1: Update auto_set_brightness from light sensor
+        if (light_sensor_param && auto_set_brightness_param) {
+            int light_level = light_sensor_param->getValue(0, 0);
             
-            bool recent_motion = true; // defaulting to true allows the screen to stay on if no motion sensor
-            if (motion_sensor_param) {
-                int last_motion_time = motion_sensor_param->getValue(0, 0);
-                if (current_time_seconds - last_motion_time < touch_inactivity_screen_timeout_param->getValue(0, 0) ) {
-                    // Recent motion detected
-                    recent_motion = true;
-                }
-                else {
-                    recent_motion = false;
-                }
+            // QUADRATIC MAPPING (x^2 normalized to 0-100%):
+            float normalized = (float)light_level / 4095.0f;
+            int brightness = (int)(pow(normalized, 2.0f) * 100);
+            
+            // Enforce minimum brightness for auto mode (never go to 0)
+            const int MIN_AUTO_BRIGHTNESS = 1;  // Minimum 1% brightness
+            if (brightness < MIN_AUTO_BRIGHTNESS) {
+                brightness = MIN_AUTO_BRIGHTNESS;
             }
-
-            // Check if the last interaction exceeds timeout
-            TickType_t tick_delta = xTaskGetTickCount() - last_interaction_tick;
-            TickType_t timeout_ticks = pdMS_TO_TICKS(touch_inactivity_screen_timeout_param->getValue(0, 0) * 1000);
-            bool recent_touch = true; // defaulting to true allows the screen to stay on if we don't have knowledge of touch times.
-            if (tick_delta >= timeout_ticks && lcd_screen_on_param && touch_inactivity_screen_timeout_param) {
-                // Recent touch detected
-                recent_touch = false;
+            
+            auto_set_brightness_param->setValue(0, 0, brightness);
+        }
+        
+        // STEP 2: Choose which brightness to use (user vs auto) and set desired_lcd_brightness
+        int base_brightness = 100;  // Default
+        if (override_auto_brightness_param && override_auto_brightness_param->getValue(0, 0) == true) {
+            // Use manual (user_set_brightness)
+            if (user_set_brightness_param) {
+                base_brightness = user_set_brightness_param->getValue(0, 0);
             }
-            else {
-                recent_touch = true;
-            }
-
-            // We should turn off the screen if there was NOT recent touch AND NOT recent motion
-            if (!recent_touch && !recent_motion) {
-                // Timeout reached - turn off screen
-                lcd_screen_on_param->setValue(0, 0, false);
-            }
-            else {
-                // Timeout not yet reached - ensure screen is on
-                lcd_screen_on_param->setValue(0, 0, true);
+        } else {
+            // Use auto (auto_set_brightness)
+            if (auto_set_brightness_param) {
+                base_brightness = auto_set_brightness_param->getValue(0, 0);
             }
         }
-
+        
+        if (desired_brightness_param) {
+            desired_brightness_param->setValue(0, 0, base_brightness);
+        }
+        
+        // STEP 3: Apply zeroing logic based on lcd_screen_on, timeouts, etc.
+        
+        // 3a) lcd_screen_on - when false, forces desired to 0. When true, relinquishes control
         if (lcd_screen_on_param && lcd_screen_on_param->getValue(0, 0) == false) {
-            // Screen off - set brightness to 0
             if (desired_brightness_param) {
                 desired_brightness_param->setValue(0, 0, 0);
             }
         }
-        else {
-            // Screen is ON - set desired brightness
-            if (light_sensor_param && override_auto_brightness_param && override_auto_brightness_param->getValue(0, 0) == false) {
-                // Auto-brightness enabled - calculate from light sensor
-                int light_level = light_sensor_param->getValue(0, 0);
-                
-                // QUADRATIC MAPPING (x^2 normalized to 0-100%):
-                // Normalize input to 0-1, square it, then scale to 0-100
-                float normalized = (float)light_level / 4095.0f;
-                int brightness = (int)(pow(normalized, 2.0f) * 100);
-
-                // INVERSE-QUADRATIC MAPPING:
-                // New nonlinear mapping: x^(1/4)*8.75+30
-                // 30 is baseline brightness. 8.75 scales to 100. x^1/4 is for response curve.
-                // int brightness = static_cast<int>(pow(light_level, 0.25) * 8.75 + 30);
-
-                // LINEAR MAPPING:
-                // int brightness = (light_level * 100) / 4095;
-
-                // LINEAR MAPPING WITH BASELINE:
-                // int baseline = 30; // Minimum brightness
-                // int brightness = baseline + (light_level * (100 - baseline)) / 4095;
-                
-                // Update GUI brightness parameter
+        
+        // 3b) Touch inactivity timeout
+        bool touch_timeout_active = false;
+        if (override_screen_timeout_param && override_screen_timeout_param->getValue(0, 0) == false) {
+            // Touch timeout is enabled - check if timeout reached
+            TickType_t tick_delta = xTaskGetTickCount() - last_interaction_tick;
+            TickType_t timeout_ticks = pdMS_TO_TICKS(touch_inactivity_screen_timeout_param->getValue(0, 0) * 1000);
+            
+            if (tick_delta >= timeout_ticks) {
+                // Timeout reached - zero desired
+                touch_timeout_active = true;
                 if (desired_brightness_param) {
-                    desired_brightness_param->setValue(0, 0, brightness);
-                }
-            } else {
-                // Auto-brightness disabled - use manual control (default to 100% if currently 0)
-                if (desired_brightness_param && desired_brightness_param->getValue(0, 0) == 0) {
-                    desired_brightness_param->setValue(0, 0, 100);
+                    desired_brightness_param->setValue(0, 0, 0);
                 }
             }
+        } else {
+            // Override is true - relinquish control
+            if (touch_timeout_was_active_last_cycle && desired_brightness_param) {
+                // Screen was timed out, now override is back to true - restore brightness
+                desired_brightness_param->setValue(0, 0, base_brightness);
+            }
         }
+        touch_timeout_was_active_last_cycle = touch_timeout_active;
+        
+        // 3c) Motion inactivity timeout
+        bool motion_timeout_active = false;
+        if (override_motion_inactivity_screen_timeout_param && 
+            override_motion_inactivity_screen_timeout_param->getValue(0, 0) == false) {
+            // Motion timeout is enabled - check if timeout reached
+            if (motion_sensor_param && motion_inactivity_screen_timeout_param) {
+                int current_time_seconds = (int)(esp_timer_get_time() / 1000000);
+                int last_motion_time = motion_sensor_param->getValue(0, 0);
+                int motion_inactive_seconds = current_time_seconds - last_motion_time;
+                
+                if (motion_inactive_seconds >= motion_inactivity_screen_timeout_param->getValue(0, 0)) {
+                    // Motion timeout reached - zero desired
+                    motion_timeout_active = true;
+                    if (desired_brightness_param) {
+                        desired_brightness_param->setValue(0, 0, 0);
+                    }
+                }
+            }
+        } else {
+            // Override is true - relinquish control
+            if (motion_timeout_was_active_last_cycle && desired_brightness_param) {
+                // Screen was timed out, now override is back to true - restore brightness
+                desired_brightness_param->setValue(0, 0, base_brightness);
+            }
+        }
+        motion_timeout_was_active_last_cycle = motion_timeout_active;
 
         // Clean up expired notification
         if (notification_overlay && xTaskGetTickCount() >= notification_expire_tick) {
@@ -520,8 +551,7 @@ void GUIComponent::guiStatusTask() {
             ESP_LOGI(TAG, "Notification expired");
         }
         
-        // Update the current brightness parameter to get closer to desired brightness
-        // NOTE: This should ALWAYS be triggered, as it is no longer CONTROL-LAW, but rather a CONTROL LOOP for smooth transitions!
+        // STEP 4: Update current_lcd_brightness to chase desired_lcd_brightness at specified rate
         int current_brightness = current_brightness_param->getValue(0, 0);
         int desired_brightness = desired_brightness_param->getValue(0, 0);
         int change_rate = change_rate_param->getValue(0, 0)/10; // percent per second
@@ -625,6 +655,19 @@ void GUIComponent::createSimpleButtonGrid() {
         // Add click event with button index as user data
         lv_obj_add_event_cb(btn, simple_button_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i);
     }
+    
+    // IP address label at bottom
+    lv_obj_t* ip_label = lv_label_create(main_screen);
+    char ip_str[32];
+    if (wifi_get_ip_string(ip_str, sizeof(ip_str))) {
+        char full_text[48];
+        snprintf(full_text, sizeof(full_text), "IP: %s", ip_str);
+        lv_label_set_text(ip_label, full_text);
+    } else {
+        lv_label_set_text(ip_label, "IP: Not connected");
+    }
+    lv_obj_set_style_text_color(ip_label, lv_color_make(150, 150, 150), 0);
+    lv_obj_align(ip_label, LV_ALIGN_BOTTOM_MID, 0, -5);
     
     // Load the screen
     lv_scr_load(main_screen);

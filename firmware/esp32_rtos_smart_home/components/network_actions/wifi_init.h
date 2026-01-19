@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -30,6 +32,14 @@ void wifi_set_status_callback(wifi_status_callback_t callback, void* user_data);
  * @return true if connected, false otherwise
  */
 bool wifi_is_connected(void);
+
+/**
+ * @brief Get current IP address as string
+ * 
+ * @param ip_str Buffer to store IP string (min 16 bytes)
+ * @return true if IP retrieved, false if not connected
+ */
+bool wifi_get_ip_string(char* ip_str, size_t max_len);
 
 #ifdef __cplusplus
 }
