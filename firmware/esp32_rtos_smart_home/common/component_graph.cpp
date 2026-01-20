@@ -1,5 +1,12 @@
 #include "component_graph.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
+
+// Memory logging helper
+static void log_component_memory(const char* component_name, const char* stage) {
+    ESP_LOGI("ComponentGraph", "  [%s] %s - Free DRAM: %lu bytes", 
+             component_name, stage, heap_caps_get_free_size(MALLOC_CAP_8BIT));
+}
 
 ComponentGraph::ComponentGraph() {
     ESP_LOGI(TAG, "ComponentGraph created");
@@ -87,23 +94,46 @@ StringParameter* ComponentGraph::getStringParam(const std::string& component_nam
 }
 
 void ComponentGraph::initializeAll() {
+    ESP_LOGI(TAG, "=== STARTING COMPONENT INITIALIZATION ===");
+    log_component_memory("GRAPH", "START of initializeAll");
+    
     ESP_LOGI(TAG, "Setting up dependencies for all components (%zu total)...", components.size());
+    log_component_memory("GRAPH", "BEFORE setUpDependencies phase");
     
     // First pass: set up dependencies
     for (auto& pair : components) {
+        log_component_memory(pair.first.c_str(), "BEFORE setUpDependencies");
         ESP_LOGI(TAG, "Setting up dependencies for: %s", pair.first.c_str());
         pair.second->setUpDependencies(this);
+        log_component_memory(pair.first.c_str(), "AFTER setUpDependencies");
     }
     
+    log_component_memory("GRAPH", "AFTER setUpDependencies phase");
     ESP_LOGI(TAG, "Initializing all components...");
+    log_component_memory("GRAPH", "BEFORE initialize phase");
     
     // Second pass: initialize
     for (auto& pair : components) {
+        log_component_memory(pair.first.c_str(), "BEFORE init");
         ESP_LOGI(TAG, "Initializing component: %s", pair.first.c_str());
         pair.second->initialize();
+        log_component_memory(pair.first.c_str(), "AFTER init");
     }
     
-    ESP_LOGI(TAG, "All components initialized successfully");
+    log_component_memory("GRAPH", "AFTER initialize phase");
+    // Third pass: Post-initialization (for tasks that need all components ready)
+    ESP_LOGI(TAG, "Running post-initialization for all components...");
+    log_component_memory("GRAPH", "BEFORE postInitialize phase");
+    for (auto& pair : components) {
+        log_component_memory(pair.first.c_str(), "BEFORE post-init");
+        ESP_LOGI(TAG, "Post-initializing component: %s", pair.first.c_str());
+        pair.second->postInitialize();
+        log_component_memory(pair.first.c_str(), "AFTER post-init");
+    }
+    
+    log_component_memory("GRAPH", "AFTER postInitialize phase");
+    ESP_LOGI(TAG, "=== COMPONENT INITIALIZATION COMPLETE ===");
+    log_component_memory("GRAPH", "END of initializeAll");
 }
 
 std::vector<std::string> ComponentGraph::getComponentNames() const {

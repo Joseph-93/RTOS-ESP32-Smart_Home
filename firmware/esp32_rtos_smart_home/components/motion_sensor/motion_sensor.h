@@ -14,7 +14,7 @@ public:
     ~MotionSensorComponent() override;
     
     void setUpDependencies(ComponentGraph* graph) override;
-    void initialize() override;
+    void onInitialize() override;
     
     // Static task entry point for FreeRTOS
     static void motionSensorTaskWrapper(void* pvParameters);

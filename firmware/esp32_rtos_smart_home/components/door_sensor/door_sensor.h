@@ -14,7 +14,7 @@ public:
     ~DoorSensorComponent() override;
     
     void setUpDependencies(ComponentGraph* graph) override;
-    void initialize() override;
+    void onInitialize() override;
     
     // Static task entry point for FreeRTOS
     static void doorSensorTaskWrapper(void* pvParameters);

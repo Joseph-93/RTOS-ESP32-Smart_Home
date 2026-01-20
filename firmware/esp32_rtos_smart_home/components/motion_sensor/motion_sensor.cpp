@@ -49,12 +49,12 @@ static void IRAM_ATTR motion_sensor_isr_handler(void* arg) {
     }
 }
 
-void MotionSensorComponent::initialize() {
+void MotionSensorComponent::onInitialize() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] MotionSensorComponent::initialize");
 #endif
 
-    addIntParam("last_motion_detected_seconds", 1, 1, 0, INT32_MAX, 0);
+    addIntParam("last_motion_detected_seconds", 1, 1, 0, INT32_MAX, 0, true);
 
     // Configure motion sensor GPIO pin
     gpio_config_t io_conf = {};

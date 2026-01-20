@@ -291,6 +291,33 @@ header h1 {
     align-items: center;
 }
 
+/* Read-only parameter styling */
+.param-item.read-only {
+    background: var(--bg-tertiary);
+    opacity: 0.75;
+}
+
+.param-item.read-only label {
+    color: var(--text-secondary);
+}
+
+.read-only-badge {
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+    opacity: 0.7;
+}
+
+.param-item.read-only input:disabled,
+.param-item.read-only textarea:disabled,
+.param-item.read-only button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.param-item.read-only input[type="range"]:disabled {
+    filter: grayscale(50%);
+}
+
 .param-item label {
     min-width: 250px;
 }

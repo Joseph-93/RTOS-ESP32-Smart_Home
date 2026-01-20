@@ -5,6 +5,7 @@
 
 let currentDevice = null;
 let currentComponent = null;
+let activeSubscriptions = [];  // Track active subscriptions for cleanup
 
 function showError(message, details = null) {
     const banner = document.getElementById('error-banner');
@@ -44,12 +45,17 @@ async function initComponent(deviceName, componentName) {
     
     currentDevice = deviceName;
     currentComponent = componentName;
+    activeSubscriptions = [];  // Reset subscriptions
     
     // Initialize WebSocket connection
     const esp32Host = window.esp32Host;
     try {
         await initWebSocket(esp32Host);
         console.log('[JS] WebSocket connected');
+        
+        // Set up parameter update handler
+        window.addEventListener('esp32-push', handleParameterUpdate);
+        
     } catch (error) {
         console.error('[JS] WebSocket connection failed:', error);
         showError('Failed to connect to ESP32 WebSocket', error.message);
@@ -65,16 +71,33 @@ async function initComponent(deviceName, componentName) {
     console.log('[JS] Done loading component');
 }
 
-function handleParameterUpdate(data) {
-    console.log('[WS] Parameter update:', data);
+// Cleanup subscriptions when leaving page
+window.addEventListener('beforeunload', async () => {
+    console.log('[JS] Cleaning up subscriptions');
+    for (const sub of activeSubscriptions) {
+        try {
+            await esp32ws.unsubscribe(sub.comp, sub.param_type, sub.idx, sub.row, sub.col);
+        } catch (error) {
+            console.error('Error unsubscribing:', error);
+        }
+    }
+});
+
+function handleParameterUpdate(event) {
+    const data = event.detail;
+    console.log('[WS Push] Parameter update:', data);
+    if (data.type !== 'param_update') return;
+    if (data.comp !== currentComponent) return;
     
-    const { param_type, idx, row, col, value } = data;
-    const inputId = `${data.component}_${param_type}_${idx}_${row}_${col}`;
+    const { comp, param_type, idx, row, col, value } = data;
+    const inputId = `${comp}_${param_type}_${idx}_${row}_${col}`;
+    
+    console.log('[WS Push] Looking for input with ID:', inputId);
     
     // Update UI based on parameter type
     if (param_type === 'bool') {
-        const trueBtn = document.querySelector(`button[onclick*="setParamValue('${currentDevice}', '${data.component}', '${param_type}', ${idx}, ${row}, ${col}, true)"]`);
-        const falseBtn = document.querySelector(`button[onclick*="setParamValue('${currentDevice}', '${data.component}', '${param_type}', ${idx}, ${row}, ${col}, false)"]`);
+        const trueBtn = document.querySelector(`button[onclick*="setParamValue('${currentDevice}', '${comp}', '${param_type}', ${idx}, ${row}, ${col}, true)"]`);
+        const falseBtn = document.querySelector(`button[onclick*="setParamValue('${currentDevice}', '${comp}', '${param_type}', ${idx}, ${row}, ${col}, false)"]`);
         
         if (trueBtn && falseBtn) {
             if (value === true || value === 'true') {
@@ -102,8 +125,7 @@ function handleParameterUpdate(data) {
         }
     }
     
-    // Show a brief notification
-    showSuccess(`✓ ${data.component} updated`);
+    // No notification for push updates - they happen frequently and would spam the user
 }
 
 async function loadActions(deviceName, componentName) {
@@ -251,7 +273,7 @@ async function loadParameters(deviceName, componentName) {
 }
 
 async function createParamSection(deviceName, component, type, idx, param) {
-    const { name, rows, cols, min, max } = param;
+    const { name, rows, cols, min, max, readOnly } = param;
     
     let html = '';
     
@@ -260,26 +282,43 @@ async function createParamSection(deviceName, component, type, idx, param) {
             const value = await getParamValue(deviceName, component, type, idx, r, c);
             const inputId = `${component}_${type}_${idx}_${r}_${c}`;
             
-            html += '<div class="param-item">';
-            html += `<label><strong>${name}[${r}][${c}]:</strong></label>`;
+            // Add read-only class if parameter is read-only
+            const readOnlyClass = readOnly ? ' read-only' : '';
+            const disabledAttr = readOnly ? ' disabled' : '';
+            const readOnlyLabel = readOnly ? ' <span class="read-only-badge">🔒</span>' : '';
+            
+            html += `<div class="param-item${readOnlyClass}">`;
+            html += `<label><strong>${name}[${r}][${c}]:</strong>${readOnlyLabel}</label>`;
             html += '<div class="param-control">';
             
             if (type === 'bool') {
                 const isTrue = (value === 'true' || value === true);
                 html += '<div class="bool-buttons">';
-                html += `<button class="bool-btn ${isTrue ? 'active' : ''}" onclick="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, true); this.classList.add('active'); this.nextElementSibling.classList.remove('active');">True</button>`;
-                html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" onclick="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, false); this.classList.add('active'); this.previousElementSibling.classList.remove('active');">False</button>`;
+                if (readOnly) {
+                    html += `<button class="bool-btn ${isTrue ? 'active' : ''}" disabled>True</button>`;
+                    html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" disabled>False</button>`;
+                } else {
+                    html += `<button class="bool-btn ${isTrue ? 'active' : ''}" onclick="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, true); this.classList.add('active'); this.nextElementSibling.classList.remove('active');">True</button>`;
+                    html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" onclick="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, false); this.classList.add('active'); this.previousElementSibling.classList.remove('active');">False</button>`;
+                }
                 html += '</div>';
             } else if (type === 'str') {
-                html += `<textarea id="${inputId}">${escapeHtml(value)}</textarea>`;
-                html += `<button class="save-btn" onclick="saveStringParam('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, '${inputId}')">💾 Save</button>`;
+                html += `<textarea id="${inputId}"${disabledAttr}>${escapeHtml(value)}</textarea>`;
+                if (!readOnly) {
+                    html += `<button class="save-btn" onclick="saveStringParam('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, '${inputId}')">💾 Save</button>`;
+                }
             } else if (type === 'int' || type === 'float') {
                 const step = type === 'float' ? '0.01' : '1';
                 const minVal = min !== undefined ? min : 0;
                 const maxVal = max !== undefined ? max : 100;
                 html += '<div class="number-control">';
-                html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncNumberInput('${inputId}', this.value)" onchange="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, this.value)">`;
-                html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncSlider('${inputId}_slider', this.value)" onchange="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, this.value)">`;
+                if (readOnly) {
+                    html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" disabled>`;
+                    html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" disabled>`;
+                } else {
+                    html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncNumberInput('${inputId}', this.value)" onchange="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, this.value)">`;
+                    html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncSlider('${inputId}_slider', this.value)" onchange="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, this.value)">`;
+                }
                 html += '</div>';
             }
             
@@ -292,10 +331,15 @@ async function createParamSection(deviceName, component, type, idx, param) {
 
 async function getParamValue(deviceName, comp, type, idx, row, col) {
     try {
-        const value = await esp32ws.getParam(comp, type, idx, row, col);
+        // Subscribe instead of get - will receive initial value and future updates
+        const value = await esp32ws.subscribe(comp, type, idx, row, col);
+        
+        // Track subscription for cleanup
+        activeSubscriptions.push({ comp, param_type: type, idx, row, col });
+        
         return value !== null ? value : '';
     } catch (error) {
-        console.error('Error getting param value:', error);
+        console.error('Error subscribing to param:', error);
         return '';
     }
 }

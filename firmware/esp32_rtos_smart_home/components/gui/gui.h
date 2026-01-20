@@ -15,7 +15,7 @@ public:
     ~GUIComponent() override;
     
     void setUpDependencies(ComponentGraph* graph) override;
-    void initialize() override;
+    void onInitialize() override;
 
     // Task function for lower-priority gui operations
     static void guiStatusTaskWrapper(void* pvParameters);

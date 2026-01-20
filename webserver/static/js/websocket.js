@@ -155,6 +155,30 @@ class ESP32WebSocket {
         return response.success;
     }
 
+    async subscribe(comp, param_type, idx, row, col) {
+        const response = await this.send({
+            type: 'subscribe',
+            comp,
+            param_type,
+            idx,
+            row,
+            col
+        });
+        return response.value;
+    }
+
+    async unsubscribe(comp, param_type, idx, row, col) {
+        const response = await this.send({
+            type: 'unsubscribe',
+            comp,
+            param_type,
+            idx,
+            row,
+            col
+        });
+        return response.success;
+    }
+
     close() {
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);

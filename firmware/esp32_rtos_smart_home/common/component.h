@@ -22,9 +22,9 @@ class ComponentGraph;
 template<typename T>
 class Parameter {
 public:
-    Parameter(const std::string &name, size_t rows, size_t cols, T min_val = T(), T max_val = T(), T default_val = T())
+    Parameter(const std::string &name, size_t rows, size_t cols, T min_val = T(), T max_val = T(), T default_val = T(), bool read_only = false)
         : name(name), rows(rows), cols(cols), min_value(min_val), max_value(max_val), 
-          onChange(nullptr) {
+          read_only(read_only), onChange(nullptr) {
         
         size_t total_elements = rows * cols;
         size_t total_bytes = total_elements * sizeof(T);
@@ -99,11 +99,16 @@ public:
             assert(false && "Parameter setValue out of bounds");
         }
         
-        data[row * cols + col] = val;
+        // Check if value actually changed
+        T& current = data[row * cols + col];
+        bool changed = (current != val);
+        if (changed) {
+            current = val;
+        }
         xSemaphoreGive(mutex);
         
-        // Invoke callback after releasing lock with the value that was set
-        if (has_callback) {
+        // Only invoke callback if value actually changed
+        if (changed && has_callback) {
             onChange(row, col, val);
         }
     }
@@ -124,6 +129,7 @@ public:
     
     T getMin() const { return min_value; }
     T getMax() const { return max_value; }
+    bool isReadOnly() const { return read_only; }
     
     // Append a new value (grows the parameter by one row, assumes single column)
     void appendValue(const T& value) {
@@ -165,6 +171,15 @@ public:
         bool result = has_callback;
         xSemaphoreGive(mutex);
         return result;
+    }
+    
+    std::function<void(size_t, size_t, T)> getOnChange() const {
+        if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+            return nullptr;
+        }
+        auto callback = onChange;
+        xSemaphoreGive(mutex);
+        return callback;
     }
     
     std::vector<T> getRegion(size_t startRow, size_t startCol, size_t numRows, size_t numCols) const {
@@ -242,6 +257,7 @@ private:
     size_t rows, cols;
     std::vector<T> data;
     T min_value, max_value;
+    bool read_only = false;
     std::function<void(size_t, size_t, T)> onChange;  // Callback receives value
     bool has_callback = false;
     mutable SemaphoreHandle_t mutex = nullptr;  // Mutable so const methods can lock
@@ -280,7 +296,16 @@ public:
     Component(Component&&) = delete;
     Component& operator=(Component&&) = delete;
     
-    virtual void initialize() = 0;
+    // Base class initialization wrapper - DO NOT OVERRIDE
+    // This calls onInitialize() and then runs post-initialization tasks
+    void initialize();
+    
+    // Override this in subclasses to implement component-specific initialization
+    virtual void onInitialize() = 0;
+    
+    // Called after ALL components have initialized (for tasks that need other components ready)
+    // Override this for setup that must happen after all component initializations complete
+    virtual void postInitialize() {}
     
     // Set up inter-component dependencies (called before initialize, after all components registered)
     // Override this to get references to other components or their parameters
@@ -308,6 +333,9 @@ public:
     const std::vector<ComponentAction>& getActions() const;
     std::vector<std::string> getActionNames() const;
     void invokeAction(size_t actionIndex);
+    
+    // Memory diagnostics - calculate approximate memory usage
+    size_t getApproximateMemoryUsage() const;
 
 protected:
     static constexpr const char *TAG = "Component";
@@ -323,10 +351,10 @@ protected:
     std::vector<std::unique_ptr<BoolParameter>> boolParams;
     std::vector<std::unique_ptr<StringParameter>> stringParams;
     
-    void addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val = INT_MIN, int max_val = INT_MAX, int default_val = 0);
-    void addFloatParam(const std::string &paramName, size_t rows, size_t cols, float min_val = -FLT_MAX, float max_val = FLT_MAX, float default_val = 0.0f);
-    void addBoolParam(const std::string &paramName, size_t rows, size_t cols, bool default_val = false);
-    void addStringParam(const std::string &paramName, size_t rows, size_t cols, const std::string &default_val = "");
+    void addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val = INT_MIN, int max_val = INT_MAX, int default_val = 0, bool readOnly = false);
+    void addFloatParam(const std::string &paramName, size_t rows, size_t cols, float min_val = -FLT_MAX, float max_val = FLT_MAX, float default_val = 0.0f, bool readOnly = false);
+    void addBoolParam(const std::string &paramName, size_t rows, size_t cols, bool default_val = false, bool readOnly = false);
+    void addStringParam(const std::string &paramName, size_t rows, size_t cols, const std::string &default_val = "", bool readOnly = false);
     
     void addAction(const std::string& name, const std::string& description, 
                    std::function<bool(Component*)> callback);

@@ -11,6 +11,7 @@
     
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "component_graph.h"
@@ -24,6 +25,15 @@
 #include <vector>
 
 static const char *TAG = "main";
+
+// Memory checkpoint logging
+static void log_memory_checkpoint(const char* checkpoint_name) {
+    ESP_LOGI(TAG, "=== CHECKPOINT: %s ===", checkpoint_name);
+    ESP_LOGI(TAG, "Free DRAM: %lu bytes", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    ESP_LOGI(TAG, "Min free DRAM: %lu bytes", heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT));
+    ESP_LOGI(TAG, "Largest block: %lu bytes", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    ESP_LOGI(TAG, "========================");
+}
 
 // TODO: Change these to your WiFi credentials
 #define WIFI_SSID      "its getting hotspot in here"
@@ -45,6 +55,8 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Starting ESP32 Smart Home System...");
     ESP_LOGI(TAG, "ESP-IDF Version: %s", esp_get_idf_version());
     
+    log_memory_checkpoint("APP START");
+    
     // Initialize WiFi and connect
     ESP_LOGI(TAG, "Initializing WiFi...");
     if (!wifi_init_sta(WIFI_SSID, WIFI_PASSWORD)) {
@@ -53,27 +65,41 @@ extern "C" void app_main(void)
         ESP_LOGI(TAG, "WiFi connected successfully!");
     }
     
+    log_memory_checkpoint("AFTER WIFI");
+    
     // Create ComponentGraph
     ESP_LOGI(TAG, "Creating component graph...");
     ComponentGraph* component_graph = new ComponentGraph();
     
+    log_memory_checkpoint("AFTER GRAPH CREATE");
+    
     // Register all components with graph
     ESP_LOGI(TAG, "Registering components with graph...");
     component_graph->registerComponent(&gui_component);
+    log_memory_checkpoint("AFTER GUI REGISTER");
+    
     component_graph->registerComponent(&network_component);
+    log_memory_checkpoint("AFTER NETWORK REGISTER");
+    
     component_graph->registerComponent(&light_sensor_component);
     component_graph->registerComponent(&motion_sensor_component);
     component_graph->registerComponent(&door_sensor_component);
     component_graph->registerComponent(&web_server_component);
     
+    log_memory_checkpoint("AFTER ALL REGISTERS");
+    
     // Initialize all components (graph handles setUpDependencies + initialize)
     ESP_LOGI(TAG, "Initializing all components...");
     component_graph->initializeAll();
+    
+    log_memory_checkpoint("AFTER INITIALIZE ALL");
     
     // Create simple button grid GUI
     ESP_LOGI(TAG, "Creating simple button grid...");
     gui_component.createSimpleButtonGrid();
     ESP_LOGI(TAG, "GUI created successfully");
+    
+    log_memory_checkpoint("AFTER GUI CREATION");
     
     ESP_LOGI(TAG, "System initialized - ready!");
     

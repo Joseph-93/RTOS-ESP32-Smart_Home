@@ -33,14 +33,14 @@ void NetworkActionsComponent::setUpDependencies(ComponentGraph* graph) {
     this->component_graph = graph;
 }
 
-void NetworkActionsComponent::initialize() {
+void NetworkActionsComponent::onInitialize() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] NetworkActionsComponent::initialize");
 #endif
     ESP_LOGI(TAG, "Initializing NetworkActionsComponent...");
     
     // Add WiFi connection status parameter
-    addBoolParam("wifi_connected", 1, 1, false);
+    addBoolParam("wifi_connected", 1, 1, false, true);
     ESP_LOGI(TAG, "Added wifi_connected parameter");
     
     // Create EMPTY parameters (0 rows) with 1 column - will grow as we append messages
@@ -49,22 +49,7 @@ void NetworkActionsComponent::initialize() {
     addStringParam("http_messages", 0, 1);
     addStringParam("ws_messages", 0, 1);
     
-    // Set up parse callbacks BEFORE loading (these will be called when parameter values change)
-    auto* tcp_param = getStringParam("tcp_messages");
-    auto* http_param = getStringParam("http_messages");
-    auto* ws_param = getStringParam("ws_messages");
-    
-    if (tcp_param) {
-        tcp_param->setOnChange([this](size_t row, size_t col, const std::string& val) { this->parseTcpMessage(row, col, val); });
-    }
-    if (http_param) {
-        http_param->setOnChange([this](size_t row, size_t col, const std::string& val) { this->parseHttpMessage(row, col, val); });
-    }
-    if (ws_param) {
-        ws_param->setOnChange([this](size_t row, size_t col, const std::string& val) { this->parseWsMessage(row, col, val); });
-    }
-    
-    // NOW load all message examples into the parameters (will trigger callbacks)
+    // Load all message examples into the parameters (no parsing - done on-demand when sending)
     loadAllMessageExamples();
     
     // Initialize clients
@@ -105,7 +90,7 @@ void NetworkActionsComponent::initialize() {
     
     initialized = true;
     ESP_LOGI(TAG, "NetworkActionsComponent initialized: %zu TCP, %zu HTTP, %zu WS messages",
-             tcp_messages.size(), http_messages.size(), ws_messages.size());
+             getTcpMessageCount(), getHttpMessageCount(), getWsMessageCount());
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] NetworkActionsComponent::initialize");
 #endif
@@ -123,27 +108,33 @@ void NetworkActionsComponent::send_next_from_queue() {
             std::string message_name;
             
             switch (item.protocol) {
-                case NetworkActionQueueItem::NetworkProtocol::TCP:
-                    if (item.message_index < tcp_messages.size()) {
-                        result = tcp_client.send(tcp_messages[item.message_index]);
+                case NetworkActionQueueItem::NetworkProtocol::TCP: {
+                    TcpMessage msg;
+                    if (parseTcpMessageAt(item.message_index, msg)) {
+                        message_name = msg.name;
+                        result = tcp_client.send(msg);
                         protocol_name = "TCP";
-                        message_name = tcp_messages[item.message_index].name;
                     }
                     break;
-                case NetworkActionQueueItem::NetworkProtocol::HTTP:
-                    if (item.message_index < http_messages.size()) {
-                        result = http_client.send(http_messages[item.message_index]);
+                }
+                case NetworkActionQueueItem::NetworkProtocol::HTTP: {
+                    HttpMessage msg;
+                    if (parseHttpMessageAt(item.message_index, msg)) {
+                        message_name = msg.name;
+                        result = http_client.send(msg);
                         protocol_name = "HTTP";
-                        message_name = http_messages[item.message_index].name;
                     }
                     break;
-                case NetworkActionQueueItem::NetworkProtocol::WebSocket:
-                    if (item.message_index < ws_messages.size()) {
-                        result = ws_client.send(ws_messages[item.message_index]);
+                }
+                case NetworkActionQueueItem::NetworkProtocol::WebSocket: {
+                    WsMessage msg;
+                    if (parseWsMessageAt(item.message_index, msg)) {
+                        message_name = msg.name;
+                        result = ws_client.send(msg);
                         protocol_name = "WebSocket";
-                        message_name = ws_messages[item.message_index].name;
                     }
                     break;
+                }
             }
             ESP_LOGI(TAG, "Sent network action (protocol: %d, index: %zu) - result: %d",
                      static_cast<int>(item.protocol), item.message_index, result);
@@ -245,34 +236,19 @@ void NetworkActionsComponent::loadAllMessageExamples() {
 #endif
 }
 
-// JSON parsing implementations
+// JSON parsing implementations - parse on demand from StringParameter
 
-void NetworkActionsComponent::parseTcpMessage(size_t row, size_t col, const std::string& val) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] parseTcpMessage - row: %zu, col: %zu", row, col);
-#endif
-    auto* param = getStringParam("tcp_messages");
-    if (!param) {
-        ESP_LOGE(TAG, "tcp_messages parameter not found");
-        return;
+bool NetworkActionsComponent::parseTcpMessageAt(size_t index, TcpMessage& out) const {
+    auto* param = const_cast<NetworkActionsComponent*>(this)->getStringParam("tcp_messages");
+    if (!param || index >= param->getRows()) {
+        return false;
     }
     
-    const std::string& json_str = param->getValue(row, col);
-    if (json_str.empty()) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] parseTcpMessage - empty string");
-#endif
-        return;
-    }
+    const std::string& json_str = param->getValue(index, 0);
+    if (json_str.empty()) return false;
     
     cJSON* item = cJSON_Parse(json_str.c_str());
-    if (!item) {
-        ESP_LOGE(TAG, "Failed to parse TCP message at [%zu,%zu]", row, col);
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] parseTcpMessage - parse failed");
-#endif
-        return;
-    }
+    if (!item) return false;
     
     cJSON* name = cJSON_GetObjectItem(item, "name");
     cJSON* host = cJSON_GetObjectItem(item, "host");
@@ -280,54 +256,33 @@ void NetworkActionsComponent::parseTcpMessage(size_t row, size_t col, const std:
     cJSON* data = cJSON_GetObjectItem(item, "data");
     cJSON* timeout = cJSON_GetObjectItem(item, "timeout_ms");
     
+    bool success = false;
     if (name && host && port && data) {
-        // Grow tcp_messages if needed
-        if (row >= tcp_messages.size()) {
-            tcp_messages.resize(row + 1);
-        }
-        
-        tcp_messages[row] = TcpMessage(
+        out = TcpMessage(
             cJSON_GetStringValue(name),
             cJSON_GetStringValue(host),
             static_cast<uint16_t>(port->valueint),
             cJSON_GetStringValue(data),
             timeout ? static_cast<uint32_t>(timeout->valueint) : 5000
         );
-        ESP_LOGI(TAG, "Parsed TCP message at index %zu: %s", row, cJSON_GetStringValue(name));
+        success = true;
     }
     
     cJSON_Delete(item);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] parseTcpMessage");
-#endif
+    return success;
 }
 
-void NetworkActionsComponent::parseHttpMessage(size_t row, size_t col, const std::string& val) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] parseHttpMessage - row: %zu, col: %zu", row, col);
-#endif
-    auto* param = getStringParam("http_messages");
-    if (!param) {
-        ESP_LOGE(TAG, "http_messages parameter not found");
-        return;
+bool NetworkActionsComponent::parseHttpMessageAt(size_t index, HttpMessage& out) const {
+    auto* param = const_cast<NetworkActionsComponent*>(this)->getStringParam("http_messages");
+    if (!param || index >= param->getRows()) {
+        return false;
     }
     
-    const std::string& json_str = param->getValue(row, col);
-    if (json_str.empty()) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] parseHttpMessage - empty string");
-#endif
-        return;
-    }
+    const std::string& json_str = param->getValue(index, 0);
+    if (json_str.empty()) return false;
     
     cJSON* item = cJSON_Parse(json_str.c_str());
-    if (!item) {
-        ESP_LOGE(TAG, "Failed to parse HTTP message at [%zu,%zu]", row, col);
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] parseHttpMessage - parse failed");
-#endif
-        return;
-    }
+    if (!item) return false;
     
     cJSON* name = cJSON_GetObjectItem(item, "name");
     cJSON* url = cJSON_GetObjectItem(item, "url");
@@ -336,6 +291,7 @@ void NetworkActionsComponent::parseHttpMessage(size_t row, size_t col, const std
     cJSON* headers_array = cJSON_GetObjectItem(item, "headers");
     cJSON* timeout = cJSON_GetObjectItem(item, "timeout_ms");
     
+    bool success = false;
     if (name && url && method) {
         std::vector<std::string> headers;
         if (headers_array && cJSON_IsArray(headers_array)) {
@@ -348,12 +304,7 @@ void NetworkActionsComponent::parseHttpMessage(size_t row, size_t col, const std
             }
         }
         
-        // Grow http_messages if needed
-        if (row >= http_messages.size()) {
-            http_messages.resize(row + 1);
-        }
-        
-        http_messages[row] = HttpMessage(
+        out = HttpMessage(
             cJSON_GetStringValue(name),
             cJSON_GetStringValue(url),
             cJSON_GetStringValue(method),
@@ -361,41 +312,24 @@ void NetworkActionsComponent::parseHttpMessage(size_t row, size_t col, const std
             headers,
             timeout ? static_cast<uint32_t>(timeout->valueint) : 10000
         );
-        ESP_LOGI(TAG, "Parsed HTTP message at index %zu: %s", row, cJSON_GetStringValue(name));
+        success = true;
     }
     
     cJSON_Delete(item);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] parseHttpMessage");
-#endif
+    return success;
 }
 
-void NetworkActionsComponent::parseWsMessage(size_t row, size_t col, const std::string& val) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] parseWsMessage - row: %zu, col: %zu", row, col);
-#endif
-    auto* param = getStringParam("ws_messages");
-    if (!param) {
-        ESP_LOGE(TAG, "ws_messages parameter not found");
-        return;
+bool NetworkActionsComponent::parseWsMessageAt(size_t index, WsMessage& out) const {
+    auto* param = const_cast<NetworkActionsComponent*>(this)->getStringParam("ws_messages");
+    if (!param || index >= param->getRows()) {
+        return false;
     }
     
-    const std::string& json_str = param->getValue(row, col);
-    if (json_str.empty()) {
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] parseWsMessage - empty string");
-#endif
-        return;
-    }
+    const std::string& json_str = param->getValue(index, 0);
+    if (json_str.empty()) return false;
     
     cJSON* item = cJSON_Parse(json_str.c_str());
-    if (!item) {
-        ESP_LOGE(TAG, "Failed to parse WebSocket message at [%zu,%zu]", row, col);
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] parseWsMessage - parse failed");
-#endif
-        return;
-    }
+    if (!item) return false;
     
     cJSON* name = cJSON_GetObjectItem(item, "name");
     cJSON* url = cJSON_GetObjectItem(item, "url");
@@ -403,32 +337,85 @@ void NetworkActionsComponent::parseWsMessage(size_t row, size_t col, const std::
     cJSON* subprotocol = cJSON_GetObjectItem(item, "subprotocol");
     cJSON* timeout = cJSON_GetObjectItem(item, "timeout_ms");
     
+    bool success = false;
     if (name && url && message) {
-        // Grow ws_messages if needed
-        if (row >= ws_messages.size()) {
-            ws_messages.resize(row + 1);
-        }
-        
-        ws_messages[row] = WsMessage(
+        out = WsMessage(
             cJSON_GetStringValue(name),
             cJSON_GetStringValue(url),
             cJSON_GetStringValue(message),
             subprotocol ? cJSON_GetStringValue(subprotocol) : "",
             timeout ? static_cast<uint32_t>(timeout->valueint) : 10000
         );
-        ESP_LOGI(TAG, "Parsed WebSocket message at index %zu: %s", row, cJSON_GetStringValue(name));
+        success = true;
     }
     
     cJSON_Delete(item);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] parseWsMessage");
-#endif
+    return success;
+}
+
+// Helper to get just the name field without full parsing
+std::string NetworkActionsComponent::getTcpMessageName(size_t index) const {
+    auto* param = const_cast<NetworkActionsComponent*>(this)->getStringParam("tcp_messages");
+    if (!param || index >= param->getRows()) return "";
+    
+    const std::string& json_str = param->getValue(index, 0);
+    cJSON* item = cJSON_Parse(json_str.c_str());
+    if (!item) return "";
+    
+    cJSON* name = cJSON_GetObjectItem(item, "name");
+    std::string result = name ? cJSON_GetStringValue(name) : "";
+    cJSON_Delete(item);
+    return result;
+}
+
+std::string NetworkActionsComponent::getHttpMessageName(size_t index) const {
+    auto* param = const_cast<NetworkActionsComponent*>(this)->getStringParam("http_messages");
+    if (!param || index >= param->getRows()) return "";
+    
+    const std::string& json_str = param->getValue(index, 0);
+    cJSON* item = cJSON_Parse(json_str.c_str());
+    if (!item) return "";
+    
+    cJSON* name = cJSON_GetObjectItem(item, "name");
+    std::string result = name ? cJSON_GetStringValue(name) : "";
+    cJSON_Delete(item);
+    return result;
+}
+
+std::string NetworkActionsComponent::getWsMessageName(size_t index) const {
+    auto* param = const_cast<NetworkActionsComponent*>(this)->getStringParam("ws_messages");
+    if (!param || index >= param->getRows()) return "";
+    
+    const std::string& json_str = param->getValue(index, 0);
+    cJSON* item = cJSON_Parse(json_str.c_str());
+    if (!item) return "";
+    
+    cJSON* name = cJSON_GetObjectItem(item, "name");
+    std::string result = name ? cJSON_GetStringValue(name) : "";
+    cJSON_Delete(item);
+    return result;
+}
+
+// Count getters - use StringParameter row count
+size_t NetworkActionsComponent::getTcpMessageCount() const {
+    auto* param = const_cast<NetworkActionsComponent*>(this)->getStringParam("tcp_messages");
+    return param ? param->getRows() : 0;
+}
+
+size_t NetworkActionsComponent::getHttpMessageCount() const {
+    auto* param = const_cast<NetworkActionsComponent*>(this)->getStringParam("http_messages");
+    return param ? param->getRows() : 0;
+}
+
+size_t NetworkActionsComponent::getWsMessageCount() const {
+    auto* param = const_cast<NetworkActionsComponent*>(this)->getStringParam("ws_messages");
+    return param ? param->getRows() : 0;
 }
 
 // Send methods - by index
 
 bool NetworkActionsComponent::sendTcp(size_t index) {
-    if (index >= tcp_messages.size()) {
+    if (index >= getTcpMessageCount()) {
         return false;
     }
     NetworkActionQueueItem item = {
@@ -439,7 +426,7 @@ bool NetworkActionsComponent::sendTcp(size_t index) {
 }
 
 bool NetworkActionsComponent::sendHttp(size_t index) {
-    if (index >= http_messages.size()) {
+    if (index >= getHttpMessageCount()) {
         return false;
     }
     NetworkActionQueueItem item = {
@@ -450,7 +437,7 @@ bool NetworkActionsComponent::sendHttp(size_t index) {
 }
 
 bool NetworkActionsComponent::sendWs(size_t index) {
-    if (index >= ws_messages.size()) {
+    if (index >= getWsMessageCount()) {
         return false;
     }
     NetworkActionQueueItem item = {
@@ -463,92 +450,56 @@ bool NetworkActionsComponent::sendWs(size_t index) {
 // Index lookup helpers
 
 size_t NetworkActionsComponent::getTcpMessageIdx(const std::string& name) const {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] getTcpMessageIdx - name: %s", name.c_str());
-#endif
-    auto it = std::find_if(tcp_messages.begin(), tcp_messages.end(),
-                          [&name](const TcpMessage& msg) { return msg.name == name; });
-    
-    if (it == tcp_messages.end()) {
-        ESP_LOGE(TAG, "TCP message '%s' not found", name.c_str());
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] getTcpMessageIdx - not found");
-#endif
-        return static_cast<size_t>(-1);
+    size_t count = getTcpMessageCount();
+    for (size_t i = 0; i < count; i++) {
+        if (getTcpMessageName(i) == name) {
+            return i;
+        }
     }
-    
-    size_t idx = std::distance(tcp_messages.begin(), it);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] getTcpMessageIdx - idx: %zu", idx);
-#endif
-    return idx;
+    ESP_LOGE(TAG, "TCP message '%s' not found", name.c_str());
+    return static_cast<size_t>(-1);
 }
 
 size_t NetworkActionsComponent::getHttpMessageIdx(const std::string& name) const {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] getHttpMessageIdx - name: %s", name.c_str());
-#endif
-    auto it = std::find_if(http_messages.begin(), http_messages.end(),
-                          [&name](const HttpMessage& msg) { return msg.name == name; });
-    
-    if (it == http_messages.end()) {
-        ESP_LOGE(TAG, "HTTP message '%s' not found", name.c_str());
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] getHttpMessageIdx - not found");
-#endif
-        return static_cast<size_t>(-1);
+    size_t count = getHttpMessageCount();
+    for (size_t i = 0; i < count; i++) {
+        if (getHttpMessageName(i) == name) {
+            return i;
+        }
     }
-    
-    size_t idx = std::distance(http_messages.begin(), it);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] getHttpMessageIdx - idx: %zu", idx);
-#endif
-    return idx;
+    ESP_LOGE(TAG, "HTTP message '%s' not found", name.c_str());
+    return static_cast<size_t>(-1);
 }
 
 size_t NetworkActionsComponent::getWsMessageIdx(const std::string& name) const {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] getWsMessageIdx - name: %s", name.c_str());
-#endif
-    auto it = std::find_if(ws_messages.begin(), ws_messages.end(),
-                          [&name](const WsMessage& msg) { return msg.name == name; });
-    
-    if (it == ws_messages.end()) {
-        ESP_LOGE(TAG, "WS message '%s' not found", name.c_str());
-#ifdef DEBUG
-        ESP_LOGI(TAG, "[EXIT] getWsMessageIdx - not found");
-#endif
-        return static_cast<size_t>(-1);
+    size_t count = getWsMessageCount();
+    for (size_t i = 0; i < count; i++) {
+        if (getWsMessageName(i) == name) {
+            return i;
+        }
     }
-    
-    size_t idx = std::distance(ws_messages.begin(), it);
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] getWsMessageIdx - idx: %zu", idx);
-#endif
-    return idx;
+    ESP_LOGE(TAG, "WS message '%s' not found", name.c_str());
+    return static_cast<size_t>(-1);
 }
 
-// Pointer getters by name
+// Get message by name - parse into output struct
 
-const TcpMessage* NetworkActionsComponent::getTcpMessage(const std::string& name) const {
-    auto it = std::find_if(tcp_messages.begin(), tcp_messages.end(),
-                          [&name](const TcpMessage& msg) { return msg.name == name; });
-    
-    return (it != tcp_messages.end()) ? &(*it) : nullptr;
+bool NetworkActionsComponent::getTcpMessage(const std::string& name, TcpMessage& out) const {
+    size_t idx = getTcpMessageIdx(name);
+    if (idx == static_cast<size_t>(-1)) return false;
+    return parseTcpMessageAt(idx, out);
 }
 
-const HttpMessage* NetworkActionsComponent::getHttpMessage(const std::string& name) const {
-    auto it = std::find_if(http_messages.begin(), http_messages.end(),
-                          [&name](const HttpMessage& msg) { return msg.name == name; });
-    
-    return (it != http_messages.end()) ? &(*it) : nullptr;
+bool NetworkActionsComponent::getHttpMessage(const std::string& name, HttpMessage& out) const {
+    size_t idx = getHttpMessageIdx(name);
+    if (idx == static_cast<size_t>(-1)) return false;
+    return parseHttpMessageAt(idx, out);
 }
 
-const WsMessage* NetworkActionsComponent::getWsMessage(const std::string& name) const {
-    auto it = std::find_if(ws_messages.begin(), ws_messages.end(),
-                          [&name](const WsMessage& msg) { return msg.name == name; });
-    
-    return (it != ws_messages.end()) ? &(*it) : nullptr;
+bool NetworkActionsComponent::getWsMessage(const std::string& name, WsMessage& out) const {
+    size_t idx = getWsMessageIdx(name);
+    if (idx == static_cast<size_t>(-1)) return false;
+    return parseWsMessageAt(idx, out);
 }
 
 // Register actions for GUI
@@ -557,43 +508,58 @@ void NetworkActionsComponent::registerActions() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] registerActions");
 #endif
-    // Register TCP actions
-    for (size_t i = 0; i < tcp_messages.size(); i++) {
-        const std::string& msg_name = tcp_messages[i].name;
-        addAction(
-            "Send TCP: " + msg_name,
-            "Send TCP message to " + tcp_messages[i].host + ":" + std::to_string(tcp_messages[i].port),
-            [i](Component* comp) -> bool {
-                auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
-                return net_comp->sendTcp(i);
-            }
-        );
+    // Register TCP actions - parse each message to get name/host/port for description
+    size_t tcp_count = getTcpMessageCount();
+    for (size_t i = 0; i < tcp_count; i++) {
+        TcpMessage msg;
+        if (parseTcpMessageAt(i, msg)) {
+            std::string action_name = "Send TCP: " + msg.name;
+            std::string action_desc = "Send TCP message to " + msg.host + ":" + std::to_string(msg.port);
+            addAction(
+                action_name,
+                action_desc,
+                [i](Component* comp) -> bool {
+                    auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
+                    return net_comp->sendTcp(i);
+                }
+            );
+        }
     }
     
     // Register HTTP actions
-    for (size_t i = 0; i < http_messages.size(); i++) {
-        const std::string& msg_name = http_messages[i].name;
-        addAction(
-            "Send HTTP: " + msg_name,
-            "Send HTTP " + http_messages[i].method + " to " + http_messages[i].url,
-            [i](Component* comp) -> bool {
-                auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
-                return net_comp->sendHttp(i);
-            }
-        );
+    size_t http_count = getHttpMessageCount();
+    for (size_t i = 0; i < http_count; i++) {
+        HttpMessage msg;
+        if (parseHttpMessageAt(i, msg)) {
+            std::string action_name = "Send HTTP: " + msg.name;
+            std::string action_desc = "Send HTTP " + msg.method + " to " + msg.url;
+            addAction(
+                action_name,
+                action_desc,
+                [i](Component* comp) -> bool {
+                    auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
+                    return net_comp->sendHttp(i);
+                }
+            );
+        }
     }
     
     // Register WebSocket actions
-    for (size_t i = 0; i < ws_messages.size(); i++) {
-        const std::string& msg_name = ws_messages[i].name;
-        addAction(
-            "Send WS: " + msg_name,
-            "Send WebSocket message to " + ws_messages[i].url,
-            [i](Component* comp) -> bool {
-                auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
-                return net_comp->sendWs(i);
-            }
-        );
+    size_t ws_count = getWsMessageCount();
+    for (size_t i = 0; i < ws_count; i++) {
+        WsMessage msg;
+        if (parseWsMessageAt(i, msg)) {
+            std::string action_name = "Send WS: " + msg.name;
+            std::string action_desc = "Send WebSocket message to " + msg.url;
+            addAction(
+                action_name,
+                action_desc,
+                [i](Component* comp) -> bool {
+                    auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
+                    return net_comp->sendWs(i);
+                }
+            );
+        }
     }
     
     ESP_LOGI(TAG, "Registered %zu actions", actions.size());

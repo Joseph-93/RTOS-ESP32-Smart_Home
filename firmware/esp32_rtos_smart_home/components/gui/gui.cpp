@@ -119,7 +119,7 @@ void GUIComponent::setUpDependencies(ComponentGraph* graph) {
 #endif
 }
 
-void GUIComponent::initialize() {
+void GUIComponent::onInitialize() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] GUIComponent::initialize");
 #endif
@@ -127,9 +127,9 @@ void GUIComponent::initialize() {
 
     // Brightness parameters
     addIntParam("user_set_brightness", 1, 1, 0, 100, 100); // User-controlled manual brightness (never touched by code)
-    addIntParam("auto_set_brightness", 1, 1, 0, 100, 100); // Auto-brightness from light sensor (never touched elsewhere)
+    addIntParam("auto_set_brightness", 1, 1, 0, 100, 100, true); // Auto-brightness from light sensor (read-only)
     addIntParam("desired_lcd_brightness", 1, 1, 0, 100, 100); // Final target brightness (what current chases)
-    addIntParam("current_lcd_brightness", 1, 1, 0, 100, 100); // Actual current brightness (read-only)
+    addIntParam("current_lcd_brightness", 1, 1, 0, 100, 100, true); // Actual current brightness (read-only)
     addIntParam("brighness_change_per_second", 1, 1, 10, 100, 50); // Rate at which current chases desired (0-100% per second)
     addIntParam("lcd_screen_timeout_seconds", 1, 1, 10, 600, 10); // Touch inactivity timeout in seconds
     addIntParam("motion_inactivity_screen_timeout_seconds", 1, 1, 10, 600, 10); // Motion inactivity timeout in seconds
@@ -480,17 +480,13 @@ void GUIComponent::guiStatusTask() {
             }
         }
         
-        if (desired_brightness_param) {
-            desired_brightness_param->setValue(0, 0, base_brightness);
-        }
+        int desired_brightness = base_brightness;
         
         // STEP 3: Apply zeroing logic based on lcd_screen_on, timeouts, etc.
         
         // 3a) lcd_screen_on - when false, forces desired to 0. When true, relinquishes control
         if (lcd_screen_on_param && lcd_screen_on_param->getValue(0, 0) == false) {
-            if (desired_brightness_param) {
-                desired_brightness_param->setValue(0, 0, 0);
-            }
+            desired_brightness = 0;
         }
         
         // 3b) Touch inactivity timeout
@@ -503,15 +499,13 @@ void GUIComponent::guiStatusTask() {
             if (tick_delta >= timeout_ticks) {
                 // Timeout reached - zero desired
                 touch_timeout_active = true;
-                if (desired_brightness_param) {
-                    desired_brightness_param->setValue(0, 0, 0);
-                }
+                desired_brightness = 0;
             }
         } else {
             // Override is true - relinquish control
-            if (touch_timeout_was_active_last_cycle && desired_brightness_param) {
+            if (touch_timeout_was_active_last_cycle) {
                 // Screen was timed out, now override is back to true - restore brightness
-                desired_brightness_param->setValue(0, 0, base_brightness);
+                desired_brightness = base_brightness;
             }
         }
         touch_timeout_was_active_last_cycle = touch_timeout_active;
@@ -529,31 +523,22 @@ void GUIComponent::guiStatusTask() {
                 if (motion_inactive_seconds >= motion_inactivity_screen_timeout_param->getValue(0, 0)) {
                     // Motion timeout reached - zero desired
                     motion_timeout_active = true;
-                    if (desired_brightness_param) {
-                        desired_brightness_param->setValue(0, 0, 0);
-                    }
+                    desired_brightness = 0;
                 }
             }
         } else {
             // Override is true - relinquish control
-            if (motion_timeout_was_active_last_cycle && desired_brightness_param) {
+            if (motion_timeout_was_active_last_cycle) {
                 // Screen was timed out, now override is back to true - restore brightness
-                desired_brightness_param->setValue(0, 0, base_brightness);
+                desired_brightness = base_brightness;
             }
         }
         motion_timeout_was_active_last_cycle = motion_timeout_active;
 
-        // Clean up expired notification
-        if (notification_overlay && xTaskGetTickCount() >= notification_expire_tick) {
-            lv_obj_del(notification_overlay);
-            notification_overlay = nullptr;
-            current_notification_priority = -1;
-            ESP_LOGI(TAG, "Notification expired");
-        }
+        desired_brightness_param->setValue(0, 0, desired_brightness);
         
         // STEP 4: Update current_lcd_brightness to chase desired_lcd_brightness at specified rate
         int current_brightness = current_brightness_param->getValue(0, 0);
-        int desired_brightness = desired_brightness_param->getValue(0, 0);
         int change_rate = change_rate_param->getValue(0, 0)/10; // percent per second
         int brightness_diff = desired_brightness - current_brightness;
         if (abs(brightness_diff) <= change_rate) {
@@ -566,15 +551,20 @@ void GUIComponent::guiStatusTask() {
             if (current_brightness > desired_brightness) {
                 current_brightness = desired_brightness;
             }
-            ESP_LOGI(TAG, "Increasing brightness to %d%%", current_brightness);
             current_brightness_param->setValue(0, 0, current_brightness);
         } else if (current_brightness > desired_brightness) {
             current_brightness -= change_rate;
             if (current_brightness < desired_brightness) {
                 current_brightness = desired_brightness;
             }
-            ESP_LOGI(TAG, "Decreasing brightness to %d%%", current_brightness);
             current_brightness_param->setValue(0, 0, current_brightness);
+        }
+
+        // Clean up expired notification
+        if (notification_overlay && xTaskGetTickCount() >= notification_expire_tick) {
+            lv_obj_del(notification_overlay);
+            notification_overlay = nullptr;
+            current_notification_priority = -1;
         }
     }
 }

@@ -14,6 +14,13 @@ Component::~Component() {
 #endif
 }
 
+void Component::initialize() {
+    ESP_LOGI(TAG, "Initializing component: %s", name.c_str());
+    onInitialize();
+    initialized = true;
+    ESP_LOGI(TAG, "Component %s initialized successfully", name.c_str());
+}
+
 std::string Component::getName() const {
 #ifdef DEBUG
     // Log with backtrace to see caller
@@ -115,42 +122,42 @@ StringParameter* Component::getStringParam(const std::string &paramName) {
 }
 
 // Protected add methods
-void Component::addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val, int max_val, int default_val) {
+void Component::addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val, int max_val, int default_val, bool readOnly) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addIntParam() - paramName: %s", paramName.c_str());
 #endif
-    intParams.push_back(std::make_unique<IntParameter>(paramName, rows, cols, min_val, max_val, default_val));
+    intParams.push_back(std::make_unique<IntParameter>(paramName, rows, cols, min_val, max_val, default_val, readOnly));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addIntParam() - paramName: %s", paramName.c_str());
 #endif
 }
 
-void Component::addFloatParam(const std::string &paramName, size_t rows, size_t cols, float min_val, float max_val, float default_val) {
+void Component::addFloatParam(const std::string &paramName, size_t rows, size_t cols, float min_val, float max_val, float default_val, bool readOnly) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addFloatParam() - paramName: %s", paramName.c_str());
 #endif
-    floatParams.push_back(std::make_unique<FloatParameter>(paramName, rows, cols, min_val, max_val, default_val));
+    floatParams.push_back(std::make_unique<FloatParameter>(paramName, rows, cols, min_val, max_val, default_val, readOnly));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addFloatParam() - paramName: %s", paramName.c_str());
 #endif
 }
 
-void Component::addBoolParam(const std::string &paramName, size_t rows, size_t cols, bool default_val) {
+void Component::addBoolParam(const std::string &paramName, size_t rows, size_t cols, bool default_val, bool readOnly) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addBoolParam() - paramName: %s", paramName.c_str());
 #endif
     // BoolParameter is Parameter<uint8_t>, so we need to pass min, max, and default as uint8_t
-    boolParams.push_back(std::make_unique<BoolParameter>(paramName, rows, cols, 0, 1, default_val ? 1 : 0));
+    boolParams.push_back(std::make_unique<BoolParameter>(paramName, rows, cols, 0, 1, default_val ? 1 : 0, readOnly));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addBoolParam() - paramName: %s", paramName.c_str());
 #endif
 }
 
-void Component::addStringParam(const std::string &paramName, size_t rows, size_t cols, const std::string &default_val) {
+void Component::addStringParam(const std::string &paramName, size_t rows, size_t cols, const std::string &default_val, bool readOnly) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addStringParam() - paramName: %s", paramName.c_str());
 #endif
-    stringParams.push_back(std::make_unique<StringParameter>(paramName, rows, cols, default_val));
+    stringParams.push_back(std::make_unique<StringParameter>(paramName, rows, cols, default_val, default_val, default_val, readOnly));
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addStringParam() - paramName: %s", paramName.c_str());
 #endif
@@ -200,4 +207,50 @@ void Component::invokeAction(size_t actionIndex) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] invokeAction() - success");
 #endif
+}
+
+size_t Component::getApproximateMemoryUsage() const {
+    size_t total = 0;
+    
+    // Component name and basic overhead
+    total += sizeof(Component);
+    total += name.capacity();
+    
+    // Int parameters
+    for (const auto& param : intParams) {
+        total += sizeof(IntParameter);
+        total += param->getName().capacity();
+        total += param->getRows() * param->getCols() * sizeof(int32_t);
+    }
+    
+    // Float parameters
+    for (const auto& param : floatParams) {
+        total += sizeof(FloatParameter);
+        total += param->getName().capacity();
+        total += param->getRows() * param->getCols() * sizeof(float);
+    }
+    
+    // Bool parameters
+    for (const auto& param : boolParams) {
+        total += sizeof(BoolParameter);
+        total += param->getName().capacity();
+        total += param->getRows() * param->getCols() * sizeof(uint8_t);
+    }
+    
+    // String parameters
+    for (const auto& param : stringParams) {
+        total += sizeof(StringParameter);
+        total += param->getName().capacity();
+        // Estimate average string size (rough)
+        total += param->getRows() * param->getCols() * 32;  // Assume avg 32 bytes per string
+    }
+    
+    // Actions
+    total += actions.capacity() * sizeof(ComponentAction);
+    for (const auto& action : actions) {
+        total += action.name.capacity();
+        total += action.description.capacity();
+    }
+    
+    return total;
 }

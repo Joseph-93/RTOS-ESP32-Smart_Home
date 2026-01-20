@@ -49,13 +49,13 @@ static void IRAM_ATTR door_sensor_isr_handler(void* arg) {
     }
 }
 
-void DoorSensorComponent::initialize() {
+void DoorSensorComponent::onInitialize() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] DoorSensorComponent::initialize");
 #endif
 
-    addIntParam("last_door_event_seconds", 1, 1, 0, INT32_MAX, 0);
-    addIntParam("door_state", 1, 1, 0, 1, 0); // 0 = closed, 1 = open
+    addIntParam("last_door_event_seconds", 1, 1, 0, INT32_MAX, 0, true);
+    addIntParam("door_state", 1, 1, 0, 1, 0, true); // 0 = closed, 1 = open
     addIntParam("door_open_too_long_threshold_seconds", 1, 1, 10, 3600, 10);
     addIntParam("entry_departure_motion_threshold_seconds", 1, 1, 0, 300, 30); // Time window to classify as departure
 
