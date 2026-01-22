@@ -276,12 +276,13 @@ class Component;
 struct ComponentAction {
     std::string name;                                  // Display name of the action
     std::string description;                           // Optional description
-    std::function<bool(Component*)> callback;          // Function to call when action is invoked
+    std::string argument;                              // String argument passed to callback
+    std::function<bool(Component*, const std::string&)> callback;  // Function to call when action is invoked
     
     ComponentAction(const std::string& name, 
                    const std::string& description,
-                   std::function<bool(Component*)> callback)
-        : name(name), description(description), callback(callback) {}
+                   std::function<bool(Component*, const std::string&)> callback)
+        : name(name), description(description), argument(""), callback(callback) {}
 };
 
 // Component base class
@@ -328,11 +329,27 @@ public:
     FloatParameter* getFloatParam(const std::string &paramName);
     BoolParameter* getBoolParam(const std::string &paramName);
     StringParameter* getStringParam(const std::string &paramName);
+    IntParameter* getIntParam(int paramId);
+    FloatParameter* getFloatParam(int paramId);
+    BoolParameter* getBoolParam(int paramId);
+    StringParameter* getStringParam(int paramId);
     
     // Action management
     const std::vector<ComponentAction>& getActions() const;
-    std::vector<std::string> getActionNames() const;
+    const ComponentAction& getAction(int actionId) const;
+    const ComponentAction& getAction(const std::string &actionName) const;
+    const std::vector<std::string> getActionNames() const;
+    const std::string getActionName(int actionId) const;
+    const std::string getActionName(const std::string &actionName) const;
+    const std::vector<std::string> getActionDescriptions() const;
+    const std::string getActionDescription(int actionId) const;
+    const std::string getActionDescription(const std::string &actionName) const;
     void invokeAction(size_t actionIndex);
+    void invokeAction(const std::string &actionName);
+    void invokeAction(size_t actionIndex, const std::string& arg);
+    void invokeAction(const std::string &actionName, const std::string& arg);
+    void setActionArgument(const std::string &actionName, const std::string& arg);
+    void setActionArgument(size_t actionIndex, const std::string& arg);
     
     // Memory diagnostics - calculate approximate memory usage
     size_t getApproximateMemoryUsage() const;
@@ -357,5 +374,5 @@ protected:
     void addStringParam(const std::string &paramName, size_t rows, size_t cols, const std::string &default_val = "", bool readOnly = false);
     
     void addAction(const std::string& name, const std::string& description, 
-                   std::function<bool(Component*)> callback);
+                   std::function<bool(Component*, const std::string&)> callback);
 };

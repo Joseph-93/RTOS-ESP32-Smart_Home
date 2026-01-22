@@ -15,6 +15,13 @@
         <header>
             <div class="breadcrumb">
                 <a href="{% url 'index' %}">← Back to Devices</a>
+                <span style="margin: 0 10px;">|</span>
+                <a href="{% url 'message_builder' device_name %}">🛠️ Message Builder</a>
+                <span style="margin: 0 10px;">|</span>
+                <a href="#" onclick="exportSettings(); return false;" class="export-btn">📥 Export Settings</a>
+                <span style="margin: 0 10px;">|</span>
+                <label for="importFile" class="export-btn" style="cursor: pointer;">📤 Import Settings</label>
+                <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importSettings(event)">
             </div>
             <h1>{{ device_name }} - Components</h1>
             <p class="subtitle">{{ device.host }}:{{ device.port }}</p>
@@ -60,6 +67,368 @@
             document.getElementById('component-list').innerHTML = 
                 `<div class="empty-state"><h3>Connection failed</h3><p>${err.message}</p></div>`;
         });
+        
+        const notifs = new NotificationManager();
+        
+        // Export settings function using existing WebSocket messages
+        async function exportSettings() {
+            // Create loading overlay
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.7);
+                z-index: 9999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-direction: column;
+                color: white;
+            `;
+            overlay.innerHTML = `
+                <div style="font-size: 24px; margin-bottom: 20px;">Exporting Settings...</div>
+                <div id="export-progress" style="font-size: 16px; opacity: 0.8;"></div>
+            `;
+            document.body.appendChild(overlay);
+            
+            const updateProgress = (msg) => {
+                document.getElementById('export-progress').textContent = msg;
+            };
+            
+            try {
+                if (!deviceWs.connected) {
+                    throw new Error('WebSocket not connected. Please refresh the page.');
+                }
+                
+                updateProgress('Getting component list...');
+                const components = await deviceWs.getComponents();
+                
+                const exportData = {
+                    device_name: '{{ device_name }}',
+                    device_host: '{{ device.host }}',
+                    device_port: {{ device.port }},
+                    exported_at: new Date().toISOString(),
+                    components: {}
+                };
+                
+                // Iterate through each component
+                for (let i = 0; i < components.length; i++) {
+                    const compName = components[i];
+                    updateProgress(`Processing ${compName} (${i+1}/${components.length})...`);
+                    
+                    exportData.components[compName] = {
+                        int: [],
+                        float: [],
+                        bool: [],
+                        str: [],
+                        actions: []
+                    };
+                    
+                    // Get each parameter type
+                    for (const paramType of ['int', 'float', 'bool', 'str']) {
+                        // First get count
+                        const countResp = await deviceWs.send({ 
+                            type: 'get_param_info', 
+                            comp: compName, 
+                            param_type: paramType,
+                            idx: -1
+                        });
+                        
+                        const count = countResp.count || 0;
+                        
+                        // Get each parameter
+                        for (let idx = 0; idx < count; idx++) {
+                            const infoResp = await deviceWs.send({
+                                type: 'get_param_info',
+                                comp: compName,
+                                param_type: paramType,
+                                idx: idx
+                            });
+                            
+                            // Skip read-only parameters
+                            if (infoResp.readOnly) {
+                                continue;
+                            }
+                            
+                            updateProgress(`Reading ${compName}.${infoResp.name}...`);
+                            
+                            const paramData = {
+                                name: infoResp.name,
+                                rows: infoResp.rows,
+                                cols: infoResp.cols,
+                                values: []
+                            };
+                            
+                            // Get all values for this parameter
+                            for (let row = 0; row < infoResp.rows; row++) {
+                                const rowValues = [];
+                                for (let col = 0; col < infoResp.cols; col++) {
+                                    const valResp = await deviceWs.send({
+                                        type: 'get_param',
+                                        comp: compName,
+                                        param_type: paramType,
+                                        idx: idx,
+                                        row: row,
+                                        col: col
+                                    });
+                                    rowValues.push(valResp.value);
+                                }
+                                paramData.values.push(rowValues);
+                            }
+                            
+                            exportData.components[compName][paramType].push(paramData);
+                        }
+                    }
+                    
+                    // Export action arguments
+                    updateProgress(`Reading ${compName} actions...`);
+                    const actionsCountResp = await deviceWs.send({
+                        type: 'get_param_info',
+                        comp: compName,
+                        param_type: 'actions',
+                        idx: -1
+                    });
+                    
+                    const actionCount = actionsCountResp.count || 0;
+                    for (let idx = 0; idx < actionCount; idx++) {
+                        const actionInfo = await deviceWs.send({
+                            type: 'get_param_info',
+                            comp: compName,
+                            param_type: 'actions',
+                            idx: idx
+                        });
+                        
+                        const actionArg = await deviceWs.send({
+                            type: 'get_param',
+                            comp: compName,
+                            param_type: 'actions',
+                            idx: idx,
+                            row: 0,
+                            col: 0
+                        });
+                        
+                        exportData.components[compName].actions.push({
+                            name: actionInfo.name,
+                            argument: actionArg.value || ''
+                        });
+                    }
+                }
+                
+                updateProgress('Generating download...');
+                
+                // Trigger download
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = '{{ device_name }}_settings.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                document.body.removeChild(overlay);
+                notifs.show('Settings exported successfully!', 'success');
+            } catch (err) {
+                document.body.removeChild(overlay);
+                notifs.show('Export failed: ' + err.message, 'error');
+            }
+        }
+        
+        // Import settings function - uploads one parameter at a time
+        async function importSettings(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            // Reset file input for next use
+            event.target.value = '';
+            
+            try {
+                const text = await file.text();
+                const importData = JSON.parse(text);
+                
+                if (!importData.components) {
+                    throw new Error('Invalid settings file format');
+                }
+                
+                // Create loading overlay
+                const overlay = document.createElement('div');
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0,0,0,0.7);
+                    z-index: 9999;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-direction: column;
+                    color: white;
+                `;
+                overlay.innerHTML = `
+                    <div style="font-size: 24px; margin-bottom: 20px;">Importing Settings...</div>
+                    <div id="import-progress" style="font-size: 16px; opacity: 0.8;"></div>
+                    <div id="import-stats" style="font-size: 14px; opacity: 0.6; margin-top: 10px;"></div>
+                `;
+                document.body.appendChild(overlay);
+                
+                const updateProgress = (msg) => {
+                    document.getElementById('import-progress').textContent = msg;
+                };
+                
+                const updateStats = (msg) => {
+                    document.getElementById('import-stats').textContent = msg;
+                };
+                
+                if (!deviceWs.connected) {
+                    throw new Error('WebSocket not connected. Please refresh the page.');
+                }
+                
+                let totalParams = 0;
+                let completedParams = 0;
+                
+                // Count total parameters to set
+                for (const compName in importData.components) {
+                    const comp = importData.components[compName];
+                    for (const paramType of ['int', 'float', 'bool', 'str']) {
+                        if (comp[paramType]) {
+                            for (const param of comp[paramType]) {
+                                totalParams += param.rows * param.cols;
+                            }
+                        }
+                    }
+                }
+                
+                updateStats(`0 / ${totalParams} parameters`);
+                
+                // Iterate through each component
+                for (const compName in importData.components) {
+                    const comp = importData.components[compName];
+                    updateProgress(`Processing ${compName}...`);
+                    
+                    // Process each parameter type
+                    for (const paramType of ['int', 'float', 'bool', 'str']) {
+                        if (!comp[paramType]) continue;
+                        
+                        // Build a map of parameter names to their actual indices on the device
+                        const countResp = await deviceWs.send({
+                            type: 'get_param_info',
+                            comp: compName,
+                            param_type: paramType,
+                            idx: -1
+                        });
+                        
+                        const count = countResp.count || 0;
+                        const nameToIdx = {};
+                        
+                        for (let i = 0; i < count; i++) {
+                            const info = await deviceWs.send({
+                                type: 'get_param_info',
+                                comp: compName,
+                                param_type: paramType,
+                                idx: i
+                            });
+                            nameToIdx[info.name] = i;
+                        }
+                        
+                        // Now set each parameter from the import file by NAME
+                        for (const param of comp[paramType]) {
+                            const actualIdx = nameToIdx[param.name];
+                            
+                            if (actualIdx === undefined) {
+                                console.warn(`Parameter ${compName}.${param.name} not found on device, skipping`);
+                                continue;
+                            }
+                            
+                            updateProgress(`Setting ${compName}.${param.name}...`);
+                            
+                            // Set each value ONE AT A TIME
+                            for (let row = 0; row < param.rows; row++) {
+                                for (let col = 0; col < param.cols; col++) {
+                                    const value = param.values[row][col];
+                                    
+                                    // Send set_param and wait for response
+                                    await deviceWs.send({
+                                        type: 'set_param',
+                                        comp: compName,
+                                        param_type: paramType,
+                                        idx: actualIdx,
+                                        row: row,
+                                        col: col,
+                                        value: value
+                                    });
+                                    
+                                    completedParams++;
+                                    updateStats(`${completedParams} / ${totalParams} parameters`);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Import action arguments
+                    if (comp.actions) {
+                        updateProgress(`Setting ${compName} action arguments...`);
+                        
+                        // Get action count from device
+                        const actionsCountResp = await deviceWs.send({
+                            type: 'get_param_info',
+                            comp: compName,
+                            param_type: 'actions',
+                            idx: -1
+                        });
+                        
+                        const actionCount = actionsCountResp.count || 0;
+                        const actionNameToIdx = {};
+                        
+                        // Build name -> index map
+                        for (let i = 0; i < actionCount; i++) {
+                            const info = await deviceWs.send({
+                                type: 'get_param_info',
+                                comp: compName,
+                                param_type: 'actions',
+                                idx: i
+                            });
+                            actionNameToIdx[info.name] = i;
+                        }
+                        
+                        // Set each action argument
+                        for (const action of comp.actions) {
+                            const actualIdx = actionNameToIdx[action.name];
+                            
+                            if (actualIdx === undefined) {
+                                console.warn(`Action ${compName}.${action.name} not found on device, skipping`);
+                                continue;
+                            }
+                            
+                            await deviceWs.send({
+                                type: 'set_param',
+                                comp: compName,
+                                param_type: 'actions',
+                                idx: actualIdx,
+                                row: 0,
+                                col: 0,
+                                value: action.argument
+                            });
+                        }
+                    }
+                }
+                
+                document.body.removeChild(overlay);
+                notifs.show(`Settings imported successfully! (${completedParams} parameters set)`, 'success', 6000);
+                
+            } catch (err) {
+                const overlayEl = document.querySelector('[id="import-progress"]');
+                if (overlayEl && overlayEl.closest('div').parentElement === document.body) {
+                    document.body.removeChild(overlayEl.closest('div'));
+                }
+                notifs.show('Import failed: ' + err.message, 'error');
+            }
+        }
     </script>
 </body>
 </html>

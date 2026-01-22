@@ -125,6 +125,49 @@ void GUIComponent::onInitialize() {
 #endif
     ESP_LOGI(TAG, "Initializing GUIComponent...");
 
+    // Register button actions - argument will contain the JSON message to execute
+    for (int i = 0; i < 8; i++) {
+        std::string action_name = "button_" + std::to_string(i);
+        std::string action_desc = "Press Button " + std::to_string(i);
+        addAction(
+            action_name,
+            action_desc,
+            [i](Component* comp, const std::string& arg) -> bool {
+                GUIComponent* gui = static_cast<GUIComponent*>(comp);
+                ESP_LOGI("GUI", "Button action %d invoked with arg: %s", i, arg.c_str());
+                
+                // If argument is empty, do nothing
+                if (arg.empty()) {
+                    ESP_LOGI("GUI", "No action configured for button %d", i);
+                    return true;
+                }
+                
+                // Execute the JSON message from the argument
+                ESP_LOGI("GUI", "Executing button %d action: %s", i, arg.c_str());
+                cJSON* response = gui->component_graph->executeMessage(arg.c_str());
+                if (response) {
+                    char* response_str = cJSON_PrintUnformatted(response);
+                    if (response_str) {
+                        ESP_LOGI("GUI", "Button action response: %s", response_str);
+                        free(response_str);
+                    }
+                    cJSON_Delete(response);
+                } else {
+                    ESP_LOGW("GUI", "Button action returned no response");
+                }
+
+                // Send notification
+                if (gui->component_graph) {
+                    char msg[64];
+                    snprintf(msg, sizeof(msg), "Button %d action triggered", i);
+                    gui->component_graph->sendNotification(msg, false, 3, 2000);
+                }
+                
+                return true;
+            }
+        );
+    }
+
     // Brightness parameters
     addIntParam("user_set_brightness", 1, 1, 0, 100, 100); // User-controlled manual brightness (never touched by code)
     addIntParam("auto_set_brightness", 1, 1, 0, 100, 100, true); // Auto-brightness from light sensor (read-only)
@@ -333,7 +376,7 @@ void GUIComponent::createPendingNotification() {
     
     // Create notification overlay
     notification_overlay = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(notification_overlay, 280, 80);
+    lv_obj_set_size(notification_overlay, 280, 30);
     lv_obj_align(notification_overlay, LV_ALIGN_TOP_MID, 0, 20);
     
     // Set color based on notification level
@@ -683,15 +726,10 @@ void GUIComponent::simple_button_event_cb(lv_event_t* e) {
     
     // Get button index from user data
     int button_index = (int)(intptr_t)lv_event_get_user_data(e);
+    std::string action_name = "button_" + std::to_string(button_index);
     
-    ESP_LOGI(TAG, "Button %d clicked!", button_index + 1);
-    
-    // Send notification via ComponentGraph
-    if (g_gui_component && g_gui_component->component_graph) {
-        char msg[64];
-        snprintf(msg, sizeof(msg), "Button %d clicked", button_index + 1);
-        g_gui_component->component_graph->sendNotification(msg, false, 5, 2000);
-    }
+    // Invoke the corresponding action (which will send its own notification)
+    g_gui_component->invokeAction(action_name);
     
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] simple_button_event_cb");

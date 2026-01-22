@@ -74,3 +74,16 @@ def component_view(request, device_name, component_name):
         'component_name': component_name,
         'device': device_info
     })
+
+
+def message_builder(request, device_name):
+    """Message builder tool for creating WebSocket/executeMessage JSON"""
+    if device_name not in devices:
+        return JsonResponse({'error': 'Device not found'}, status=404)
+    
+    device_info = devices[device_name]
+    return render(request, 'dashboard/message_builder.html', {
+        'device_name': device_name,
+        'device': device_info
+    })
+

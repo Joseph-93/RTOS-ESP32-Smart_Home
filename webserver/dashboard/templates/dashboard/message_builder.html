@@ -1,0 +1,654 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Message Builder</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <style>
+        .message-builder {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #2b2b2b;
+            border-radius: 8px;
+        }
+        
+        .builder-section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #1e1e1e;
+            border-radius: 5px;
+        }
+        
+        .builder-section h3 {
+            margin-top: 0;
+            color: #4CAF50;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        
+        .search-select {
+            position: relative;
+            margin-bottom: 15px;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 10px;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 14px;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        
+        .dropdown-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 250px;
+            overflow-y: auto;
+            background: #333;
+            border: 1px solid #555;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .dropdown-list.show {
+            display: block;
+        }
+        
+        .dropdown-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #444;
+            color: #ccc;
+        }
+        
+        .dropdown-item:hover {
+            background: #444;
+        }
+        
+        .dropdown-item.selected {
+            background: #4CAF50;
+            color: #fff;
+        }
+        
+        .param-type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        
+        .param-type-int { background: #2196F3; }
+        .param-type-float { background: #FF9800; }
+        .param-type-bool { background: #9C27B0; }
+        .param-type-str { background: #00BCD4; }
+        .param-type-action { background: #F44336; }
+        
+        .param-controls {
+            margin-top: 15px;
+            padding: 15px;
+            background: #252525;
+            border-radius: 5px;
+            border: 1px solid #444;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+            font-size: 13px;
+        }
+        
+        .control-group input[type="number"],
+        .control-group input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 14px;
+        }
+        
+        .control-group input[type="range"] {
+            width: 100%;
+            margin-top: 5px;
+        }
+        
+        .bool-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .bool-btn {
+            flex: 1;
+            padding: 12px;
+            background: #444;
+            border: 2px solid #555;
+            border-radius: 4px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        .bool-btn:hover {
+            background: #555;
+        }
+        
+        .bool-btn.active {
+            background: #4CAF50;
+            border-color: #4CAF50;
+        }
+        
+        .message-output {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1a1a1a;
+            border: 1px solid #4CAF50;
+            border-radius: 5px;
+        }
+        
+        .message-output h4 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        
+        .message-code {
+            background: #0d0d0d;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #0f0;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            position: relative;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 6px 12px;
+            background: #4CAF50;
+            border: none;
+            border-radius: 3px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .copy-btn:hover {
+            background: #45a049;
+        }
+        
+        .copy-btn.copied {
+            background: #2196F3;
+        }
+        
+        .range-value {
+            display: inline-block;
+            margin-left: 10px;
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            padding: 8px 15px;
+            background: #444;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        
+        .back-link:hover {
+            background: #555;
+        }
+        
+        .readonly-notice {
+            color: #ff9800;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="message-builder">
+        <a href="{% url 'device' device_name %}" class="back-link">← Back to {{ device_name }}</a>
+        
+        <h2>ESP32 Message Builder - {{ device_name }}</h2>
+        <p style="color: #aaa; margin-bottom: 30px;">
+            Build JSON messages to control ESP32 components via WebSocket or internal executeMessage() calls.
+        </p>
+        
+        <!-- Component Selection -->
+        <div class="builder-section">
+            <h3>1. Select Component</h3>
+            <select id="componentSelect" class="search-input">
+                <option value="">-- Select Component --</option>
+            </select>
+        </div>
+        
+        <!-- Parameter/Action Selection -->
+        <div class="builder-section" id="paramSection" style="display: none;">
+            <h3>2. Select Parameter or Action</h3>
+            <select id="paramSelect" class="search-input">
+                <option value="">-- Select Parameter/Action --</option>
+            </select>
+        </div>
+        
+        <!-- Parameter Controls -->
+        <div class="builder-section" id="controlsSection" style="display: none;">
+            <h3>3. Configure Value</h3>
+            <div id="paramControls" class="param-controls"></div>
+        </div>
+        
+        <!-- Generated Message -->
+        <div class="message-output" id="messageOutput" style="display: none;">
+            <h4>Generated Message</h4>
+            <div class="message-code">
+                <button class="copy-btn" onclick="copyMessage()">Copy</button>
+                <pre id="messageText"></pre>
+            </div>
+            <p style="color: #aaa; font-size: 13px; margin-top: 10px;">
+                Use this message with WebSocket clients or internal component executeMessage() calls.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let components = [];
+        let selectedComponent = null;
+        let selectedParam = null;
+        let paramInfo = {};
+        
+        const esp32Host = '{{ device.host }}';
+        
+        // WebSocket connection
+        function connectWebSocket() {
+            const protocol = 'ws:';
+            ws = new WebSocket(`${protocol}//${esp32Host}/ws`);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected to {{ device_name }}');
+                loadComponents();
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket closed, reconnecting...');
+                setTimeout(connectWebSocket, 2000);
+            };
+        }
+        
+        function handleWebSocketMessage(data) {
+            if (data.components) {
+                components = data.components;
+                populateComponentDropdown();
+            } else if ((data.count !== undefined || data.name !== undefined) && selectedComponent) {
+                handleParamInfo(data);
+            }
+        }
+        
+        function loadComponents() {
+            ws.send(JSON.stringify({ type: 'get_components' }));
+        }
+        
+        // Component dropdown
+        const componentSelect = document.getElementById('componentSelect');
+        
+        componentSelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                selectComponent(e.target.value);
+            }
+        });
+        
+        function populateComponentDropdown() {
+            componentSelect.innerHTML = '<option value="">-- Select Component --</option>';
+            components.forEach(comp => {
+                const option = document.createElement('option');
+                option.value = comp;
+                option.textContent = comp;
+                componentSelect.appendChild(option);
+            });
+        }
+        
+        function selectComponent(comp) {
+            selectedComponent = comp;
+            
+            // Load parameters and actions for this component
+            loadParametersAndActions();
+            
+            document.getElementById('paramSection').style.display = 'block';
+            document.getElementById('controlsSection').style.display = 'none';
+            document.getElementById('messageOutput').style.display = 'none';
+        }
+        // Load parameters and actions
+        let currentParamTypeIndex = 0;
+        const paramTypes = ['int', 'float', 'bool', 'str', 'actions'];
+        let currentParamType = null;
+        let expectedCount = null;
+        let receivedCount = 0;
+        
+        function loadParametersAndActions() {
+            paramInfo = {};
+            currentParamTypeIndex = 0;
+            
+            // Clear param dropdown
+            const paramSelect = document.getElementById('paramSelect');
+            paramSelect.innerHTML = '<option value="">-- Loading... --</option>';
+            
+            // Start with first param type
+            requestNextParamType();
+        }
+        
+        function requestNextParamType() {
+            if (currentParamTypeIndex >= paramTypes.length) {
+                // Done loading all types
+                return;
+            }
+            
+            currentParamType = paramTypes[currentParamTypeIndex];
+            expectedCount = null;
+            receivedCount = 0;
+            
+            // Request count for this type
+            ws.send(JSON.stringify({
+                type: 'get_param_info',
+                comp: selectedComponent,
+                param_type: currentParamType,
+                idx: -1
+            }));
+        }
+        
+        function handleParamInfo(info) {
+            // If this has a count, it's a count response
+            if (info.count !== undefined && !info.name) {
+                expectedCount = info.count;
+                
+                // Request individual param details for this type
+                for (let i = 0; i < expectedCount; i++) {
+                    ws.send(JSON.stringify({
+                        type: 'get_param_info',
+                        comp: selectedComponent,
+                        param_type: currentParamType,
+                        idx: i
+                    }));
+                }
+                
+                // If count is 0, move to next type immediately
+                if (expectedCount === 0) {
+                    currentParamTypeIndex++;
+                    requestNextParamType();
+                }
+                return;
+            }
+            
+            // This is individual param info
+            const idx = info.idx !== undefined ? info.idx : receivedCount;
+            const key = `${currentParamType}_${idx}`;
+            
+            paramInfo[key] = { ...info, param_type: currentParamType, idx: idx };
+            receivedCount++;
+            
+            populateParamDropdown();
+            
+            // Check if we've received all params for this type
+            if (receivedCount >= expectedCount) {
+                currentParamTypeIndex++;
+                requestNextParamType();
+            }
+        }
+        
+        // Parameter dropdown
+        const paramSelect = document.getElementById('paramSelect');
+        
+        paramSelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                selectParam(e.target.value);
+            }
+        });
+        
+        function populateParamDropdown() {
+            const paramSelect = document.getElementById('paramSelect');
+            paramSelect.innerHTML = '<option value="">-- Select Parameter/Action --</option>';
+            
+            Object.entries(paramInfo).forEach(([key, info]) => {
+                const [type, idx] = key.split('_');
+                const name = info.name || '';
+                const displayType = type === 'str' ? 'string' : type;
+                
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = `${name} [${displayType}]`;
+                paramSelect.appendChild(option);
+            });
+        }
+        
+        function selectParam(key) {
+            selectedParam = key;
+            const info = paramInfo[key];
+            
+            // Build controls based on parameter type
+            buildParamControls(info);
+            
+            // Only show controls section for parameters, not actions
+            const [type, idx] = key.split('_');
+            if (type !== 'actions') {
+                document.getElementById('controlsSection').style.display = 'block';
+            }
+        }
+        
+        function buildParamControls(info) {
+            const controls = document.getElementById('paramControls');
+            const [type, idx] = selectedParam.split('_');
+            
+            if (type === 'actions') {
+                // Action - hide controls section entirely and just generate message
+                document.getElementById('controlsSection').style.display = 'none';
+                generateMessage();
+                return;
+            }
+            
+            let html = '';
+            
+            // Row/Col selectors if multi-dimensional
+            if (info.rows > 1 || info.cols > 1) {
+                // Build row dropdown
+                let rowOptions = '';
+                for (let i = 0; i < info.rows; i++) {
+                    rowOptions += `<option value="${i}">${i}</option>`;
+                }
+                
+                // Build col dropdown
+                let colOptions = '';
+                for (let i = 0; i < info.cols; i++) {
+                    colOptions += `<option value="${i}">${i}</option>`;
+                }
+                
+                html += `
+                    <div class="control-group">
+                        <label>Row (0-${info.rows - 1})</label>
+                        <select id="rowSelect" onchange="generateMessage()">${rowOptions}</select>
+                    </div>
+                    <div class="control-group">
+                        <label>Column (0-${info.cols - 1})</label>
+                        <select id="colSelect" onchange="generateMessage()">${colOptions}</select>
+                    </div>
+                `;
+            }
+            
+            // Value controls based on type
+            if (type === 'bool') {
+                html += `
+                    <div class="control-group">
+                        <label>Value</label>
+                        ${info.readOnly ? '<p class="readonly-notice">⚠️ Read-only parameter</p>' : ''}
+                        <div class="bool-buttons">
+                            <button class="bool-btn" id="boolFalse" onclick="setBool(false)">FALSE</button>
+                            <button class="bool-btn active" id="boolTrue" onclick="setBool(true)">TRUE</button>
+                        </div>
+                    </div>
+                `;
+            } else if (type === 'int') {
+                const min = info.min || 0;
+                const max = info.max || 100;
+                html += `
+                    <div class="control-group">
+                        <label>Value (${min} - ${max})</label>
+                        ${info.readOnly ? '<p class="readonly-notice">⚠️ Read-only parameter</p>' : ''}
+                        <input type="number" id="valueInput" min="${min}" max="${max}" value="${min}" 
+                               oninput="updateRangeFromNumber(); generateMessage()">
+                        <input type="range" id="valueRange" min="${min}" max="${max}" value="${min}"
+                               oninput="updateNumberFromRange(); generateMessage()">
+                    </div>
+                `;
+            } else if (type === 'float') {
+                const min = info.min || 0.0;
+                const max = info.max || 1.0;
+                const step = (max - min) / 100;
+                html += `
+                    <div class="control-group">
+                        <label>Value (${min} - ${max})</label>
+                        ${info.readOnly ? '<p class="readonly-notice">⚠️ Read-only parameter</p>' : ''}
+                        <input type="number" id="valueInput" min="${min}" max="${max}" step="${step}" value="${min}" 
+                               oninput="updateRangeFromNumber(); generateMessage()">
+                        <input type="range" id="valueRange" min="${min}" max="${max}" step="${step}" value="${min}"
+                               oninput="updateNumberFromRange(); generateMessage()">
+                    </div>
+                `;
+            } else if (type === 'str') {
+                html += `
+                    <div class="control-group">
+                        <label>Value</label>
+                        ${info.readOnly ? '<p class="readonly-notice">⚠️ Read-only parameter</p>' : ''}
+                        <input type="text" id="valueInput" placeholder="Enter string value..." oninput="generateMessage()">
+                    </div>
+                `;
+            }
+            
+            controls.innerHTML = html;
+            generateMessage();
+        }
+        
+        function setBool(value) {
+            document.getElementById('boolTrue').classList.toggle('active', value);
+            document.getElementById('boolFalse').classList.toggle('active', !value);
+            generateMessage();
+        }
+        
+        function updateRangeFromNumber() {
+            const num = document.getElementById('valueInput');
+            const range = document.getElementById('valueRange');
+            range.value = num.value;
+        }
+        
+        function updateNumberFromRange() {
+            const num = document.getElementById('valueInput');
+            const range = document.getElementById('valueRange');
+            num.value = range.value;
+        }
+        
+        function generateMessage() {
+            if (!selectedComponent || !selectedParam) return;
+            
+            const [type, idx] = selectedParam.split('_');
+            const info = paramInfo[selectedParam];
+            let message = {};
+            
+            if (type === 'actions') {
+                message = {
+                    type: 'invoke_action',
+                    comp: selectedComponent,
+                    action: info.name
+                };
+            } else {
+                const row = document.getElementById('rowSelect')?.value || 0;
+                const col = document.getElementById('colSelect')?.value || 0;
+                
+                let value;
+                if (type === 'bool') {
+                    const boolTrueBtn = document.getElementById('boolTrue');
+                    if (!boolTrueBtn) return; // Controls not ready yet
+                    value = boolTrueBtn.classList.contains('active');
+                } else if (type === 'int') {
+                    const valueInput = document.getElementById('valueInput');
+                    if (!valueInput) return; // Controls not ready yet
+                    value = parseInt(valueInput.value);
+                } else if (type === 'float') {
+                    const valueInput = document.getElementById('valueInput');
+                    if (!valueInput) return; // Controls not ready yet
+                    value = parseFloat(valueInput.value);
+                } else if (type === 'str') {
+                    const valueInput = document.getElementById('valueInput');
+                    if (!valueInput) return; // Controls not ready yet
+                    value = valueInput.value;
+                }
+                
+                message = {
+                    type: 'set_param',
+                    comp: selectedComponent,
+                    param_type: type,
+                    idx: parseInt(idx),
+                    row: parseInt(row),
+                    col: parseInt(col),
+                    value: value
+                };
+            }
+            
+            const messageText = document.getElementById('messageText');
+            messageText.textContent = JSON.stringify(message, null, 2);
+            document.getElementById('messageOutput').style.display = 'block';
+        }
+        
+        function copyMessage() {
+            const messageText = document.getElementById('messageText').textContent;
+            navigator.clipboard.writeText(messageText).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+        
+        // Initialize
+        connectWebSocket();
+    </script>
+</body>
+</html>

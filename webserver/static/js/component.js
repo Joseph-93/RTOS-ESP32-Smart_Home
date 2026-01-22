@@ -148,17 +148,49 @@ async function loadActions(deviceName, componentName) {
         for (let i = 0; i < actionCount; i++) {
             console.log(`[JS] Fetching action ${i}...`);
             const data = await esp32ws.getParamInfo(componentName, 'actions', i);
-            if (data.name) actions.push(data.name);
+            console.log(`[JS] Action ${i} info:`, data);
+            if (data.name) {
+                // Also fetch the current argument
+                const argData = await esp32ws.getParam(componentName, 'actions', i, 0, 0);
+                console.log(`[JS] Action ${i} (${data.name}) argument data:`, argData);
+                console.log(`[JS] Action ${i} typeof argData:`, typeof argData);
+                
+                // The WebSocket returns the JSON string directly
+                let argument = '';
+                if (typeof argData === 'string') {
+                    // argData IS the JSON string - use it directly
+                    argument = argData;
+                } else if (typeof argData === 'object' && argData.type) {
+                    // Fallback: if it's already parsed, stringify it
+                    argument = JSON.stringify(argData, null, 2);
+                }
+                
+                console.log(`[JS] Final argument for action ${i} (length ${argument.length}):`, argument);
+                actions.push({
+                    index: i,
+                    name: data.name,
+                    argument: argument
+                });
+            }
             await new Promise(r => setTimeout(r, 100));
         }
         
-        let html = '<div class="actions-grid">';
+        let html = '<div class="param-group">';
+        html += '<h4>📝 Action Arguments</h4>';
+        console.log(`[JS] Building HTML for ${actions.length} actions`);
         for (const action of actions) {
-            html += `<button class="action-btn" onclick="invokeAction('${deviceName}', '${componentName}', '${action}')">
-                        ⚡ ${action}
-                     </button>`;
+            console.log(`[JS] Building HTML for action ${action.name}, argument length: ${action.argument.length}`);
+            const inputId = `action_arg_${componentName}_${action.index}`;
+            html += '<div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">';
+            html += `<button class="action-btn" onclick="invokeAction('${deviceName}', '${componentName}', '${action.name}')">⚡ ${action.name}</button>`;
+            const escapedArg = escapeHtml(action.argument);
+            console.log(`[JS] Escaped argument for ${action.name}:`, escapedArg);
+            html += `<textarea id="${inputId}" placeholder="Enter argument for ${action.name}" style="flex: 1; min-height: 100px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #222; padding: 8px; border-radius: 4px; font-family: monospace; resize: vertical;">${escapedArg}</textarea>`;
+            html += `<button class="save-btn" onclick="saveActionArgument('${deviceName}', '${componentName}', '${action.name}', ${action.index}, '${inputId}')">💾 Save</button>`;
+            html += '</div>';
         }
         html += '</div>';
+        console.log(`[JS] Final HTML length: ${html.length}`);
         
         container.innerHTML = html;
         
@@ -400,6 +432,25 @@ async function invokeAction(deviceName, comp, action) {
     } catch (error) {
         console.error('Error invoking action:', error);
         notifications.error(`Error: ${error.message}`);
+    }
+}
+
+async function saveActionArgument(deviceName, comp, actionName, actionIndex, inputId) {
+    try {
+        const value = document.getElementById(inputId).value;
+        
+        // Use set_param with param_type="actions"
+        const success = await esp32ws.setParam(comp, 'actions', actionIndex, 0, 0, value);
+        
+        if (success) {
+            console.log('Action argument updated successfully');
+            notifications.success(`Argument for "${actionName}" updated`);
+        } else {
+            notifications.error('Failed to update action argument');
+        }
+    } catch (error) {
+        console.error('Error setting action argument:', error);
+        notifications.error('Error updating action argument');
     }
 }
 

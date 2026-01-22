@@ -518,7 +518,7 @@ void NetworkActionsComponent::registerActions() {
             addAction(
                 action_name,
                 action_desc,
-                [i](Component* comp) -> bool {
+                [i](Component* comp, const std::string& arg) -> bool {
                     auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
                     return net_comp->sendTcp(i);
                 }
@@ -536,7 +536,7 @@ void NetworkActionsComponent::registerActions() {
             addAction(
                 action_name,
                 action_desc,
-                [i](Component* comp) -> bool {
+                [i](Component* comp, const std::string& arg) -> bool {
                     auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
                     return net_comp->sendHttp(i);
                 }
@@ -554,7 +554,7 @@ void NetworkActionsComponent::registerActions() {
             addAction(
                 action_name,
                 action_desc,
-                [i](Component* comp) -> bool {
+                [i](Component* comp, const std::string& arg) -> bool {
                     auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
                     return net_comp->sendWs(i);
                 }

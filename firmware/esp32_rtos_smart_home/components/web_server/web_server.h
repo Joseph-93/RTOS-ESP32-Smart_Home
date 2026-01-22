@@ -49,6 +49,11 @@ public:
     
     // Called by parameter onChange callbacks to broadcast updates
     void broadcastParameterUpdate(const char* comp, const char* param_type, int idx, int row, int col, cJSON* value);
+    
+    // Execute a JSON message using the same structure as WebSocket (for internal use)
+    // Returns response JSON (caller must cJSON_Delete it) or nullptr on error
+    cJSON* executeMessage(const char* json_str);
+    cJSON* executeMessage(cJSON* request);
 
     static constexpr const char* TAG = "WebServer";
 

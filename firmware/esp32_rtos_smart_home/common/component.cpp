@@ -67,6 +67,24 @@ IntParameter* Component::getIntParam(const std::string &paramName) {
     return nullptr;
 }
 
+IntParameter* Component::getIntParam(int paramId) {
+#ifdef DEBUG
+    ESP_LOGI("Component", "[ENTER] getIntParam() - paramId: %d", paramId);
+#endif
+    if (paramId < 0 || paramId >= static_cast<int>(intParams.size())) {
+        ESP_LOGE("Component", "Int parameter ID %d out of range (max: %zu) in component '%s'", 
+                 paramId, intParams.size(), this->name.c_str());
+#ifdef DEBUG
+        ESP_LOGI("Component", "[EXIT] getIntParam() - out of range");
+#endif
+        return nullptr;
+    }
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] getIntParam() - found");
+#endif
+    return intParams[paramId].get();
+}
+
 FloatParameter* Component::getFloatParam(const std::string &paramName) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] getFloatParam() - paramName: %s", paramName.c_str());
@@ -83,6 +101,24 @@ FloatParameter* Component::getFloatParam(const std::string &paramName) {
     ESP_LOGI("Component", "[EXIT] getFloatParam() - not found");
 #endif
     return nullptr;
+}
+
+FloatParameter* Component::getFloatParam(int paramId) {
+#ifdef DEBUG
+    ESP_LOGI("Component", "[ENTER] getFloatParam() - paramId: %d", paramId);
+#endif
+    if (paramId < 0 || paramId >= static_cast<int>(floatParams.size())) {
+        ESP_LOGE("Component", "Float parameter ID %d out of range (max: %zu) in component '%s'", 
+                 paramId, floatParams.size(), this->name.c_str());
+#ifdef DEBUG
+        ESP_LOGI("Component", "[EXIT] getFloatParam() - out of range");
+#endif
+        return nullptr;
+    }
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] getFloatParam() - found");
+#endif
+    return floatParams[paramId].get();
 }
 
 BoolParameter* Component::getBoolParam(const std::string &paramName) {
@@ -103,6 +139,24 @@ BoolParameter* Component::getBoolParam(const std::string &paramName) {
     return nullptr;
 }
 
+BoolParameter* Component::getBoolParam(int paramId) {
+#ifdef DEBUG
+    ESP_LOGI("Component", "[ENTER] getBoolParam() - paramId: %d", paramId);
+#endif
+    if (paramId < 0 || paramId >= static_cast<int>(boolParams.size())) {
+        ESP_LOGE("Component", "Bool parameter ID %d out of range (max: %zu) in component '%s'", 
+                 paramId, boolParams.size(), this->name.c_str());
+#ifdef DEBUG
+        ESP_LOGI("Component", "[EXIT] getBoolParam() - out of range");
+#endif
+        return nullptr;
+    }
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] getBoolParam() - found");
+#endif
+    return boolParams[paramId].get();
+}
+
 StringParameter* Component::getStringParam(const std::string &paramName) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] getStringParam() - paramName: %s", paramName.c_str());
@@ -119,6 +173,24 @@ StringParameter* Component::getStringParam(const std::string &paramName) {
     ESP_LOGI("Component", "[EXIT] getStringParam() - not found");
 #endif
     return nullptr;
+}
+
+StringParameter* Component::getStringParam(int paramId) {
+#ifdef DEBUG
+    ESP_LOGI("Component", "[ENTER] getStringParam() - paramId: %d", paramId);
+#endif
+    if (paramId < 0 || paramId >= static_cast<int>(stringParams.size())) {
+        ESP_LOGE("Component", "String parameter ID %d out of range (max: %zu) in component '%s'", 
+                 paramId, stringParams.size(), this->name.c_str());
+#ifdef DEBUG
+        ESP_LOGI("Component", "[EXIT] getStringParam() - out of range");
+#endif
+        return nullptr;
+    }
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] getStringParam() - found");
+#endif
+    return stringParams[paramId].get();
 }
 
 // Protected add methods
@@ -169,12 +241,12 @@ const std::vector<ComponentAction>& Component::getActions() const {
     return actions;
 }
 
-std::vector<std::string> Component::getActionNames() const {
+const std::vector<std::string> Component::getActionNames() const {
     return actionNames;  // Return the separate names vector, not touching ComponentAction objects
 }
 
 void Component::addAction(const std::string& name, const std::string& description,
-                         std::function<bool(Component*)> callback) {
+                         std::function<bool(Component*, const std::string&)> callback) {
 #ifdef DEBUG
     ESP_LOGI("Component", "[ENTER] addAction() - name: %s, desc: %s", name.c_str(), description.c_str());
 #endif
@@ -183,6 +255,76 @@ void Component::addAction(const std::string& name, const std::string& descriptio
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] addAction() - name: %s, desc: %s", name.c_str(), description.c_str());
 #endif
+}
+
+const ComponentAction& Component::getAction(int actionId) const {
+    if (actionId < 0 || actionId >= static_cast<int>(actions.size())) {
+        ESP_LOGE("Component", "Action ID %d out of range (max: %zu) in component '%s'", 
+                 actionId, actions.size(), this->name.c_str());
+        static ComponentAction dummy("", "", nullptr);
+        return dummy;
+    }
+    return actions[actionId];
+}
+
+const ComponentAction& Component::getAction(const std::string &actionName) const {
+    for (const auto& action : actions) {
+        if (action.name == actionName) {
+            return action;
+        }
+    }
+    ESP_LOGE("Component", "Action '%s' not found in component '%s'", 
+             actionName.c_str(), this->name.c_str());
+    static ComponentAction dummy("", "", nullptr);
+    return dummy;
+}
+
+const std::string Component::getActionName(int actionId) const {
+    if (actionId < 0 || actionId >= static_cast<int>(actionNames.size())) {
+        ESP_LOGE("Component", "Action ID %d out of range (max: %zu) in component '%s'", 
+                 actionId, actionNames.size(), this->name.c_str());
+        return "";
+    }
+    return actionNames[actionId];
+}
+
+const std::string Component::getActionName(const std::string &actionName) const {
+    // This returns the name if it exists, empty string otherwise
+    for (const auto& name : actionNames) {
+        if (name == actionName) {
+            return name;
+        }
+    }
+    return "";
+}
+
+const std::vector<std::string> Component::getActionDescriptions() const {
+    std::vector<std::string> descriptions;
+    descriptions.reserve(actions.size());
+    for (const auto& action : actions) {
+        descriptions.push_back(action.description);
+    }
+    return descriptions;
+}
+
+const std::string Component::getActionDescription(int actionId) const {
+    if (actionId < 0 || actionId >= static_cast<int>(actions.size())) {
+        ESP_LOGE("Component", "Action ID %d out of range (max: %zu) in component '%s'", 
+                 actionId, actions.size(), this->name.c_str());
+        return "";
+    }
+    return actions[actionId].description;
+}
+
+const std::string Component::getActionDescription(const std::string &actionName) const {
+    for (const auto& action : actions) {
+        if (action.name == actionName) {
+            return action.description;
+        }
+    }
+    ESP_LOGE("Component", "Action '%s' not found in component '%s'", 
+             actionName.c_str(), this->name.c_str());
+    return "";
 }
 
 void Component::invokeAction(size_t actionIndex) {
@@ -199,13 +341,119 @@ void Component::invokeAction(size_t actionIndex) {
     }
     
     auto& action = actions[actionIndex];
-    ESP_LOGI("Component", "Invoking action[%zu] '%s' on component '%s'", 
-             actionIndex, action.name.c_str(), this->name.c_str());
-    bool success = action.callback(this);
+    ESP_LOGI("Component", "Invoking action[%zu] '%s' on component '%s' with arg: '%s'", 
+             actionIndex, action.name.c_str(), this->name.c_str(), action.argument.c_str());
+    bool success = action.callback(this, action.argument);
     ESP_LOGI("Component", "Action[%zu] '%s' %s", actionIndex, action.name.c_str(), 
              success ? "succeeded" : "failed");
 #ifdef DEBUG
     ESP_LOGI("Component", "[EXIT] invokeAction() - success");
+#endif
+}
+
+void Component::invokeAction(const std::string &actionName) {
+#ifdef DEBUG
+    ESP_LOGI("Component", "[ENTER] invokeAction() - actionName: %s", actionName.c_str());
+#endif
+    for (size_t i = 0; i < actions.size(); ++i) {
+        if (actions[i].name == actionName) {
+            invokeAction(i);
+#ifdef DEBUG
+            ESP_LOGI("Component", "[EXIT] invokeAction() - found and invoked");
+#endif
+            return;
+        }
+    }
+    ESP_LOGE("Component", "Action '%s' not found in component '%s'", 
+             actionName.c_str(), this->name.c_str());
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] invokeAction() - not found");
+#endif
+}
+
+void Component::invokeAction(size_t actionIndex, const std::string& arg) {
+#ifdef DEBUG
+    ESP_LOGI("Component", "[ENTER] invokeAction() - actionIndex: %zu, arg: %s", actionIndex, arg.c_str());
+#endif
+    if (actionIndex >= actions.size()) {
+        ESP_LOGE("Component", "Action index %zu out of range (max: %zu) in component '%s'", 
+                 actionIndex, actions.size(), this->name.c_str());
+#ifdef DEBUG
+        ESP_LOGI("Component", "[EXIT] invokeAction() - index out of range");
+#endif
+        return;
+    }
+    
+    auto& action = actions[actionIndex];
+    ESP_LOGI("Component", "Invoking action[%zu] '%s' on component '%s' with temporary arg: '%s'", 
+             actionIndex, action.name.c_str(), this->name.c_str(), arg.c_str());
+    bool success = action.callback(this, arg);
+    ESP_LOGI("Component", "Action[%zu] '%s' %s", actionIndex, action.name.c_str(), 
+             success ? "succeeded" : "failed");
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] invokeAction() - success");
+#endif
+}
+
+void Component::invokeAction(const std::string &actionName, const std::string& arg) {
+#ifdef DEBUG
+    ESP_LOGI("Component", "[ENTER] invokeAction() - actionName: %s, arg: %s", actionName.c_str(), arg.c_str());
+#endif
+    for (size_t i = 0; i < actions.size(); ++i) {
+        if (actions[i].name == actionName) {
+            invokeAction(i, arg);
+#ifdef DEBUG
+            ESP_LOGI("Component", "[EXIT] invokeAction() - found and invoked");
+#endif
+            return;
+        }
+    }
+    ESP_LOGE("Component", "Action '%s' not found in component '%s'", 
+             actionName.c_str(), this->name.c_str());
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] invokeAction() - not found");
+#endif
+}
+
+void Component::setActionArgument(const std::string &actionName, const std::string& arg) {
+#ifdef DEBUG
+    ESP_LOGI("Component", "[ENTER] setActionArgument() - actionName: %s, arg: %s", actionName.c_str(), arg.c_str());
+#endif
+    for (size_t i = 0; i < actions.size(); ++i) {
+        if (actions[i].name == actionName) {
+            actions[i].argument = arg;
+            ESP_LOGI("Component", "Set argument for action '%s' to: '%s'", actionName.c_str(), arg.c_str());
+#ifdef DEBUG
+            ESP_LOGI("Component", "[EXIT] setActionArgument() - success");
+#endif
+            return;
+        }
+    }
+    ESP_LOGE("Component", "Action '%s' not found in component '%s'", 
+             actionName.c_str(), this->name.c_str());
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] setActionArgument() - not found");
+#endif
+}
+
+void Component::setActionArgument(size_t actionIndex, const std::string& arg) {
+#ifdef DEBUG
+    ESP_LOGI("Component", "[ENTER] setActionArgument() - actionIndex: %zu, arg: %s", actionIndex, arg.c_str());
+#endif
+    if (actionIndex >= actions.size()) {
+        ESP_LOGE("Component", "Action index %zu out of range (max: %zu) in component '%s'", 
+                 actionIndex, actions.size(), this->name.c_str());
+#ifdef DEBUG
+        ESP_LOGI("Component", "[EXIT] setActionArgument() - index out of range");
+#endif
+        return;
+    }
+    
+    actions[actionIndex].argument = arg;
+    ESP_LOGI("Component", "Set argument for action[%zu] '%s' to: '%s'", 
+             actionIndex, actions[actionIndex].name.c_str(), arg.c_str());
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] setActionArgument() - success");
 #endif
 }
 

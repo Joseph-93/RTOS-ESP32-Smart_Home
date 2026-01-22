@@ -6,6 +6,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include "cJSON.h"
 
 #ifdef __cplusplus
 
@@ -56,6 +57,10 @@ public:
     
     // Send notification to all notification consumers (GUI, UART, etc.)
     void sendNotification(const char* message, bool is_error, int priority = 2, uint32_t display_ms = 3000);
+    
+    // Execute a JSON message (core message processor)
+    cJSON* executeMessage(const char* json_str);
+    cJSON* executeMessage(cJSON* request);
     
     // Public queue handles (GUI/UART tasks read from these)
     QueueHandle_t getGuiNotificationQueue() const { return notification_queue_gui; }
