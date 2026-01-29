@@ -6,6 +6,8 @@
 #include <vector>
 #include <map>
 
+#define NUM_BUTTONS 6  // Number of buttons in the grid (3x2)
+
 #ifdef __cplusplus
 
 // GUIComponent - manages simple button grid interface
@@ -40,6 +42,9 @@ public:
     // Pending notification (set by notification task, consumed by LVGL task)
     volatile bool pending_notification = false;
     ComponentGraph::NotificationQueueItem pending_notification_item;
+    
+    // Pending button label update (set by parameter callback, consumed by LVGL task)
+    volatile bool button_label_update_pending = false;
 
 private:
     TaskHandle_t gui_status_task_handle = nullptr;
@@ -53,6 +58,9 @@ private:
     
     // Simple button grid screen
     lv_obj_t* main_screen = nullptr;
+    
+    // Button label objects for dynamic updating (6 buttons)
+    lv_obj_t* button_labels[NUM_BUTTONS] = {nullptr};
     
     // Button event handler
     static void simple_button_event_cb(lv_event_t* e);

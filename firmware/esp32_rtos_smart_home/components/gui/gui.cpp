@@ -125,8 +125,27 @@ void GUIComponent::onInitialize() {
 #endif
     ESP_LOGI(TAG, "Initializing GUIComponent...");
 
+    // Add string parameter for button names (6 rows, 1 column)
+    addStringParam("button_names", NUM_BUTTONS, 1, "Button");
+    
+    // Initialize each button name
+    auto* button_names_param = getStringParam("button_names");
+    if (button_names_param) {
+        for (int i = 0; i < NUM_BUTTONS; i++) {
+            std::string default_name = "Button " + std::to_string(i + 1);
+            button_names_param->setValue(i, 0, default_name);
+        }
+        
+        // Set onChange callback to trigger label update in LVGL task
+        button_names_param->setOnChange([this](size_t row, size_t col, const std::string& val) {
+            // Signal LVGL task to update the button label
+            button_label_update_pending = true;
+            ESP_LOGI(TAG, "Button name changed for button %zu: %s", row, val.c_str());
+        });
+    }
+    
     // Register button actions - argument will contain the JSON message to execute
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_BUTTONS; i++) {
         std::string action_name = "button_" + std::to_string(i);
         std::string action_desc = "Press Button " + std::to_string(i);
         addAction(
@@ -640,16 +659,6 @@ void GUIComponent::createSimpleButtonGrid() {
     lv_obj_set_style_text_color(title, lv_color_white(), 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
     
-    // Button labels
-    const char* button_labels[6] = {
-        "Button 1",
-        "Button 2",
-        "Button 3",
-        "Button 4",
-        "Button 5",
-        "Button 6"
-    };
-    
     // Create 3x2 grid of buttons
     const int btn_width = 90;
     const int btn_height = 60;
@@ -657,7 +666,7 @@ void GUIComponent::createSimpleButtonGrid() {
     const int v_spacing = 15;
     const int start_y = 50;
     
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < NUM_BUTTONS; i++) {
         int row = i / 3;  // 0 or 1
         int col = i % 3;  // 0, 1, or 2
         
@@ -670,7 +679,7 @@ void GUIComponent::createSimpleButtonGrid() {
         lv_obj_set_pos(btn, x, y);
         
         // Set button color (different colors for visual distinction)
-        lv_color_t colors[6] = {
+        lv_color_t colors[NUM_BUTTONS] = {
             lv_color_make(0, 100, 200),   // Blue
             lv_color_make(200, 100, 0),   // Orange
             lv_color_make(0, 150, 100),   // Teal
@@ -680,10 +689,21 @@ void GUIComponent::createSimpleButtonGrid() {
         };
         lv_obj_set_style_bg_color(btn, colors[i], 0);
         
-        // Button label
+        // Button label - get text from parameter (row i, column 0)
         lv_obj_t* label = lv_label_create(btn);
-        lv_label_set_text(label, button_labels[i]);
+        StringParameter* name_param = getStringParam("button_names");
+        if (name_param) {
+            lv_label_set_text(label, name_param->getValue(i, 0).c_str());
+        } else {
+            lv_label_set_text(label, ("Button " + std::to_string(i + 1)).c_str());
+        }
+        lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);          // Enable text wrapping
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0); // Center-align text
+        lv_obj_set_width(label, btn_width - 10);                     // Wrap within button (with 5px padding each side)
         lv_obj_center(label);
+        
+        // Store label reference for dynamic updates
+        button_labels[i] = label;
         
         // Add click event with button index as user data
         lv_obj_add_event_cb(btn, simple_button_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i);
@@ -931,6 +951,20 @@ void GUIComponent::lvgl_timer_task(void *arg) {
         // Check if there's a pending notification to create
         if (g_gui_component->pending_notification) {
             g_gui_component->createPendingNotification();
+        }
+        
+        // Check if button labels need updating (thread-safe from LVGL task)
+        if (g_gui_component->button_label_update_pending) {
+            g_gui_component->button_label_update_pending = false;
+            StringParameter* names = g_gui_component->getStringParam("button_names");
+            if (names) {
+                for (int i = 0; i < NUM_BUTTONS; i++) {
+                    if (g_gui_component->button_labels[i]) {
+                        std::string name = names->getValue(i, 0);
+                        lv_label_set_text(g_gui_component->button_labels[i], name.c_str());
+                    }
+                }
+            }
         }
 
         // Increment LVGL tick by 10ms
