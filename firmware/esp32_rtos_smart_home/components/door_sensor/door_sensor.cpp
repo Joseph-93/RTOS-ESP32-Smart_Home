@@ -6,7 +6,7 @@
 #include "driver/gpio.h"
 #include <cmath>
 
-#define DOOR_SENSOR_PIN 34 // GPIO34
+#define DOOR_SENSOR_PIN 32 // GPIO32
 
 DoorSensorComponent::DoorSensorComponent() 
     : Component("DoorSensor") {
@@ -63,8 +63,8 @@ void DoorSensorComponent::onInitialize() {
     gpio_config_t io_conf = {};
     io_conf.pin_bit_mask = (1ULL << DOOR_SENSOR_PIN);
     io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;  // Pull-down so default is LOW
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;  // Pull-up so default is HIGH (1=open if sensor pulls to GND when closed)
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.intr_type = GPIO_INTR_ANYEDGE;  // Trigger on both edges (door opened/closed)
     ESP_ERROR_CHECK(gpio_config(&io_conf));
     
