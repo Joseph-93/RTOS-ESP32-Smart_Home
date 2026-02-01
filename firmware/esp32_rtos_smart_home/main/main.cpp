@@ -3,10 +3,15 @@
  * 
  * Modular architecture with separate components:
  * - GUI: LVGL graphics library integration and UI (owns LCD and Touch)
- * - Network Actions: Network-related functionality
  * - Light Sensor: Ambient light detection for auto-brightness
+ * - Motion Sensor: PIR motion detection
+ * - Door Sensor: Magnetic door/window state
+ * - Heartbeat: Periodic pulse to indicate device is alive
+ * - Web Server: WebSocket API for external control
  * 
- * Uses ComponentGraph for centralized component management and inter-component communication
+ * Uses ComponentGraph for centralized component management and inter-component communication.
+ * All components are "dumb" - they expose read-only sensor data and writable settings.
+ * Complex logic is delegated to external systems (e.g., Raspberry Pi hub).
  */
     
 #include "esp_log.h"
@@ -16,7 +21,7 @@
 #include "freertos/task.h"
 #include "component_graph.h"
 #include "gui.h"
-#include "network_actions.h"
+#include "heartbeat.h"
 #include "light_sensor.h"
 #include "motion_sensor.h"
 #include "door_sensor.h"
@@ -41,7 +46,7 @@ static void log_memory_checkpoint(const char* checkpoint_name) {
 
 // Global component instances
 static GUIComponent gui_component;
-static NetworkActionsComponent network_component;
+static HeartbeatComponent heartbeat_component;
 static LightSensorComponent light_sensor_component;
 static MotionSensorComponent motion_sensor_component;
 static DoorSensorComponent door_sensor_component;
@@ -78,8 +83,8 @@ extern "C" void app_main(void)
     component_graph->registerComponent(&gui_component);
     log_memory_checkpoint("AFTER GUI REGISTER");
     
-    component_graph->registerComponent(&network_component);
-    log_memory_checkpoint("AFTER NETWORK REGISTER");
+    component_graph->registerComponent(&heartbeat_component);
+    log_memory_checkpoint("AFTER HEARTBEAT REGISTER");
     
     component_graph->registerComponent(&light_sensor_component);
     component_graph->registerComponent(&motion_sensor_component);

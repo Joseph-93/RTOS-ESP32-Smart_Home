@@ -48,8 +48,8 @@ void LightSensorComponent::onInitialize() {
     adc1_config_width(ADC_WIDTH_BIT_12);
     adc1_config_channel_atten(LIGHT_SENSOR_PIN, ADC_ATTEN_DB_12);
 
-    // Example: addIntParam("light_level", 1, 1, 0, 1023);
-    addIntParam("current_light_level", 1, 1, 0, 4095, 4095, true);
+    // Create parameter and store typed pointer
+    currentLightLevel = addIntParam("current_light_level", 1, 1, 0, 4095, 4095, true);
 
     BaseType_t result = xTaskCreate(
         LightSensorComponent::lightSensorTaskWrapper,
@@ -104,7 +104,6 @@ void LightSensorComponent::lightSensorTaskWrapper(void* pvParameters) {
 void LightSensorComponent::lightSensorTask() {
     ESP_LOGI(TAG, "Light sensor task started");
     
-    auto* param = getIntParam("current_light_level");
     static int sample_count = 0;
 
     while (1) {
@@ -119,9 +118,9 @@ void LightSensorComponent::lightSensorTask() {
         
         sample_count++;
         
-        // Update the parameter
-        if (param) {
-            param->setValue(0, 0, inverted_value);
+        // Update the parameter using member pointer
+        if (currentLightLevel) {
+            currentLightLevel->setValue(0, 0, inverted_value);
         }
     }
 }

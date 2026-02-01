@@ -48,11 +48,16 @@
                 if (components && components.length > 0) {
                     container.innerHTML = '';
                     components.forEach(comp => {
+                        // comp is now an object with {name, id} instead of just a string
+                        const compName = comp.name || comp;  // Support both old and new format
+                        const compId = comp.id || null;
+                        
                         const card = document.createElement('div');
                         card.className = 'component-card';
                         card.innerHTML = `
-                            <h3>${comp}</h3>
-                            <a href="/device/{{ device_name }}/${comp}/" class="btn btn-primary">View Details</a>
+                            <h3>${compName}</h3>
+                            ${(compId && window.DEBUG_MODE) ? `<small style="color: #888;">ID: ${compId}</small>` : ''}
+                            <a href="/device/{{ device_name }}/${compName}/" class="btn btn-primary">View Details</a>
                         `;
                         container.appendChild(card);
                     });

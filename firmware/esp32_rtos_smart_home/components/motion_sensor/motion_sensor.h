@@ -28,7 +28,9 @@ public:
     TaskHandle_t motion_sensor_task_handle = nullptr;
 
 private:
-    // Add private members here as needed
+    // Typed parameter member pointers (assigned at init, never null after)
+    IntParameter* lastMotionDetectedSeconds = nullptr;
+
     TimerHandle_t motion_sensor_timer_handle = nullptr;
     Component* gui_component = nullptr;
 };

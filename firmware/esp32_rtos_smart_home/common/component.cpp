@@ -1,34 +1,121 @@
 #include "component.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 
-// Component class implementations
+// Static member initialization
+uint32_t Component::nextComponentId = 1;
+uint32_t Component::nextParameterId = 1;
+bool Component::nvsLoaded = false;
+
+// NVS namespace and keys
+static const char* NVS_NAMESPACE = "component_ids";
+static const char* NVS_KEY_COMP_ID = "next_comp_id";
+static const char* NVS_KEY_PARAM_ID = "next_param_id";
+
+// ============================================================================
+// NVS Persistence
+// ============================================================================
+
+static bool nvsInitialized = false;
+
+static void ensureNvsInitialized() {
+    if (nvsInitialized) return;
+    
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        // NVS partition was truncated and needs to be erased
+        ESP_LOGW("Component", "NVS needs erase, erasing...");
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    
+    if (err == ESP_OK) {
+        ESP_LOGI("Component", "NVS flash initialized successfully");
+        nvsInitialized = true;
+    } else {
+        ESP_LOGE("Component", "Failed to initialize NVS flash: %s", esp_err_to_name(err));
+    }
+}
+
+void Component::loadNextIds() {
+    if (nvsLoaded) return;
+    
+    // Ensure NVS is initialized before first use
+    ensureNvsInitialized();
+    
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err == ESP_OK) {
+        uint32_t comp_id = 1, param_id = 1;
+        nvs_get_u32(handle, NVS_KEY_COMP_ID, &comp_id);
+        nvs_get_u32(handle, NVS_KEY_PARAM_ID, &param_id);
+        nvs_close(handle);
+        
+        nextComponentId = comp_id;
+        nextParameterId = param_id;
+        ESP_LOGI("Component", "Loaded UUIDs from NVS: nextComponentId=%u, nextParameterId=%u", 
+                 nextComponentId, nextParameterId);
+    } else if (err == ESP_ERR_NVS_NOT_FOUND) {
+        ESP_LOGI("Component", "No saved UUIDs in NVS, starting from 1");
+    } else {
+        ESP_LOGW("Component", "Failed to open NVS for reading: %s", esp_err_to_name(err));
+    }
+    
+    nvsLoaded = true;
+}
+
+void Component::saveNextIds() {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGW("Component", "Failed to open NVS for writing: %s", esp_err_to_name(err));
+        return;
+    }
+    
+    nvs_set_u32(handle, NVS_KEY_COMP_ID, nextComponentId);
+    nvs_set_u32(handle, NVS_KEY_PARAM_ID, nextParameterId);
+    nvs_commit(handle);
+    nvs_close(handle);
+}
+
+// ============================================================================
+// Component Implementation
+// ============================================================================
 
 Component::Component(const std::string &name) : name(name), initialized(false) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER/EXIT] Component() - name: %s", name.c_str());
-#endif
+    // Load UUIDs from NVS on first component creation
+    loadNextIds();
+    
+    // Assign component ID and increment
+    componentId = nextComponentId++;
+    saveNextIds();
+    
+    // Create params mutex
+    paramsMutex = xSemaphoreCreateMutex();
+    if (paramsMutex == nullptr) {
+        ESP_LOGE(TAG, "Component '%s': Failed to create params mutex!", name.c_str());
+        assert(false && "Mutex creation failed");
+    }
+    
+    ESP_LOGI(TAG, "Component '%s' created with id=%u", name.c_str(), componentId);
 }
 
 Component::~Component() {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER/EXIT] ~Component() - name: %s", name.c_str());
-#endif
+    ESP_LOGI(TAG, "Component '%s' (id=%u) destroyed", name.c_str(), componentId);
+    
+    if (paramsMutex != nullptr) {
+        vSemaphoreDelete(paramsMutex);
+    }
 }
 
 void Component::initialize() {
-    ESP_LOGI(TAG, "Initializing component: %s", name.c_str());
+    ESP_LOGI(TAG, "Initializing component: %s (id=%u)", name.c_str(), componentId);
     onInitialize();
     initialized = true;
     ESP_LOGI(TAG, "Component %s initialized successfully", name.c_str());
 }
 
-std::string Component::getName() const {
-#ifdef DEBUG
-    // Log with backtrace to see caller
-    void* trace[10];
-    int trace_size = 0;
-    ESP_LOGI("Component", "getName() called for '%s' from task '%s'", 
-             name.c_str(), pcTaskGetName(NULL));
-#endif
+const std::string& Component::getName() const {
     return name;
 }
 
@@ -36,303 +123,218 @@ bool Component::isInitialized() const {
     return initialized;
 }
 
-// Const getters
-const std::vector<std::unique_ptr<IntParameter>>& Component::getIntParams() const { return intParams; }
-const std::vector<std::unique_ptr<FloatParameter>>& Component::getFloatParams() const { return floatParams; }
-const std::vector<std::unique_ptr<BoolParameter>>& Component::getBoolParams() const { return boolParams; }
-const std::vector<std::unique_ptr<StringParameter>>& Component::getStringParams() const { return stringParams; }
-const std::vector<std::unique_ptr<TriggerParameter>>& Component::getTriggerParams() const { return triggerParams; }
+// ============================================================================
+// Parameter Access
+// ============================================================================
 
-// Non-const getters
-std::vector<std::unique_ptr<IntParameter>>& Component::getIntParams() { return intParams; }
-std::vector<std::unique_ptr<FloatParameter>>& Component::getFloatParams() { return floatParams; }
-std::vector<std::unique_ptr<BoolParameter>>& Component::getBoolParams() { return boolParams; }
-std::vector<std::unique_ptr<StringParameter>>& Component::getStringParams() { return stringParams; }
-std::vector<std::unique_ptr<TriggerParameter>>& Component::getTriggerParams() { return triggerParams; }
-
-// Get methods
-IntParameter* Component::getIntParam(const std::string &paramName) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] getIntParam() - paramName: %s", paramName.c_str());
-#endif
-    for (auto &p : intParams) {
-        if (p->getName() == paramName) {
-#ifdef DEBUG
-            ESP_LOGI("Component", "[EXIT] getIntParam() - found");
-#endif
-            return p.get();
-        }
+BaseParameter* Component::getParam(const std::string& paramName) {
+    if (xSemaphoreTake(paramsMutex, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to take mutex for getParam");
+        return nullptr;
     }
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] getIntParam() - not found");
-#endif
+    
+    auto it = paramsByName.find(paramName);
+    BaseParameter* result = (it != paramsByName.end()) ? it->second.get() : nullptr;
+    
+    xSemaphoreGive(paramsMutex);
+    return result;
+}
+
+BaseParameter* Component::getParamById(uint32_t paramId) {
+    if (xSemaphoreTake(paramsMutex, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to take mutex for getParamById");
+        return nullptr;
+    }
+    
+    auto it = paramsById.find(paramId);
+    BaseParameter* result = (it != paramsById.end()) ? it->second : nullptr;
+    
+    xSemaphoreGive(paramsMutex);
+    return result;
+}
+
+IntParameter* Component::getIntParam(const std::string& paramName) {
+    BaseParameter* param = getParam(paramName);
+    if (param && param->getType() == ParameterType::INT) {
+        return static_cast<IntParameter*>(param);
+    }
     return nullptr;
 }
 
-IntParameter* Component::getIntParam(int paramId) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] getIntParam() - paramId: %d", paramId);
-#endif
-    if (paramId < 0 || paramId >= static_cast<int>(intParams.size())) {
-        ESP_LOGE("Component", "Int parameter ID %d out of range (max: %zu) in component '%s'", 
-                 paramId, intParams.size(), this->name.c_str());
-#ifdef DEBUG
-        ESP_LOGI("Component", "[EXIT] getIntParam() - out of range");
-#endif
-        return nullptr;
+FloatParameter* Component::getFloatParam(const std::string& paramName) {
+    BaseParameter* param = getParam(paramName);
+    if (param && param->getType() == ParameterType::FLOAT) {
+        return static_cast<FloatParameter*>(param);
     }
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] getIntParam() - found");
-#endif
-    return intParams[paramId].get();
-}
-
-FloatParameter* Component::getFloatParam(const std::string &paramName) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] getFloatParam() - paramName: %s", paramName.c_str());
-#endif
-    for (auto &p : floatParams) {
-        if (p->getName() == paramName) {
-#ifdef DEBUG
-            ESP_LOGI("Component", "[EXIT] getFloatParam() - found");
-#endif
-            return p.get();
-        }
-    }
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] getFloatParam() - not found");
-#endif
     return nullptr;
 }
 
-FloatParameter* Component::getFloatParam(int paramId) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] getFloatParam() - paramId: %d", paramId);
-#endif
-    if (paramId < 0 || paramId >= static_cast<int>(floatParams.size())) {
-        ESP_LOGE("Component", "Float parameter ID %d out of range (max: %zu) in component '%s'", 
-                 paramId, floatParams.size(), this->name.c_str());
-#ifdef DEBUG
-        ESP_LOGI("Component", "[EXIT] getFloatParam() - out of range");
-#endif
-        return nullptr;
+BoolParameter* Component::getBoolParam(const std::string& paramName) {
+    BaseParameter* param = getParam(paramName);
+    if (param && param->getType() == ParameterType::BOOL) {
+        return static_cast<BoolParameter*>(param);
     }
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] getFloatParam() - found");
-#endif
-    return floatParams[paramId].get();
-}
-
-BoolParameter* Component::getBoolParam(const std::string &paramName) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] getBoolParam() - paramName: %s", paramName.c_str());
-#endif
-    for (auto &p : boolParams) {
-        if (p->getName() == paramName) {
-#ifdef DEBUG
-            ESP_LOGI("Component", "[EXIT] getBoolParam() - found");
-#endif
-            return p.get();
-        }
-    }
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] getBoolParam() - not found");
-#endif
     return nullptr;
 }
 
-BoolParameter* Component::getBoolParam(int paramId) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] getBoolParam() - paramId: %d", paramId);
-#endif
-    if (paramId < 0 || paramId >= static_cast<int>(boolParams.size())) {
-        ESP_LOGE("Component", "Bool parameter ID %d out of range (max: %zu) in component '%s'", 
-                 paramId, boolParams.size(), this->name.c_str());
-#ifdef DEBUG
-        ESP_LOGI("Component", "[EXIT] getBoolParam() - out of range");
-#endif
-        return nullptr;
+StringParameter* Component::getStringParam(const std::string& paramName) {
+    BaseParameter* param = getParam(paramName);
+    if (param && param->getType() == ParameterType::STRING) {
+        return static_cast<StringParameter*>(param);
     }
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] getBoolParam() - found");
-#endif
-    return boolParams[paramId].get();
-}
-
-StringParameter* Component::getStringParam(const std::string &paramName) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] getStringParam() - paramName: %s", paramName.c_str());
-#endif
-    for (auto &p : stringParams) {
-        if (p->getName() == paramName) {
-#ifdef DEBUG
-            ESP_LOGI("Component", "[EXIT] getStringParam() - found");
-#endif
-            return p.get();
-        }
-    }
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] getStringParam() - not found");
-#endif
     return nullptr;
 }
 
-StringParameter* Component::getStringParam(int paramId) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] getStringParam() - paramId: %d", paramId);
-#endif
-    if (paramId < 0 || paramId >= static_cast<int>(stringParams.size())) {
-        ESP_LOGE("Component", "String parameter ID %d out of range (max: %zu) in component '%s'", 
-                 paramId, stringParams.size(), this->name.c_str());
-#ifdef DEBUG
-        ESP_LOGI("Component", "[EXIT] getStringParam() - out of range");
-#endif
+const std::unordered_map<std::string, std::unique_ptr<BaseParameter>>& Component::getAllParams() const {
+    return paramsByName;
+}
+
+// ============================================================================
+// Add Parameter Methods
+// ============================================================================
+
+IntParameter* Component::addIntParam(const std::string &paramName, size_t rows, size_t cols, 
+                                     int min_val, int max_val, int default_val, bool readOnly) {
+    if (xSemaphoreTake(paramsMutex, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to take mutex for addIntParam");
         return nullptr;
     }
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] getStringParam() - found");
-#endif
-    return stringParams[paramId].get();
-}
-
-TriggerParameter* Component::getTriggerParam(const std::string &paramName) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] getTriggerParam() - paramName: %s", paramName.c_str());
-#endif
-    for (auto &p : triggerParams) {
-        if (p->getName() == paramName) {
-#ifdef DEBUG
-            ESP_LOGI("Component", "[EXIT] getTriggerParam() - found");
-#endif
-            return p.get();
-        }
-    }
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] getTriggerParam() - not found");
-#endif
-    return nullptr;
-}
-
-TriggerParameter* Component::getTriggerParam(int paramId) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] getTriggerParam() - paramId: %d", paramId);
-#endif
-    if (paramId < 0 || paramId >= static_cast<int>(triggerParams.size())) {
-        ESP_LOGE("Component", "Trigger parameter ID %d out of range (max: %zu) in component '%s'", 
-                 paramId, triggerParams.size(), this->name.c_str());
-#ifdef DEBUG
-        ESP_LOGI("Component", "[EXIT] getTriggerParam() - out of range");
-#endif
+    
+    // Check if parameter already exists
+    if (paramsByName.find(paramName) != paramsByName.end()) {
+        ESP_LOGE(TAG, "Parameter '%s' already exists in component '%s'", paramName.c_str(), name.c_str());
+        xSemaphoreGive(paramsMutex);
         return nullptr;
     }
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] getTriggerParam() - found");
-#endif
-    return triggerParams[paramId].get();
+    
+    // Assign ID and create parameter
+    uint32_t paramId = nextParameterId++;
+    auto param = std::make_unique<IntParameter>(paramName, paramId, rows, cols, min_val, max_val, default_val, readOnly);
+    IntParameter* ptr = param.get();
+    
+    // Add to both maps
+    paramsById[paramId] = ptr;
+    paramsByName[paramName] = std::move(param);
+    
+    xSemaphoreGive(paramsMutex);
+    
+    // Save updated IDs to NVS
+    saveNextIds();
+    
+    ESP_LOGI(TAG, "Added int param '%s' (id=%u) to component '%s'", paramName.c_str(), paramId, name.c_str());
+    return ptr;
 }
 
-// Protected add methods
-void Component::addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val, int max_val, int default_val, bool readOnly) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] addIntParam() - paramName: %s", paramName.c_str());
-#endif
-    intParams.push_back(std::make_unique<IntParameter>(paramName, rows, cols, min_val, max_val, default_val, readOnly));
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] addIntParam() - paramName: %s", paramName.c_str());
-#endif
+FloatParameter* Component::addFloatParam(const std::string &paramName, size_t rows, size_t cols, 
+                                         float min_val, float max_val, float default_val, bool readOnly) {
+    if (xSemaphoreTake(paramsMutex, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to take mutex for addFloatParam");
+        return nullptr;
+    }
+    
+    if (paramsByName.find(paramName) != paramsByName.end()) {
+        ESP_LOGE(TAG, "Parameter '%s' already exists in component '%s'", paramName.c_str(), name.c_str());
+        xSemaphoreGive(paramsMutex);
+        return nullptr;
+    }
+    
+    uint32_t paramId = nextParameterId++;
+    auto param = std::make_unique<FloatParameter>(paramName, paramId, rows, cols, min_val, max_val, default_val, readOnly);
+    FloatParameter* ptr = param.get();
+    
+    paramsById[paramId] = ptr;
+    paramsByName[paramName] = std::move(param);
+    
+    xSemaphoreGive(paramsMutex);
+    saveNextIds();
+    
+    ESP_LOGI(TAG, "Added float param '%s' (id=%u) to component '%s'", paramName.c_str(), paramId, name.c_str());
+    return ptr;
 }
 
-void Component::addFloatParam(const std::string &paramName, size_t rows, size_t cols, float min_val, float max_val, float default_val, bool readOnly) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] addFloatParam() - paramName: %s", paramName.c_str());
-#endif
-    floatParams.push_back(std::make_unique<FloatParameter>(paramName, rows, cols, min_val, max_val, default_val, readOnly));
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] addFloatParam() - paramName: %s", paramName.c_str());
-#endif
-}
-
-void Component::addBoolParam(const std::string &paramName, size_t rows, size_t cols, bool default_val, bool readOnly) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] addBoolParam() - paramName: %s", paramName.c_str());
-#endif
+BoolParameter* Component::addBoolParam(const std::string &paramName, size_t rows, size_t cols, 
+                                       bool default_val, bool readOnly) {
+    if (xSemaphoreTake(paramsMutex, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to take mutex for addBoolParam");
+        return nullptr;
+    }
+    
+    if (paramsByName.find(paramName) != paramsByName.end()) {
+        ESP_LOGE(TAG, "Parameter '%s' already exists in component '%s'", paramName.c_str(), name.c_str());
+        xSemaphoreGive(paramsMutex);
+        return nullptr;
+    }
+    
+    uint32_t paramId = nextParameterId++;
     // BoolParameter is Parameter<uint8_t>, so we need to pass min, max, and default as uint8_t
-    boolParams.push_back(std::make_unique<BoolParameter>(paramName, rows, cols, 0, 1, default_val ? 1 : 0, readOnly));
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] addBoolParam() - paramName: %s", paramName.c_str());
-#endif
+    auto param = std::make_unique<BoolParameter>(paramName, paramId, rows, cols, 0, 1, default_val ? 1 : 0, readOnly);
+    BoolParameter* ptr = param.get();
+    
+    paramsById[paramId] = ptr;
+    paramsByName[paramName] = std::move(param);
+    
+    xSemaphoreGive(paramsMutex);
+    saveNextIds();
+    
+    ESP_LOGI(TAG, "Added bool param '%s' (id=%u) to component '%s'", paramName.c_str(), paramId, name.c_str());
+    return ptr;
 }
 
-void Component::addStringParam(const std::string &paramName, size_t rows, size_t cols, const std::string &default_val, bool readOnly) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] addStringParam() - paramName: %s", paramName.c_str());
-#endif
-    stringParams.push_back(std::make_unique<StringParameter>(paramName, rows, cols, default_val, default_val, default_val, readOnly));
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] addStringParam() - paramName: %s", paramName.c_str());
-#endif
+StringParameter* Component::addStringParam(const std::string &paramName, size_t rows, size_t cols, 
+                                           const std::string &default_val, bool readOnly) {
+    if (xSemaphoreTake(paramsMutex, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to take mutex for addStringParam");
+        return nullptr;
+    }
+    
+    if (paramsByName.find(paramName) != paramsByName.end()) {
+        ESP_LOGE(TAG, "Parameter '%s' already exists in component '%s'", paramName.c_str(), name.c_str());
+        xSemaphoreGive(paramsMutex);
+        return nullptr;
+    }
+    
+    uint32_t paramId = nextParameterId++;
+    auto param = std::make_unique<StringParameter>(paramName, paramId, rows, cols, default_val, default_val, default_val, readOnly);
+    StringParameter* ptr = param.get();
+    
+    paramsById[paramId] = ptr;
+    paramsByName[paramName] = std::move(param);
+    
+    xSemaphoreGive(paramsMutex);
+    saveNextIds();
+    
+    ESP_LOGI(TAG, "Added string param '%s' (id=%u) to component '%s'", paramName.c_str(), paramId, name.c_str());
+    return ptr;
 }
 
-void Component::addTriggerParam(const std::string &paramName, size_t rows, size_t cols,
-                               const std::string &default_val,
-                               std::function<void(Component*, size_t, size_t, const std::string&)> callback,
-                               bool readOnly) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] addTriggerParam() - paramName: %s", paramName.c_str());
-#endif
-    auto trigger = std::make_unique<TriggerParameter>(paramName, rows, cols, default_val, callback, readOnly);
-    trigger->setOwner(this);
-    triggerParams.push_back(std::move(trigger));
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] addTriggerParam() - paramName: %s", paramName.c_str());
-#endif
-}
-
-// Action management section removed - replaced by TriggerParameter system
+// ============================================================================
+// Memory Diagnostics
+// ============================================================================
 
 size_t Component::getApproximateMemoryUsage() const {
     size_t total = 0;
     
-    // Component name and basic overhead
+    // Component overhead
     total += sizeof(Component);
     total += name.capacity();
     
-    // Int parameters
-    for (const auto& param : intParams) {
-        total += sizeof(IntParameter);
-        total += param->getName().capacity();
-        total += param->getRows() * param->getCols() * sizeof(int32_t);
+    // Parameters
+    if (xSemaphoreTake(paramsMutex, portMAX_DELAY) != pdTRUE) {
+        return total;
     }
     
-    // Float parameters
-    for (const auto& param : floatParams) {
-        total += sizeof(FloatParameter);
+    for (const auto& pair : paramsByName) {
+        const auto& param = pair.second;
+        total += sizeof(BaseParameter);
         total += param->getName().capacity();
-        total += param->getRows() * param->getCols() * sizeof(float);
+        total += param->getRows() * param->getCols() * 32;  // Rough estimate per element
     }
     
-    // Bool parameters
-    for (const auto& param : boolParams) {
-        total += sizeof(BoolParameter);
-        total += param->getName().capacity();
-        total += param->getRows() * param->getCols() * sizeof(uint8_t);
-    }
+    // Map overhead
+    total += paramsByName.size() * (sizeof(std::string) + sizeof(std::unique_ptr<BaseParameter>) + 32);
+    total += paramsById.size() * (sizeof(uint32_t) + sizeof(BaseParameter*) + 16);
     
-    // String parameters
-    for (const auto& param : stringParams) {
-        total += sizeof(StringParameter);
-        total += param->getName().capacity();
-        // Estimate average string size (rough)
-        total += param->getRows() * param->getCols() * 32;  // Assume avg 32 bytes per string
-    }
-    
-    // Trigger parameters (similar to string parameters)
-    for (const auto& param : triggerParams) {
-        total += sizeof(TriggerParameter);
-        total += param->getName().capacity();
-        // Estimate average string size (rough)
-        total += param->getRows() * param->getCols() * 32;  // Assume avg 32 bytes per string
-    }
+    xSemaphoreGive(paramsMutex);
     
     return total;
 }

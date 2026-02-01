@@ -54,7 +54,8 @@ void MotionSensorComponent::onInitialize() {
     ESP_LOGI(TAG, "[ENTER] MotionSensorComponent::initialize");
 #endif
 
-    addIntParam("last_motion_detected_seconds", 1, 1, 0, INT32_MAX, 0, true);
+    // Create parameter and store typed pointer
+    lastMotionDetectedSeconds = addIntParam("last_motion_detected_seconds", 1, 1, 0, INT32_MAX, 0, true);
 
     // Configure motion sensor GPIO pin
     gpio_config_t io_conf = {};
@@ -110,18 +111,16 @@ void MotionSensorComponent::motionSensorTaskWrapper(void* pvParameters) {
 void MotionSensorComponent::motionSensorTask() {
     ESP_LOGI(TAG, "Motion sensor task started");
     
-    IntParameter* last_motion_detected_seconds_param = getIntParam("last_motion_detected_seconds");
-    
     while (1) {
         // Wait for notification from ISR (blocking)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         
         ESP_LOGI(TAG, "*** MOTION DETECTED *** (GPIO %d triggered)", MOTION_SENSOR_PIN);
         
-        // Update the last motion detected time
-        if (last_motion_detected_seconds_param) {
+        // Update the last motion detected time using member pointer
+        if (lastMotionDetectedSeconds) {
             int current_time = esp_timer_get_time() / 1000000;
-            last_motion_detected_seconds_param->setValue(0, 0, current_time); // time in seconds
+            lastMotionDetectedSeconds->setValue(0, 0, current_time); // time in seconds
             ESP_LOGI(TAG, "Motion timestamp updated: %d seconds", current_time);
         }
     }

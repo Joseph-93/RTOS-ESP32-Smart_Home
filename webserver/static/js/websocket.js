@@ -111,6 +111,61 @@ class ESP32WebSocket {
         return response.components || [];
     }
 
+    // NEW API: Get all parameters for a component in one call
+    async getComponentParams(comp) {
+        const response = await this.send({
+            type: 'get_component_params',
+            comp
+        });
+        return response;
+    }
+
+    // NEW API: Get parameter by ID
+    async getParamById(param_id, row = 0, col = 0) {
+        const response = await this.send({
+            type: 'get_param',
+            param_id,
+            row,
+            col
+        });
+        return response;
+    }
+
+    // NEW API: Set parameter by ID
+    async setParamById(param_id, row, col, value) {
+        const response = await this.send({
+            type: 'set_param',
+            param_id,
+            row,
+            col,
+            value
+        });
+        return response.success;
+    }
+
+    // NEW API: Subscribe by param_id
+    async subscribeById(param_id, row = 0, col = 0) {
+        const response = await this.send({
+            type: 'subscribe',
+            param_id,
+            row,
+            col
+        });
+        return response.value;
+    }
+
+    // NEW API: Unsubscribe by param_id
+    async unsubscribeById(param_id, row = 0, col = 0) {
+        const response = await this.send({
+            type: 'unsubscribe',
+            param_id,
+            row,
+            col
+        });
+        return response.success;
+    }
+
+    // Old API method - still needed for one-at-a-time fetching to avoid overwhelming ESP32
     async getParamInfo(comp, param_type, idx = -1) {
         const response = await this.send({
             type: 'get_param_info',

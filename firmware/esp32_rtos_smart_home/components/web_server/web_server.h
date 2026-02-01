@@ -9,30 +9,24 @@
 #include "freertos/queue.h"
 #include <map>
 #include <set>
-#include <tuple>
 
 // Broadcast queue item - parameter update to send to WebSocket clients
+// Uses param_id (UUID) for identification instead of component/type/index
 struct BroadcastQueueItem {
-    char component[32];
-    char param_type[8];
-    int idx;
+    uint32_t param_id;     // Parameter UUID
     int row;
     int col;
     char value_json[128];  // Pre-serialized JSON value to avoid cJSON in queue
 };
 
-// Subscription key: (component_name, param_type, idx, row, col)
+// Subscription key: (param_id, row, col) - simplified from old component/type/index scheme
 struct SubscriptionKey {
-    std::string component;
-    std::string param_type;
-    int idx;
+    uint32_t param_id;
     int row;
     int col;
     
     bool operator<(const SubscriptionKey& other) const {
-        if (component != other.component) return component < other.component;
-        if (param_type != other.param_type) return param_type < other.param_type;
-        if (idx != other.idx) return idx < other.idx;
+        if (param_id != other.param_id) return param_id < other.param_id;
         if (row != other.row) return row < other.row;
         return col < other.col;
     }
@@ -48,7 +42,8 @@ public:
     void postInitialize() override;  // Set up parameter broadcasting after all components initialized
     
     // Called by parameter onChange callbacks to broadcast updates
-    void broadcastParameterUpdate(const char* comp, const char* param_type, int idx, int row, int col, cJSON* value);
+    // Uses param_id (UUID) for identification
+    void broadcastParameterUpdate(uint32_t param_id, int row, int col, cJSON* value);
     
     // Execute a JSON message using the same structure as WebSocket (for internal use)
     // Returns response JSON (caller must cJSON_Delete it) or nullptr on error

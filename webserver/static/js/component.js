@@ -76,7 +76,8 @@ window.addEventListener('beforeunload', async () => {
     console.log('[JS] Cleaning up subscriptions');
     for (const sub of activeSubscriptions) {
         try {
-            await esp32ws.unsubscribe(sub.comp, sub.param_type, sub.idx, sub.row, sub.col);
+            // Use new ID-based unsubscribe
+            await esp32ws.unsubscribeById(sub.param_id, sub.row, sub.col);
         } catch (error) {
             console.error('Error unsubscribing:', error);
         }
@@ -87,42 +88,44 @@ function handleParameterUpdate(event) {
     const data = event.detail;
     console.log('[WS Push] Parameter update:', data);
     if (data.type !== 'param_update') return;
-    if (data.comp !== currentComponent) return;
     
-    const { comp, param_type, idx, row, col, value } = data;
-    const inputId = `${comp}_${param_type}_${idx}_${row}_${col}`;
+    // New API uses param_id - extract from push message
+    const { param_id, row, col, value } = data;
+    
+    // Build input ID based on param_id
+    const inputId = `param_${param_id}_${row}_${col}`;
     
     console.log('[WS Push] Looking for input with ID:', inputId);
     
-    // Update UI based on parameter type
-    if (param_type === 'bool') {
-        const trueBtn = document.querySelector(`button[onclick*="setParamValue('${currentDevice}', '${comp}', '${param_type}', ${idx}, ${row}, ${col}, true)"]`);
-        const falseBtn = document.querySelector(`button[onclick*="setParamValue('${currentDevice}', '${comp}', '${param_type}', ${idx}, ${row}, ${col}, false)"]`);
-        
-        if (trueBtn && falseBtn) {
-            if (value === true || value === 'true') {
-                trueBtn.classList.add('active');
-                falseBtn.classList.remove('active');
-            } else {
-                trueBtn.classList.remove('active');
-                falseBtn.classList.add('active');
+    // Try to find the input element - could be various types
+    const element = document.getElementById(inputId);
+    const slider = document.getElementById(inputId + '_slider');
+    
+    if (element) {
+        // Check if it's a bool-buttons container (div with class bool-buttons)
+        if (element.classList.contains('bool-buttons')) {
+            const buttons = element.querySelectorAll('.bool-btn');
+            const isTrue = (value === true || value === 'true' || value === 1);
+            console.log('[WS Push] Bool update - isTrue:', isTrue, 'value:', value);
+            if (buttons.length >= 2) {
+                buttons[0].classList.toggle('active', isTrue);
+                buttons[1].classList.toggle('active', !isTrue);
+            }
+        } else if (element.tagName === 'TEXTAREA') {
+            if (element !== document.activeElement) {
+                element.value = value;
+            }
+        } else {
+            // Number input
+            if (element !== document.activeElement) {
+                element.value = value;
+            }
+            if (slider && slider !== document.activeElement) {
+                slider.value = value;
             }
         }
-    } else if (param_type === 'str') {
-        const textarea = document.getElementById(inputId);
-        if (textarea && textarea !== document.activeElement) {
-            textarea.value = value;
-        }
-    } else if (param_type === 'int' || param_type === 'float') {
-        const input = document.getElementById(inputId);
-        const slider = document.getElementById(inputId + '_slider');
-        
-        if (input && input !== document.activeElement) {
-            input.value = value;
-        }
-        if (slider && slider !== document.activeElement) {
-            slider.value = value;
-        }
+    } else {
+        console.log('[WS Push] Element not found for ID:', inputId);
     }
     
     // No notification for push updates - they happen frequently and would spam the user
@@ -131,116 +134,16 @@ function handleParameterUpdate(event) {
 async function loadActions(deviceName, componentName) {
     const container = document.getElementById('actions-container');
     
-    try {
-        let html = '';
-        
-        // Load LEGACY actions (deprecated)
-        console.log('[JS] Getting legacy action count...');
-        const actionCountData = await esp32ws.getParamInfo(componentName, 'actions', -1);
-        const actionCount = actionCountData.count || 0;
-        await new Promise(r => setTimeout(r, 100));
-        
-        if (actionCount > 0) {
-            const actions = [];
-            for (let i = 0; i < actionCount; i++) {
-                console.log(`[JS] Fetching legacy action ${i}...`);
-                const data = await esp32ws.getParamInfo(componentName, 'actions', i);
-                if (data.name) {
-                    const argData = await esp32ws.getParam(componentName, 'actions', i, 0, 0);
-                    let argument = '';
-                    if (typeof argData === 'string') {
-                        argument = argData;
-                    } else if (typeof argData === 'object' && argData.type) {
-                        argument = JSON.stringify(argData, null, 2);
-                    }
-                    actions.push({
-                        index: i,
-                        name: data.name,
-                        argument: argument,
-                        type: 'action'
-                    });
-                }
-                await new Promise(r => setTimeout(r, 100));
-            }
-            
-            if (actions.length > 0) {
-                html += '<div class="param-group">';
-                html += '<h4>📝 Legacy Actions (Deprecated)</h4>';
-                for (const action of actions) {
-                    const inputId = `action_arg_${componentName}_${action.index}`;
-                    html += '<div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">';
-                    html += `<button class="action-btn" onclick="invokeAction('${deviceName}', '${componentName}', '${action.name}')">⚡ ${action.name}</button>`;
-                    const escapedArg = escapeHtml(action.argument);
-                    html += `<textarea id="${inputId}" placeholder="Enter argument for ${action.name}" style="flex: 1; min-height: 100px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #222; padding: 8px; border-radius: 4px; font-family: monospace; resize: vertical;">${escapedArg}</textarea>`;
-                    html += `<button class="save-btn" onclick="saveActionArgument('${deviceName}', '${componentName}', '${action.name}', ${action.index}, '${inputId}')">💾 Save</button>`;
-                    html += '</div>';
-                }
-                html += '</div>';
-            }
-        }
-        
-        // Load TRIGGER parameters (new system)
-        console.log('[JS] Getting trigger count...');
-        const triggerCountData = await esp32ws.getParamInfo(componentName, 'trigger', -1);
-        const triggerCount = triggerCountData.count || 0;
-        await new Promise(r => setTimeout(r, 100));
-        
-        if (triggerCount > 0) {
-            const triggers = [];
-            for (let i = 0; i < triggerCount; i++) {
-                console.log(`[JS] Fetching trigger ${i}...`);
-                const data = await esp32ws.getParamInfo(componentName, 'trigger', i);
-                if (data.name) {
-                    const argData = await esp32ws.getParam(componentName, 'trigger', i, 0, 0);
-                    let argument = '';
-                    if (typeof argData === 'string') {
-                        argument = argData;
-                    }
-                    triggers.push({
-                        index: i,
-                        name: data.name,
-                        argument: argument,
-                        type: 'trigger'
-                    });
-                }
-                await new Promise(r => setTimeout(r, 100));
-            }
-            
-            if (triggers.length > 0) {
-                html += '<div class="param-group">';
-                html += '<h4>⚡ Triggers</h4>';
-                for (const trigger of triggers) {
-                    const inputId = `trigger_arg_${componentName}_${trigger.index}`;
-                    html += '<div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">';
-                    html += `<button class="action-btn" onclick="invokeTrigger('${deviceName}', '${componentName}', '${trigger.name}', ${trigger.index})">⚡ ${trigger.name}</button>`;
-                    const escapedArg = escapeHtml(trigger.argument);
-                    html += `<textarea id="${inputId}" placeholder="Enter argument for ${trigger.name}" style="flex: 1; min-height: 100px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #222; padding: 8px; border-radius: 4px; font-family: monospace; resize: vertical;">${escapedArg}</textarea>`;
-                    html += `<button class="save-btn" onclick="saveTriggerArgument('${deviceName}', '${componentName}', '${trigger.name}', ${trigger.index}, '${inputId}')">💾 Store</button>`;
-                    html += '</div>';
-                }
-                html += '</div>';
-            }
-        }
-        
-        if (!html) {
-            html = '<p class="empty-state">No actions or triggers available</p>';
-        }
-        
-        console.log(`[JS] Final HTML length: ${html.length}`);
-        container.innerHTML = html;
-        
-    } catch (error) {
-        console.error('[JS] Error loading actions:', error);
-        showError('Failed to load actions', error.message);
-        container.innerHTML = `<p class="error-text">Error: ${error.message}</p>`;
-    }
+    // Triggers have been removed - this section is now empty
+    // Components only expose read-only state and writable settings
+    container.innerHTML = '<p class="empty-state">No actions available (triggers removed)</p>';
 }
 
 async function loadParameters(deviceName, componentName) {
     const container = document.getElementById('params-container');
     
     try {
-        // Get COUNTS first via WebSocket
+        // Get COUNTS first via WebSocket - one type at a time
         console.log('[JS] Getting int param count...');
         const intCount = (await esp32ws.getParamInfo(componentName, 'int', -1)).count || 0;
         await new Promise(r => setTimeout(r, 100));
@@ -294,11 +197,11 @@ async function loadParameters(deviceName, componentName) {
         
         let html = '';
         
-        // Integer parameters
+        // Integer parameters - use param.id for subscriptions
         if (intParams.length > 0) {
             html += '<div class="param-group"><h4>📊 Integer Parameters</h4>';
-            for (let i = 0; i < intParams.length; i++) {
-                html += await createParamSection(deviceName, componentName, 'int', i, intParams[i]);
+            for (const param of intParams) {
+                html += await createParamSectionById(deviceName, componentName, param);
             }
             html += '</div>';
         }
@@ -306,8 +209,8 @@ async function loadParameters(deviceName, componentName) {
         // Float parameters
         if (floatParams.length > 0) {
             html += '<div class="param-group"><h4>📈 Float Parameters</h4>';
-            for (let i = 0; i < floatParams.length; i++) {
-                html += await createParamSection(deviceName, componentName, 'float', i, floatParams[i]);
+            for (const param of floatParams) {
+                html += await createParamSectionById(deviceName, componentName, param);
             }
             html += '</div>';
         }
@@ -315,8 +218,8 @@ async function loadParameters(deviceName, componentName) {
         // Boolean parameters
         if (boolParams.length > 0) {
             html += '<div class="param-group"><h4>🔘 Boolean Parameters</h4>';
-            for (let i = 0; i < boolParams.length; i++) {
-                html += await createParamSection(deviceName, componentName, 'bool', i, boolParams[i]);
+            for (const param of boolParams) {
+                html += await createParamSectionById(deviceName, componentName, param);
             }
             html += '</div>';
         }
@@ -324,8 +227,8 @@ async function loadParameters(deviceName, componentName) {
         // String parameters
         if (stringParams.length > 0) {
             html += '<div class="param-group"><h4>📝 String Parameters</h4>';
-            for (let i = 0; i < stringParams.length; i++) {
-                html += await createParamSection(deviceName, componentName, 'str', i, stringParams[i]);
+            for (const param of stringParams) {
+                html += await createParamSectionById(deviceName, componentName, param);
             }
             html += '</div>';
         }
@@ -339,15 +242,16 @@ async function loadParameters(deviceName, componentName) {
     }
 }
 
-async function createParamSection(deviceName, component, type, idx, param) {
-    const { name, rows, cols, min, max, readOnly } = param;
+// Create param section using param.param_id for subscriptions and updates
+async function createParamSectionById(deviceName, component, param) {
+    const { name, param_id: paramId, type, rows, cols, min, max, readOnly } = param;
     
     let html = '';
     
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-            const value = await getParamValue(deviceName, component, type, idx, r, c);
-            const inputId = `${component}_${type}_${idx}_${r}_${c}`;
+            const value = await getParamValueById(paramId, r, c);
+            const inputId = `param_${paramId}_${r}_${c}`;
             
             // Add read-only class if parameter is read-only
             const readOnlyClass = readOnly ? ' read-only' : '';
@@ -360,19 +264,19 @@ async function createParamSection(deviceName, component, type, idx, param) {
             
             if (type === 'bool') {
                 const isTrue = (value === 'true' || value === true);
-                html += '<div class="bool-buttons">';
+                html += `<div class="bool-buttons" id="${inputId}">`;
                 if (readOnly) {
                     html += `<button class="bool-btn ${isTrue ? 'active' : ''}" disabled>True</button>`;
                     html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" disabled>False</button>`;
                 } else {
-                    html += `<button class="bool-btn ${isTrue ? 'active' : ''}" onclick="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, true); this.classList.add('active'); this.nextElementSibling.classList.remove('active');">True</button>`;
-                    html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" onclick="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, false); this.classList.add('active'); this.previousElementSibling.classList.remove('active');">False</button>`;
+                    html += `<button class="bool-btn ${isTrue ? 'active' : ''}" onclick="setParamValueById(${paramId}, ${r}, ${c}, true); this.classList.add('active'); this.nextElementSibling.classList.remove('active');">True</button>`;
+                    html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" onclick="setParamValueById(${paramId}, ${r}, ${c}, false); this.classList.add('active'); this.previousElementSibling.classList.remove('active');">False</button>`;
                 }
                 html += '</div>';
             } else if (type === 'str') {
                 html += `<textarea id="${inputId}"${disabledAttr}>${escapeHtml(value)}</textarea>`;
                 if (!readOnly) {
-                    html += `<button class="save-btn" onclick="saveStringParam('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, '${inputId}')">💾 Save</button>`;
+                    html += `<button class="save-btn" onclick="saveStringParamById(${paramId}, ${r}, ${c}, '${inputId}')">💾 Save</button>`;
                 }
             } else if (type === 'int' || type === 'float') {
                 const step = type === 'float' ? '0.01' : '1';
@@ -383,8 +287,8 @@ async function createParamSection(deviceName, component, type, idx, param) {
                     html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" disabled>`;
                     html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" disabled>`;
                 } else {
-                    html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncNumberInput('${inputId}', this.value)" onchange="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, this.value)">`;
-                    html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncSlider('${inputId}_slider', this.value)" onchange="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, this.value)">`;
+                    html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncNumberInput('${inputId}', this.value)" onchange="setParamValueById(${paramId}, ${r}, ${c}, this.value)">`;
+                    html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncSlider('${inputId}_slider', this.value)" onchange="setParamValueById(${paramId}, ${r}, ${c}, this.value)">`;
                 }
                 html += '</div>';
             }
@@ -396,21 +300,26 @@ async function createParamSection(deviceName, component, type, idx, param) {
     return html;
 }
 
-async function getParamValue(deviceName, comp, type, idx, row, col) {
+// Get param value by ID and subscribe for updates
+async function getParamValueById(paramId, row, col) {
     try {
-        // Subscribe instead of get - will receive initial value and future updates
-        const value = await esp32ws.subscribe(comp, type, idx, row, col);
+        // Subscribe to get initial value and future updates
+        const value = await esp32ws.subscribeById(paramId, row, col);
         
         // Track subscription for cleanup
-        activeSubscriptions.push({ comp, param_type: type, idx, row, col });
+        activeSubscriptions.push({ param_id: paramId, row, col });
+        
+        // Small delay to avoid overwhelming ESP32
+        await new Promise(r => setTimeout(r, 50));
         
         return value !== null ? value : '';
     } catch (error) {
-        console.error('Error subscribing to param:', error);
+        console.error('Error subscribing to param by ID:', error);
         return '';
     }
 }
 
+// Sync functions for slider/number inputs
 function syncNumberInput(inputId, value) {
     document.getElementById(inputId).value = value;
 }
@@ -419,25 +328,10 @@ function syncSlider(sliderId, value) {
     document.getElementById(sliderId).value = value;
 }
 
-function saveStringParam(deviceName, comp, type, idx, row, col, inputId) {
-    const value = document.getElementById(inputId).value;
-    setParamValue(deviceName, comp, type, idx, row, col, value);
-}
-
-async function setParamValue(deviceName, comp, type, idx, row, col, value) {
+// New ID-based param setter
+async function setParamValueById(paramId, row, col, value) {
     try {
-        // Convert value to proper type
-        let convertedValue = value;
-        if (type === 'int') {
-            convertedValue = parseInt(value, 10);
-        } else if (type === 'float') {
-            convertedValue = parseFloat(value);
-        } else if (type === 'bool') {
-            convertedValue = (value === true || value === 'true' || value === '1');
-        }
-        // str type stays as string
-        
-        const success = await esp32ws.setParam(comp, type, idx, row, col, convertedValue);
+        const success = await esp32ws.setParamById(paramId, row, col, value);
         
         if (success) {
             console.log('Parameter updated successfully');
@@ -451,81 +345,10 @@ async function setParamValue(deviceName, comp, type, idx, row, col, value) {
     }
 }
 
-async function invokeAction(deviceName, comp, action) {
-    if (!confirm(`Invoke action "${action}" on ${comp}?`)) {
-        return;
-    }
-    
-    try {
-        const success = await esp32ws.invokeAction(comp, action);
-        
-        if (success) {
-            notifications.success(`Action "${action}" executed successfully!`);
-        } else {
-            notifications.error(`Action failed`);
-        }
-    } catch (error) {
-        console.error('Error invoking action:', error);
-        notifications.error(`Error: ${error.message}`);
-    }
-}
-
-async function saveActionArgument(deviceName, comp, actionName, actionIndex, inputId) {
-    try {
-        const value = document.getElementById(inputId).value;
-        
-        // Use set_param with param_type="actions"
-        const success = await esp32ws.setParam(comp, 'actions', actionIndex, 0, 0, value);
-        
-        if (success) {
-            console.log('Action argument updated successfully');
-            notifications.success(`Argument for "${actionName}" updated`);
-        } else {
-            notifications.error('Failed to update action argument');
-        }
-    } catch (error) {
-        console.error('Error setting action argument:', error);
-        notifications.error('Error updating action argument');
-    }
-}
-
-async function invokeTrigger(deviceName, comp, triggerName, triggerIndex) {
-    try {
-        // Get the current value from the textarea
-        const inputId = `trigger_arg_${comp}_${triggerIndex}`;
-        const value = document.getElementById(inputId).value;
-        
-        // Setting a trigger parameter's value will invoke its callback
-        const success = await esp32ws.setParam(comp, 'trigger', triggerIndex, 0, 0, value);
-        
-        if (success) {
-            notifications.success(`Trigger "${triggerName}" activated!`);
-        } else {
-            notifications.error(`Trigger failed`);
-        }
-    } catch (error) {
-        console.error('Error invoking trigger:', error);
-        notifications.error(`Error: ${error.message}`);
-    }
-}
-
-async function saveTriggerArgument(deviceName, comp, triggerName, triggerIndex, inputId) {
-    try {
-        const value = document.getElementById(inputId).value;
-        
-        // Use set_param with param_type="trigger" - this stores AND triggers
-        const success = await esp32ws.setParam(comp, 'trigger', triggerIndex, 0, 0, value);
-        
-        if (success) {
-            console.log('Trigger argument stored and executed');
-            notifications.success(`Trigger "${triggerName}" stored & executed`);
-        } else {
-            notifications.error('Failed to store trigger argument');
-        }
-    } catch (error) {
-        console.error('Error setting trigger argument:', error);
-        notifications.error('Error storing trigger argument');
-    }
+// Save string param by ID
+function saveStringParamById(paramId, row, col, inputId) {
+    const value = document.getElementById(inputId).value;
+    setParamValueById(paramId, row, col, value);
 }
 
 function showSuccess(message) {

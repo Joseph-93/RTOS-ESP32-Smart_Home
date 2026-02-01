@@ -150,69 +150,64 @@ void WebServerComponent::setupParameterBroadcasting() {
         Component* comp = component_graph->getComponent(comp_name);
         if (!comp) continue;
         
-        // Get component name pointer (stable, doesn't need copying)
-        const char* comp_name_ptr = comp->getName().c_str();
+        // Iterate over all parameters using the new unified map
+        const auto& params = comp->getAllParams();
         
-        // Set up int params
-        const auto& int_params = comp->getIntParams();
-        for (size_t idx = 0; idx < int_params.size(); idx++) {
-            auto* param = int_params[idx].get();
-            // Skip read-only params and params with existing callbacks
-            if (param->isReadOnly() || param->hasCallback()) {
-                continue;
+        for (const auto& [param_name, param_ptr] : params) {
+            BaseParameter* param = param_ptr.get();
+            if (!param) continue;
+            
+            // Get the parameter ID for the callback capture
+            uint32_t param_id = param->getParameterId();
+            
+            // Set up onChange callback based on parameter type
+            // Note: We DO set up broadcasts for read-only params - external systems subscribe to them
+            // But we skip params that already have callbacks (to avoid overwriting)
+            switch (param->getType()) {
+                case ParameterType::INT: {
+                    auto* int_param = static_cast<IntParameter*>(param);
+                    if (int_param->hasCallback()) continue;
+                    int_param->setOnChange([this, param_id](size_t row, size_t col, int val) {
+                        cJSON* value = cJSON_CreateNumber(val);
+                        broadcastParameterUpdate(param_id, row, col, value);
+                        cJSON_Delete(value);
+                    });
+                    break;
+                }
+                case ParameterType::FLOAT: {
+                    auto* float_param = static_cast<FloatParameter*>(param);
+                    if (float_param->hasCallback()) continue;
+                    float_param->setOnChange([this, param_id](size_t row, size_t col, float val) {
+                        cJSON* value = cJSON_CreateNumber(val);
+                        broadcastParameterUpdate(param_id, row, col, value);
+                        cJSON_Delete(value);
+                    });
+                    break;
+                }
+                case ParameterType::BOOL: {
+                    auto* bool_param = static_cast<BoolParameter*>(param);
+                    if (bool_param->hasCallback()) continue;
+                    bool_param->setOnChange([this, param_id](size_t row, size_t col, bool val) {
+                        cJSON* value = cJSON_CreateBool(val);
+                        broadcastParameterUpdate(param_id, row, col, value);
+                        cJSON_Delete(value);
+                    });
+                    break;
+                }
+                case ParameterType::STRING: {
+                    auto* str_param = static_cast<StringParameter*>(param);
+                    if (str_param->hasCallback()) continue;
+                    str_param->setOnChange([this, param_id](size_t row, size_t col, const std::string& val) {
+                        cJSON* value = cJSON_CreateString(val.c_str());
+                        broadcastParameterUpdate(param_id, row, col, value);
+                        cJSON_Delete(value);
+                    });
+                    break;
+                }
+                default:
+                    break;
             }
-            param->setOnChange([this, comp_name_ptr, idx](size_t row, size_t col, int val) {
-                // Broadcast update
-                cJSON* value = cJSON_CreateNumber(val);
-                broadcastParameterUpdate(comp_name_ptr, "int", idx, row, col, value);
-                cJSON_Delete(value);
-            });
         }
-        
-        // Set up float params
-        const auto& float_params = comp->getFloatParams();
-        for (size_t idx = 0; idx < float_params.size(); idx++) {
-            auto* param = float_params[idx].get();
-            if (param->isReadOnly() || param->hasCallback()) {
-                continue;
-            }
-            param->setOnChange([this, comp_name_ptr, idx](size_t row, size_t col, float val) {
-                cJSON* value = cJSON_CreateNumber(val);
-                broadcastParameterUpdate(comp_name_ptr, "float", idx, row, col, value);
-                cJSON_Delete(value);
-            });
-        }
-        
-        // Set up bool params
-        const auto& bool_params = comp->getBoolParams();
-        for (size_t idx = 0; idx < bool_params.size(); idx++) {
-            auto* param = bool_params[idx].get();
-            if (param->isReadOnly() || param->hasCallback()) {
-                continue;
-            }
-            param->setOnChange([this, comp_name_ptr, idx](size_t row, size_t col, bool val) {
-                cJSON* value = cJSON_CreateBool(val);
-                broadcastParameterUpdate(comp_name_ptr, "bool", idx, row, col, value);
-                cJSON_Delete(value);
-            });
-        }
-        
-        // Set up string params
-        const auto& str_params = comp->getStringParams();
-        for (size_t idx = 0; idx < str_params.size(); idx++) {
-            auto* param = str_params[idx].get();
-            if (param->isReadOnly() || param->hasCallback()) {
-                continue;
-            }
-            param->setOnChange([this, comp_name_ptr, idx](size_t row, size_t col, const std::string& val) {
-                cJSON* value = cJSON_CreateString(val.c_str());
-                broadcastParameterUpdate(comp_name_ptr, "str", idx, row, col, value);
-                cJSON_Delete(value);
-            });
-        }
-        
-        // Note: TriggerParams are NOT broadcast since they always invoke callbacks immediately
-        // and don't store state that needs broadcasting
     }
     
     ESP_LOGI(TAG, "Parameter broadcasting set up for %d components", comp_names.size());
@@ -346,95 +341,66 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
 cJSON* WebServerComponent::handle_ws_message(cJSON* request, const char* msg_type, int socket_fd) {
     ESP_LOGI(TAG, "Handling WebSocket message from socket %d", socket_fd);
     
-    // Only subscribe/unsubscribe need socket_fd, everything else delegates to executeMessage
+    // Subscribe/unsubscribe use param_id (UUID) instead of component/type/index
     if (strcmp(msg_type, "subscribe") == 0) {
-        cJSON* comp_item = cJSON_GetObjectItem(request, "comp");
-        cJSON* type_item = cJSON_GetObjectItem(request, "param_type");
-        cJSON* idx_item = cJSON_GetObjectItem(request, "idx");
+        cJSON* param_id_item = cJSON_GetObjectItem(request, "param_id");
         cJSON* row_item = cJSON_GetObjectItem(request, "row");
         cJSON* col_item = cJSON_GetObjectItem(request, "col");
         
-        if (!comp_item || !type_item || !idx_item || !row_item || !col_item) {
+        if (!param_id_item || !row_item || !col_item) {
             cJSON* error = cJSON_CreateObject();
-            cJSON_AddStringToObject(error, "error", "missing required fields");
+            cJSON_AddStringToObject(error, "error", "missing required fields (param_id, row, col)");
             return error;
         }
         
-        const char* comp_name = comp_item->valuestring;
-        const char* param_type = type_item->valuestring;
-        int idx = idx_item->valueint;
+        uint32_t param_id = (uint32_t)param_id_item->valueint;
         int row = row_item->valueint;
         int col = col_item->valueint;
         
-        // Add to subscriptions
-        SubscriptionKey key{comp_name, param_type, idx, row, col};
-        subscribe_param(socket_fd, key);
-        
-        // Return current value (same as get_param)
-        Component* comp = get_component(comp_name);
-        if (!comp) {
+        // Validate parameter exists
+        BaseParameter* param = component_graph ? component_graph->getParamById(param_id) : nullptr;
+        if (!param) {
             cJSON* error = cJSON_CreateObject();
-            cJSON_AddStringToObject(error, "error", "component not found");
+            cJSON_AddStringToObject(error, "error", "parameter not found");
             return error;
         }
         
-        cJSON* response = cJSON_CreateObject();
+        // Add to subscriptions
+        SubscriptionKey key{param_id, row, col};
+        subscribe_param(socket_fd, key);
         
-        if (strcmp(param_type, "int") == 0) {
-            const auto& list = comp->getIntParams();
-            if (idx < list.size()) {
-                int value = list[idx]->getValue(row, col);
-                cJSON_AddNumberToObject(response, "value", value);
-            }
-        } else if (strcmp(param_type, "float") == 0) {
-            const auto& list = comp->getFloatParams();
-            if (idx < list.size()) {
-                float value = list[idx]->getValue(row, col);
-                cJSON_AddNumberToObject(response, "value", value);
-            }
-        } else if (strcmp(param_type, "bool") == 0) {
-            const auto& list = comp->getBoolParams();
-            if (idx < list.size()) {
-                bool value = list[idx]->getValue(row, col);
-                cJSON_AddBoolToObject(response, "value", value);
-            }
-        } else if (strcmp(param_type, "str") == 0) {
-            const auto& list = comp->getStringParams();
-            if (idx < list.size()) {
-                std::string value = list[idx]->getValue(row, col);
-                cJSON_AddStringToObject(response, "value", value.c_str());
-            }
+        // Return current value using polymorphic JSON access
+        cJSON* response = cJSON_CreateObject();
+        cJSON* value = param->getValueAsJson(row, col);
+        if (value) {
+            cJSON_AddItemToObject(response, "value", value);
         }
         
-        ESP_LOGI(TAG, "Subscribed socket %d to %s.%s[%d][%d][%d]", 
-                 socket_fd, comp_name, param_type, idx, row, col);
+        ESP_LOGI(TAG, "Subscribed socket %d to param %u[%d][%d]", 
+                 socket_fd, param_id, row, col);
         return response;
         
     } else if (strcmp(msg_type, "unsubscribe") == 0) {
-        cJSON* comp_item = cJSON_GetObjectItem(request, "comp");
-        cJSON* type_item = cJSON_GetObjectItem(request, "param_type");
-        cJSON* idx_item = cJSON_GetObjectItem(request, "idx");
+        cJSON* param_id_item = cJSON_GetObjectItem(request, "param_id");
         cJSON* row_item = cJSON_GetObjectItem(request, "row");
         cJSON* col_item = cJSON_GetObjectItem(request, "col");
         
-        if (!comp_item || !type_item || !idx_item || !row_item || !col_item) {
+        if (!param_id_item || !row_item || !col_item) {
             cJSON* error = cJSON_CreateObject();
-            cJSON_AddStringToObject(error, "error", "missing required fields");
+            cJSON_AddStringToObject(error, "error", "missing required fields (param_id, row, col)");
             return error;
         }
         
-        const char* comp_name = comp_item->valuestring;
-        const char* param_type = type_item->valuestring;
-        int idx = idx_item->valueint;
+        uint32_t param_id = (uint32_t)param_id_item->valueint;
         int row = row_item->valueint;
         int col = col_item->valueint;
         
         // Remove from subscriptions
-        SubscriptionKey key{comp_name, param_type, idx, row, col};
+        SubscriptionKey key{param_id, row, col};
         unsubscribe_param(socket_fd, key);
         
-        ESP_LOGI(TAG, "Unsubscribed socket %d from %s.%s[%d][%d][%d]", 
-                 socket_fd, comp_name, param_type, idx, row, col);
+        ESP_LOGI(TAG, "Unsubscribed socket %d from param %u[%d][%d]", 
+                 socket_fd, param_id, row, col);
         
         cJSON* response = cJSON_CreateObject();
         cJSON_AddBoolToObject(response, "success", true);
@@ -451,9 +417,8 @@ void WebServerComponent::subscribe_param(int socket_fd, const SubscriptionKey& k
         subscriptions[socket_fd].insert(key);
         int count = subscriptions[socket_fd].size();
         xSemaphoreGive(subscriptions_mutex);
-        ESP_LOGI(TAG, "Socket %d subscribed to %s.%s[%d][%d][%d]. Total subscriptions: %d",
-                 socket_fd, key.component.c_str(), key.param_type.c_str(), 
-                 key.idx, key.row, key.col, count);
+        ESP_LOGI(TAG, "Socket %d subscribed to param %u[%d][%d]. Total subscriptions: %d",
+                 socket_fd, key.param_id, key.row, key.col, count);
     }
 }
 
@@ -482,8 +447,8 @@ void WebServerComponent::clear_subscriptions(int socket_fd) {
     }
 }
 
-void WebServerComponent::broadcastParameterUpdate(const char* comp, const char* param_type, 
-                                                   int idx, int row, int col, cJSON* value) {
+void WebServerComponent::broadcastParameterUpdate(uint32_t param_id, 
+                                                   int row, int col, cJSON* value) {
     if (!broadcast_queue || !subscriptions_mutex) return;
     
     // Check if anyone is subscribed (with mutex protection)
@@ -496,7 +461,7 @@ void WebServerComponent::broadcastParameterUpdate(const char* comp, const char* 
         }
         
         // Check if anyone is subscribed to this specific parameter
-        SubscriptionKey key{comp, param_type, idx, row, col};
+        SubscriptionKey key{param_id, row, col};
         for (const auto& [socket_fd, subscribed_params] : subscriptions) {
             if (subscribed_params.find(key) != subscribed_params.end()) {
                 has_subscribers = true;
@@ -515,11 +480,7 @@ void WebServerComponent::broadcastParameterUpdate(const char* comp, const char* 
     
     // Build queue item
     BroadcastQueueItem item;
-    strncpy(item.component, comp, sizeof(item.component) - 1);
-    item.component[sizeof(item.component) - 1] = '\0';
-    strncpy(item.param_type, param_type, sizeof(item.param_type) - 1);
-    item.param_type[sizeof(item.param_type) - 1] = '\0';
-    item.idx = idx;
+    item.param_id = param_id;
     item.row = row;
     item.col = col;
     strncpy(item.value_json, value_str, sizeof(item.value_json) - 1);
@@ -529,8 +490,8 @@ void WebServerComponent::broadcastParameterUpdate(const char* comp, const char* 
     
     // Queue for broadcast task (non-blocking - drop if queue full)
     if (xQueueSend(broadcast_queue, &item, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "Broadcast queue full - dropping update for %s.%s[%d][%d][%d]",
-                 comp, param_type, idx, row, col);
+        ESP_LOGW(TAG, "Broadcast queue full - dropping update for param %u[%d][%d]",
+                 param_id, row, col);
     }
 }
 
@@ -561,7 +522,7 @@ void WebServerComponent::broadcastTask() {
         if (xQueueReceive(broadcast_queue, &item, portMAX_DELAY) == pdTRUE) {
             if (!http_server) continue;
             
-            SubscriptionKey key{item.component, item.param_type, item.idx, item.row, item.col};
+            SubscriptionKey key{item.param_id, item.row, item.col};
             
             // Parse value back from JSON string
             cJSON* value = cJSON_Parse(item.value_json);
@@ -570,12 +531,10 @@ void WebServerComponent::broadcastTask() {
                 continue;
             }
             
-            // Build push message
+            // Build push message - now uses param_id instead of component/type/idx
             cJSON* push_msg = cJSON_CreateObject();
             cJSON_AddStringToObject(push_msg, "type", "param_update");
-            cJSON_AddStringToObject(push_msg, "comp", item.component);
-            cJSON_AddStringToObject(push_msg, "param_type", item.param_type);
-            cJSON_AddNumberToObject(push_msg, "idx", item.idx);
+            cJSON_AddNumberToObject(push_msg, "param_id", item.param_id);
             cJSON_AddNumberToObject(push_msg, "row", item.row);
             cJSON_AddNumberToObject(push_msg, "col", item.col);
             cJSON_AddItemToObject(push_msg, "value", value);  // Transfer ownership

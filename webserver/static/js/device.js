@@ -1,7 +1,10 @@
 /**
  * ESP32 Device Interface
- * Handles dynamic loading of components and parameters
+ * Handles dynamic loading of components and parameters via WebSocket
  */
+
+// Global device info for onclick handlers
+let currentDeviceInfo = null;
 
 function showError(message, details = null) {
     const banner = document.getElementById('error-banner');
@@ -26,21 +29,24 @@ async function initDevice(deviceName) {
     try {
         // Get ESP32 connection info from Django
         const deviceInfoResponse = await fetch(`/api/${deviceName}/info/`);
-        const deviceInfo = await deviceInfoResponse.json();
+        currentDeviceInfo = await deviceInfoResponse.json();
         
-        const esp32BaseUrl = `http://${deviceInfo.host}:${deviceInfo.port}`;
-        console.log('[JS] ESP32 Base URL:', esp32BaseUrl);
+        console.log('[JS] Device info:', currentDeviceInfo);
         
-        // Load components directly from ESP32
-        console.log('[JS] Fetching components from ESP32:', `${esp32BaseUrl}/api/components`);
-        const response = await fetch(`${esp32BaseUrl}/api/components`);
-        console.log('[JS] Response status:', response.status);
-        const data = await response.json();
-        console.log('[JS] Received data:', data);
+        // Initialize WebSocket connection
+        await initWebSocket(currentDeviceInfo.host);
+        console.log('[JS] WebSocket connected');
         
-        if (data.components && data.components.length > 0) {
-            console.log('[JS] Found', data.components.length, 'components');
-            displayComponents(deviceInfo, data.components);
+        // Get components via WebSocket
+        console.log('[JS] Getting components...');
+        const components = await esp32ws.getComponents();
+        console.log('[JS] Components:', components);
+        
+        if (components && components.length > 0) {
+            // Extract component names (new API returns {name, id} objects)
+            const componentNames = components.map(c => typeof c === 'string' ? c : c.name);
+            console.log('[JS] Found', componentNames.length, 'components');
+            await displayComponents(componentNames);
         } else {
             console.error('[JS] No components in response');
             document.getElementById('components-container').innerHTML = 
@@ -54,7 +60,7 @@ async function initDevice(deviceName) {
     }
 }
 
-async function displayComponents(deviceInfo, components) {
+async function displayComponents(componentNames) {
     const container = document.getElementById('components-container');
     container.innerHTML = '<div class="component-list"></div>';
     const list = container.querySelector('.component-list');
@@ -62,14 +68,15 @@ async function displayComponents(deviceInfo, components) {
     hideError();
     
     // Load each component's parameters
-    for (const component of components) {
-        const card = await createComponentCard(deviceInfo, component);
+    for (const componentName of componentNames) {
+        const card = await createComponentCard(componentName);
         list.appendChild(card);
+        // Small delay between components to avoid overwhelming the ESP32
+        await new Promise(r => setTimeout(r, 100));
     }
 }
 
-async function createComponentCard(deviceInfo, componentName) {
-    const esp32BaseUrl = `http://${deviceInfo.host}:${deviceInfo.port}`;
+async function createComponentCard(componentName) {
     const card = document.createElement('div');
     card.className = 'component-card';
     card.innerHTML = `
@@ -78,83 +85,99 @@ async function createComponentCard(deviceInfo, componentName) {
     `;
     
     try {
-        // Get parameter info from ESP32 directly - ONE TYPE AT A TIME
-        const data = {};
+        // Fetch parameter counts and info ONE AT A TIME to avoid overwhelming ESP32
+        console.log(`[JS] Getting param counts for ${componentName}...`);
         
-        console.log('[JS] Fetching int params...');
-        let response = await fetch(`${esp32BaseUrl}/api/param_info?comp=${componentName}&type=int`);
-        data.int_params = (await response.json()).params || [];
+        const intCount = (await esp32ws.getParamInfo(componentName, 'int', -1)).count || 0;
+        await new Promise(r => setTimeout(r, 100));
         
-        console.log('[JS] Fetching float params...');
-        response = await fetch(`${esp32BaseUrl}/api/param_info?comp=${componentName}&type=float`);
-        data.float_params = (await response.json()).params || [];
+        const floatCount = (await esp32ws.getParamInfo(componentName, 'float', -1)).count || 0;
+        await new Promise(r => setTimeout(r, 100));
         
-        console.log('[JS] Fetching bool params...');
-        response = await fetch(`${esp32BaseUrl}/api/param_info?comp=${componentName}&type=bool`);
-        data.bool_params = (await response.json()).params || [];
+        const boolCount = (await esp32ws.getParamInfo(componentName, 'bool', -1)).count || 0;
+        await new Promise(r => setTimeout(r, 100));
         
-        console.log('[JS] Fetching string params...');
-        response = await fetch(`${esp32BaseUrl}/api/param_info?comp=${componentName}&type=str`);
-        data.string_params = (await response.json()).params || [];
+        const strCount = (await esp32ws.getParamInfo(componentName, 'str', -1)).count || 0;
+        await new Promise(r => setTimeout(r, 100));
         
-        console.log('[JS] Fetching actions...');
-        response = await fetch(`${esp32BaseUrl}/api/param_info?comp=${componentName}&type=actions`);
-        data.actions = (await response.json()).actions || [];
+        const triggerCount = (await esp32ws.getParamInfo(componentName, 'trigger', -1)).count || 0;
+        await new Promise(r => setTimeout(r, 100));
         
-        if (data.error) {
-            showError(`Component ${componentName}: ${data.error}`);
-            card.innerHTML = `<h3>${componentName}</h3><p class="error-text">Error: ${data.error}</p>`;
-            return card;
+        // Fetch each param ONE AT A TIME
+        const intParams = [];
+        for (let i = 0; i < intCount; i++) {
+            intParams.push(await esp32ws.getParamInfo(componentName, 'int', i));
+            await new Promise(r => setTimeout(r, 100));
+        }
+        
+        const floatParams = [];
+        for (let i = 0; i < floatCount; i++) {
+            floatParams.push(await esp32ws.getParamInfo(componentName, 'float', i));
+            await new Promise(r => setTimeout(r, 100));
+        }
+        
+        const boolParams = [];
+        for (let i = 0; i < boolCount; i++) {
+            boolParams.push(await esp32ws.getParamInfo(componentName, 'bool', i));
+            await new Promise(r => setTimeout(r, 100));
+        }
+        
+        const stringParams = [];
+        for (let i = 0; i < strCount; i++) {
+            stringParams.push(await esp32ws.getParamInfo(componentName, 'str', i));
+            await new Promise(r => setTimeout(r, 100));
+        }
+        
+        const triggers = [];
+        for (let i = 0; i < triggerCount; i++) {
+            triggers.push(await esp32ws.getParamInfo(componentName, 'trigger', i));
+            await new Promise(r => setTimeout(r, 100));
         }
         
         // Build parameter UI
         let html = '';
         
         // Int parameters
-        if (data.int_params && data.int_params.length > 0) {
+        if (intParams.length > 0) {
             html += '<div class="param-group"><h4>Integer Parameters</h4>';
-            for (let i = 0; i < data.int_params.length; i++) {
-                const param = data.int_params[i];
-                html += await createParamSection(deviceName, componentName, 'int', i, param);
+            for (const param of intParams) {
+                html += await createParamSectionNew(componentName, param);
             }
             html += '</div>';
         }
         
         // Float parameters
-        if (data.float_params && data.float_params.length > 0) {
+        if (floatParams.length > 0) {
             html += '<div class="param-group"><h4>Float Parameters</h4>';
-            for (let i = 0; i < data.float_params.length; i++) {
-                const param = data.float_params[i];
-                html += await createParamSection(deviceName, componentName, 'float', i, param);
+            for (const param of floatParams) {
+                html += await createParamSectionNew(componentName, param);
             }
             html += '</div>';
         }
         
         // Bool parameters
-        if (data.bool_params && data.bool_params.length > 0) {
+        if (boolParams.length > 0) {
             html += '<div class="param-group"><h4>Boolean Parameters</h4>';
-            for (let i = 0; i < data.bool_params.length; i++) {
-                const param = data.bool_params[i];
-                html += await createParamSection(deviceName, componentName, 'bool', i, param);
+            for (const param of boolParams) {
+                html += await createParamSectionNew(componentName, param);
             }
             html += '</div>';
         }
         
         // String parameters
-        if (data.string_params && data.string_params.length > 0) {
+        if (stringParams.length > 0) {
             html += '<div class="param-group"><h4>String Parameters</h4>';
-            for (let i = 0; i < data.string_params.length; i++) {
-                const param = data.string_params[i];
-                html += await createParamSection(deviceName, componentName, 'str', i, param);
+            for (const param of stringParams) {
+                html += await createParamSectionNew(componentName, param);
             }
             html += '</div>';
         }
         
-        // Actions
-        if (data.actions && data.actions.length > 0) {
+        // Triggers
+        if (triggers.length > 0) {
             html += '<div class="actions-group">';
-            for (const action of data.actions) {
-                html += `<button class="action-btn" onclick="invokeAction('${deviceName}', '${componentName}', '${action}')">${action}</button>`;
+            for (const trigger of triggers) {
+                html += `<button class="action-btn" onclick="invokeTriggerById(${trigger.param_id})">⚡ ${trigger.name}</button>`;
             }
             html += '</div>';
         }
@@ -163,42 +186,59 @@ async function createComponentCard(deviceInfo, componentName) {
         card.innerHTML += html;
         
     } catch (error) {
+        console.error(`Error loading ${componentName}:`, error);
         card.innerHTML = `<h3>${componentName}</h3><p>Error loading: ${error.message}</p>`;
     }
     
     return card;
 }
 
-async function createParamSection(deviceName, component, type, idx, param) {
-    const { name, rows, cols, min, max } = param;
+// New param section using param_id
+async function createParamSectionNew(component, param) {
+    const { name, param_id: paramId, type, rows, cols, min, max, readOnly } = param;
     
     let html = '';
     
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-            const value = await getParamValue(deviceName, component, type, idx, r, c);
-            const inputId = `${component}_${type}_${idx}_${r}_${c}`;
+            const value = await getParamValueById(paramId, r, c);
+            const inputId = `param_${paramId}_${r}_${c}`;
             
-            html += '<div class="param-item">';
+            const readOnlyClass = readOnly ? ' read-only' : '';
+            const disabledAttr = readOnly ? ' disabled' : '';
+            
+            html += `<div class="param-item${readOnlyClass}">`;
             html += `<label><strong>${name}[${r}][${c}]:</strong></label>`;
             html += '<div class="param-control">';
             
             if (type === 'bool') {
                 const isTrue = (value === 'true' || value === true);
                 html += '<div class="bool-buttons">';
-                html += `<button class="bool-btn ${isTrue ? 'active' : ''}" onclick="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, true); this.classList.add('active'); this.nextElementSibling.classList.remove('active');">True</button>`;
-                html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" onclick="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, false); this.classList.add('active'); this.previousElementSibling.classList.remove('active');">False</button>`;
+                if (readOnly) {
+                    html += `<button class="bool-btn ${isTrue ? 'active' : ''}" disabled>True</button>`;
+                    html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" disabled>False</button>`;
+                } else {
+                    html += `<button class="bool-btn ${isTrue ? 'active' : ''}" onclick="setParamValueById(${paramId}, ${r}, ${c}, true); this.classList.add('active'); this.nextElementSibling.classList.remove('active');">True</button>`;
+                    html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" onclick="setParamValueById(${paramId}, ${r}, ${c}, false); this.classList.add('active'); this.previousElementSibling.classList.remove('active');">False</button>`;
+                }
                 html += '</div>';
             } else if (type === 'str') {
-                html += `<textarea id="${inputId}">${escapeHtml(value)}</textarea>`;
-                html += `<button class="save-btn" onclick="saveStringParam('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, '${inputId}')">💾 Save</button>`;
+                html += `<textarea id="${inputId}"${disabledAttr}>${escapeHtml(value)}</textarea>`;
+                if (!readOnly) {
+                    html += `<button class="save-btn" onclick="saveStringParamById(${paramId}, ${r}, ${c}, '${inputId}')">💾 Save</button>`;
+                }
             } else if (type === 'int' || type === 'float') {
                 const step = type === 'float' ? '0.01' : '1';
                 const minVal = min !== undefined ? min : 0;
                 const maxVal = max !== undefined ? max : 100;
                 html += '<div class="number-control">';
-                html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncNumberInput('${inputId}', this.value)" onchange="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, this.value)">`;
-                html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncSlider('${inputId}_slider', this.value)" onchange="setParamValue('${deviceName}', '${component}', '${type}', ${idx}, ${r}, ${c}, this.value)">`;
+                if (readOnly) {
+                    html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" disabled>`;
+                    html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" disabled>`;
+                } else {
+                    html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncNumberInput('${inputId}', this.value)" onchange="setParamValueById(${paramId}, ${r}, ${c}, this.value)">`;
+                    html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncSlider('${inputId}_slider', this.value)" onchange="setParamValueById(${paramId}, ${r}, ${c}, this.value)">`;
+                }
                 html += '</div>';
             }
             
@@ -209,10 +249,12 @@ async function createParamSection(deviceName, component, type, idx, param) {
     return html;
 }
 
-async function getParamValue(deviceName, comp, type, idx, row, col) {
+// Get param value by ID via WebSocket
+async function getParamValueById(paramId, row, col) {
     try {
-        const response = await fetch(`/api/${deviceName}/get_param/?comp=${comp}&type=${type}&idx=${idx}&row=${row}&col=${col}`);
-        const data = await response.json();
+        const data = await esp32ws.getParamById(paramId, row, col);
+        // Small delay to avoid overwhelming ESP32
+        await new Promise(r => setTimeout(r, 50));
         return data.value !== null ? data.value : '';
     } catch (error) {
         console.error('Error getting param value:', error);
@@ -228,25 +270,18 @@ function syncSlider(sliderId, value) {
     document.getElementById(sliderId).value = value;
 }
 
-function saveStringParam(deviceName, comp, type, idx, row, col, inputId) {
+function saveStringParamById(paramId, row, col, inputId) {
     const value = document.getElementById(inputId).value;
-    setParamValue(deviceName, comp, type, idx, row, col, value);
+    setParamValueById(paramId, row, col, value);
 }
 
-async function setParamValue(deviceName, comp, type, idx, row, col, value) {
+async function setParamValueById(paramId, row, col, value) {
     try {
-        const response = await fetch(`/api/${deviceName}/set_param/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({ comp, type, idx, row, col, value })
-        });
+        const success = await esp32ws.setParamById(paramId, row, col, value);
         
-        const data = await response.json();
-        if (data.success) {
+        if (success) {
             console.log('Parameter updated successfully');
+            notifications.success('Parameter updated');
         } else {
             notifications.error('Failed to update parameter');
         }
@@ -256,45 +291,23 @@ async function setParamValue(deviceName, comp, type, idx, row, col, value) {
     }
 }
 
-async function invokeAction(deviceName, comp, action) {
+async function invokeTriggerById(paramId) {
     try {
-        const response = await fetch(`/api/${deviceName}/invoke_action/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({ comp, action })
-        });
+        const success = await esp32ws.invokeTriggerById(paramId, 0, 0, '');
         
-        const data = await response.json();
-        if (data.success) {
-            notifications.success(`Action "${action}" executed successfully`);
+        if (success) {
+            notifications.success('Trigger executed successfully');
         } else {
-            notifications.error('Failed to execute action');
+            notifications.error('Failed to execute trigger');
         }
     } catch (error) {
-        console.error('Error invoking action:', error);
-        notifications.error('Error executing action');
+        console.error('Error invoking trigger:', error);
+        notifications.error('Error executing trigger');
     }
-}
-
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
 }
 
 function escapeHtml(text) {
+    if (!text) return '';
     const map = {
         '&': '&amp;',
         '<': '&lt;',
@@ -302,5 +315,13 @@ function escapeHtml(text) {
         '"': '&quot;',
         "'": '&#039;'
     };
-    return text.replace(/[&<>"']/g, m => map[m]);
+    return String(text).replace(/[&<>"']/g, m => map[m]);
 }
+
+// Cleanup when leaving page
+window.addEventListener('beforeunload', () => {
+    console.log('[JS] Cleaning up WebSocket connection');
+    if (esp32ws) {
+        esp32ws.close();
+    }
+});

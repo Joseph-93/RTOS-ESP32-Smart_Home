@@ -125,90 +125,51 @@ void GUIComponent::onInitialize() {
 #endif
     ESP_LOGI(TAG, "Initializing GUIComponent...");
 
-    // Add string parameter for button names (6 rows, 1 column)
-    addStringParam("button_names", NUM_BUTTONS, 1, "Button");
+    // Add string parameter for button names (6 rows, 1 column) and store pointer
+    buttonNames = addStringParam("button_names", NUM_BUTTONS, 1, "Button");
     
     // Initialize each button name
-    auto* button_names_param = getStringParam("button_names");
-    if (button_names_param) {
+    if (buttonNames) {
         for (int i = 0; i < NUM_BUTTONS; i++) {
             std::string default_name = "Button " + std::to_string(i + 1);
-            button_names_param->setValue(i, 0, default_name);
+            buttonNames->setValue(i, 0, default_name);
         }
         
         // Set onChange callback to trigger label update in LVGL task
-        button_names_param->setOnChange([this](size_t row, size_t col, const std::string& val) {
+        buttonNames->setOnChange([this](size_t row, size_t col, const std::string& val) {
             // Signal LVGL task to update the button label
             button_label_update_pending = true;
             ESP_LOGI(TAG, "Button name changed for button %zu: %s", row, val.c_str());
         });
     }
     
-    // Register button triggers - value contains the JSON message to execute
+    // Register button pressed states as read-only bool params
+    // These pulse true when a button is pressed, allowing external subscribers to react
     for (int i = 0; i < NUM_BUTTONS; i++) {
-        std::string trigger_name = "button_" + std::to_string(i);
-        
-        // Add trigger parameter (no separate description to save memory)
-        addTriggerParam(
-            trigger_name,
-            1, 1,
-            "",  // default empty value
-            [i](Component* comp, size_t row, size_t col, const std::string& arg) {
-                GUIComponent* gui = static_cast<GUIComponent*>(comp);
-                ESP_LOGI("GUI", "Button trigger %d invoked with arg: %s", i, arg.c_str());
-                
-                // If argument is empty, do nothing
-                if (arg.empty()) {
-                    ESP_LOGI("GUI", "No action configured for button %d", i);
-                    return;
-                }
-                
-                // Execute the JSON message from the argument
-                ESP_LOGI("GUI", "Executing button %d trigger: %s", i, arg.c_str());
-                cJSON* response = gui->component_graph->executeMessage(arg.c_str());
-                if (response) {
-                    char* response_str = cJSON_PrintUnformatted(response);
-                    if (response_str) {
-                        ESP_LOGI("GUI", "Button trigger response: %s", response_str);
-                        free(response_str);
-                    }
-                    cJSON_Delete(response);
-                } else {
-                    ESP_LOGW("GUI", "Button trigger returned no response");
-                }
-
-                // Send notification
-                if (gui->component_graph) {
-                    char msg[64];
-                    snprintf(msg, sizeof(msg), "Button %d trigger activated", i);
-                    gui->component_graph->sendNotification(msg, false, 3, 2000);
-                }
-            },
-            false  // not read-only
-        );
+        std::string param_name = "button_" + std::to_string(i) + "_pressed";
+        buttonPressed[i] = addBoolParam(param_name, 1, 1, false, true);  // read-only
     }
 
-    // Brightness parameters
-    addIntParam("user_set_brightness", 1, 1, 0, 100, 100); // User-controlled manual brightness (never touched by code)
-    addIntParam("auto_set_brightness", 1, 1, 0, 100, 100, true); // Auto-brightness from light sensor (read-only)
-    addIntParam("desired_lcd_brightness", 1, 1, 0, 100, 100); // Final target brightness (what current chases)
-    addIntParam("current_lcd_brightness", 1, 1, 0, 100, 100, true); // Actual current brightness (read-only)
-    addIntParam("brighness_change_per_second", 1, 1, 10, 100, 50); // Rate at which current chases desired (0-100% per second)
-    addIntParam("lcd_screen_timeout_seconds", 1, 1, 10, 600, 10); // Touch inactivity timeout in seconds
-    addIntParam("motion_inactivity_screen_timeout_seconds", 1, 1, 10, 600, 10); // Motion inactivity timeout in seconds
-    addBoolParam("lcd_screen_on", 1, 1, true); // When false, forces desired to 0. When true, relinquishes control
-    addBoolParam("override_auto_brightness", 1, 1, true); // When true, use user_set. When false, use auto_set
-    addBoolParam("override_screen_timeout", 1, 1, true); // When false, touch timeout can zero desired. When true, relinquishes
-    addBoolParam("override_motion_inactivity_screen_timeout", 1, 1, true); // When false, motion timeout can zero desired. When true, relinquishes
+    // Brightness parameters - store member pointers
+    userSetBrightness = addIntParam("user_set_brightness", 1, 1, 0, 100, 100); // User-controlled manual brightness (never touched by code)
+    autoSetBrightness = addIntParam("auto_set_brightness", 1, 1, 0, 100, 100, true); // Auto-brightness from light sensor (read-only)
+    desiredLcdBrightness = addIntParam("desired_lcd_brightness", 1, 1, 0, 100, 100, true); // Final target brightness (what current chases) (read-only)
+    currentLcdBrightness = addIntParam("current_lcd_brightness", 1, 1, 0, 100, 100, true); // Actual current brightness (read-only)
+    brightnessChangePerSecond = addIntParam("brighness_change_per_second", 1, 1, 10, 100, 50); // Rate at which current chases desired (0-100% per second)
+    lcdScreenTimeoutSeconds = addIntParam("lcd_screen_timeout_seconds", 1, 1, 10, 600, 10); // Touch inactivity timeout in seconds
+    motionInactivityScreenTimeoutSeconds = addIntParam("motion_inactivity_screen_timeout_seconds", 1, 1, 10, 600, 10); // Motion inactivity timeout in seconds
+    lcdScreenOn = addBoolParam("lcd_screen_on", 1, 1, true); // When false, forces desired to 0. When true, relinquishes control
+    overrideAutoBrightness = addBoolParam("override_auto_brightness", 1, 1, true); // When true, use user_set. When false, use auto_set
+    overrideScreenTimeout = addBoolParam("override_screen_timeout", 1, 1, true); // When false, touch timeout can zero desired. When true, relinquishes
+    overrideMotionInactivityScreenTimeout = addBoolParam("override_motion_inactivity_screen_timeout", 1, 1, true); // When false, motion timeout can zero desired. When true, relinquishes
     
-    auto* brightness_param = getIntParam("current_lcd_brightness");
-    if (brightness_param) {
-        brightness_param->setOnChange([this](size_t row, size_t col, int val) {
+    if (currentLcdBrightness) {
+        currentLcdBrightness->setOnChange([this](size_t row, size_t col, int val) {
             int brightness = val;
             lcd_set_brightness(brightness);
         });
-        // Set initial brightness to 100%
-        brightness_param->setValue(0, 0, 100);
+        // Set initial brightness directly (setValue won't trigger callback if value unchanged)
+        lcd_set_brightness(100);
     }
 
     // Create GUI status task and its timer for lower-priority operations
@@ -441,18 +402,7 @@ void GUIComponent::guiStatusTaskWrapper(void* pvParameters) {
 void GUIComponent::guiStatusTask() {
     ESP_LOGI(TAG, "GUI status task started");
     
-    // Declare static param pointers (will be initialized on first run AFTER component is initialized)
-    static IntParameter* user_set_brightness_param = nullptr;
-    static IntParameter* auto_set_brightness_param = nullptr;
-    static IntParameter* desired_brightness_param = nullptr;
-    static IntParameter* current_brightness_param = nullptr;
-    static IntParameter* change_rate_param = nullptr;
-    static IntParameter* touch_inactivity_screen_timeout_param = nullptr;
-    static IntParameter* motion_inactivity_screen_timeout_param = nullptr;
-    static BoolParameter* lcd_screen_on_param = nullptr;
-    static BoolParameter* override_auto_brightness_param = nullptr;
-    static BoolParameter* override_screen_timeout_param = nullptr;
-    static BoolParameter* override_motion_inactivity_screen_timeout_param = nullptr;
+    // Sensor parameter pointers (will be looked up from other components)
     static IntParameter* light_sensor_param = nullptr;
     static IntParameter* motion_sensor_param = nullptr;
     static bool first_run = true;
@@ -473,22 +423,13 @@ void GUIComponent::guiStatusTask() {
             continue;
         }
 
-        // Initialize parameter pointers on first run (AFTER component is initialized)
-        if (!(user_set_brightness_param && auto_set_brightness_param && desired_brightness_param && current_brightness_param && 
-            change_rate_param && touch_inactivity_screen_timeout_param && motion_inactivity_screen_timeout_param &&
-            lcd_screen_on_param && override_auto_brightness_param && override_screen_timeout_param && 
-            override_motion_inactivity_screen_timeout_param)) {
-            user_set_brightness_param = this->getIntParam("user_set_brightness");
-            auto_set_brightness_param = this->getIntParam("auto_set_brightness");
-            desired_brightness_param = this->getIntParam("desired_lcd_brightness");
-            current_brightness_param = this->getIntParam("current_lcd_brightness");
-            change_rate_param = this->getIntParam("brighness_change_per_second");
-            touch_inactivity_screen_timeout_param = this->getIntParam("lcd_screen_timeout_seconds");
-            motion_inactivity_screen_timeout_param = this->getIntParam("motion_inactivity_screen_timeout_seconds");
-            lcd_screen_on_param = this->getBoolParam("lcd_screen_on");
-            override_auto_brightness_param = this->getBoolParam("override_auto_brightness");
-            override_screen_timeout_param = this->getBoolParam("override_screen_timeout");
-            override_motion_inactivity_screen_timeout_param = this->getBoolParam("override_motion_inactivity_screen_timeout");
+        // Verify member parameter pointers are valid
+        if (!(userSetBrightness && autoSetBrightness && desiredLcdBrightness && currentLcdBrightness && 
+            brightnessChangePerSecond && lcdScreenTimeoutSeconds && motionInactivityScreenTimeoutSeconds &&
+            lcdScreenOn && overrideAutoBrightness && overrideScreenTimeout && 
+            overrideMotionInactivityScreenTimeout)) {
+            ESP_LOGW(TAG, "Some member parameter pointers are null - skipping cycle");
+            continue;
         }
         
         // Try to get sensor parameters once (they may not exist yet or at all)
@@ -513,7 +454,7 @@ void GUIComponent::guiStatusTask() {
         // ===========================================
         
         // STEP 1: Update auto_set_brightness from light sensor
-        if (light_sensor_param && auto_set_brightness_param) {
+        if (light_sensor_param && autoSetBrightness) {
             int light_level = light_sensor_param->getValue(0, 0);
             
             // QUADRATIC MAPPING (x^2 normalized to 0-100%):
@@ -526,20 +467,20 @@ void GUIComponent::guiStatusTask() {
                 brightness = MIN_AUTO_BRIGHTNESS;
             }
             
-            auto_set_brightness_param->setValue(0, 0, brightness);
+            autoSetBrightness->setValue(0, 0, brightness);
         }
         
         // STEP 2: Choose which brightness to use (user vs auto) and set desired_lcd_brightness
         int base_brightness = 100;  // Default
-        if (override_auto_brightness_param && override_auto_brightness_param->getValue(0, 0) == true) {
+        if (overrideAutoBrightness && overrideAutoBrightness->getValue(0, 0) == true) {
             // Use manual (user_set_brightness)
-            if (user_set_brightness_param) {
-                base_brightness = user_set_brightness_param->getValue(0, 0);
+            if (userSetBrightness) {
+                base_brightness = userSetBrightness->getValue(0, 0);
             }
         } else {
             // Use auto (auto_set_brightness)
-            if (auto_set_brightness_param) {
-                base_brightness = auto_set_brightness_param->getValue(0, 0);
+            if (autoSetBrightness) {
+                base_brightness = autoSetBrightness->getValue(0, 0);
             }
         }
         
@@ -548,16 +489,16 @@ void GUIComponent::guiStatusTask() {
         // STEP 3: Apply zeroing logic based on lcd_screen_on, timeouts, etc.
         
         // 3a) lcd_screen_on - when false, forces desired to 0. When true, relinquishes control
-        if (lcd_screen_on_param && lcd_screen_on_param->getValue(0, 0) == false) {
+        if (lcdScreenOn && lcdScreenOn->getValue(0, 0) == false) {
             desired_brightness = 0;
         }
         
         // 3b) Touch inactivity timeout
         bool touch_timeout_active = false;
-        if (override_screen_timeout_param && override_screen_timeout_param->getValue(0, 0) == false) {
+        if (overrideScreenTimeout && overrideScreenTimeout->getValue(0, 0) == false) {
             // Touch timeout is enabled - check if timeout reached
             TickType_t tick_delta = xTaskGetTickCount() - last_interaction_tick;
-            TickType_t timeout_ticks = pdMS_TO_TICKS(touch_inactivity_screen_timeout_param->getValue(0, 0) * 1000);
+            TickType_t timeout_ticks = pdMS_TO_TICKS(lcdScreenTimeoutSeconds->getValue(0, 0) * 1000);
             
             if (tick_delta >= timeout_ticks) {
                 // Timeout reached - zero desired
@@ -575,15 +516,15 @@ void GUIComponent::guiStatusTask() {
         
         // 3c) Motion inactivity timeout
         bool motion_timeout_active = false;
-        if (override_motion_inactivity_screen_timeout_param && 
-            override_motion_inactivity_screen_timeout_param->getValue(0, 0) == false) {
+        if (overrideMotionInactivityScreenTimeout && 
+            overrideMotionInactivityScreenTimeout->getValue(0, 0) == false) {
             // Motion timeout is enabled - check if timeout reached
-            if (motion_sensor_param && motion_inactivity_screen_timeout_param) {
+            if (motion_sensor_param && motionInactivityScreenTimeoutSeconds) {
                 int current_time_seconds = (int)(esp_timer_get_time() / 1000000);
                 int last_motion_time = motion_sensor_param->getValue(0, 0);
                 int motion_inactive_seconds = current_time_seconds - last_motion_time;
                 
-                if (motion_inactive_seconds >= motion_inactivity_screen_timeout_param->getValue(0, 0)) {
+                if (motion_inactive_seconds >= motionInactivityScreenTimeoutSeconds->getValue(0, 0)) {
                     // Motion timeout reached - zero desired
                     motion_timeout_active = true;
                     desired_brightness = 0;
@@ -598,15 +539,15 @@ void GUIComponent::guiStatusTask() {
         }
         motion_timeout_was_active_last_cycle = motion_timeout_active;
 
-        desired_brightness_param->setValue(0, 0, desired_brightness);
+        desiredLcdBrightness->setValue(0, 0, desired_brightness);
         
         // STEP 4: Update current_lcd_brightness to chase desired_lcd_brightness at specified rate
-        int current_brightness = current_brightness_param->getValue(0, 0);
-        int change_rate = change_rate_param->getValue(0, 0)/10; // percent per second
+        int current_brightness = currentLcdBrightness->getValue(0, 0);
+        int change_rate = brightnessChangePerSecond->getValue(0, 0)/10; // percent per second
         int brightness_diff = desired_brightness - current_brightness;
         if (abs(brightness_diff) <= change_rate) {
             // Do not allow deadband oscillation - snap to desired
-            current_brightness_param->setValue(0, 0, desired_brightness);
+            currentLcdBrightness->setValue(0, 0, desired_brightness);
             continue;
         }
         else if (current_brightness < desired_brightness) {
@@ -614,13 +555,13 @@ void GUIComponent::guiStatusTask() {
             if (current_brightness > desired_brightness) {
                 current_brightness = desired_brightness;
             }
-            current_brightness_param->setValue(0, 0, current_brightness);
+            currentLcdBrightness->setValue(0, 0, current_brightness);
         } else if (current_brightness > desired_brightness) {
             current_brightness -= change_rate;
             if (current_brightness < desired_brightness) {
                 current_brightness = desired_brightness;
             }
-            current_brightness_param->setValue(0, 0, current_brightness);
+            currentLcdBrightness->setValue(0, 0, current_brightness);
         }
 
         // Clean up expired notification
@@ -690,11 +631,10 @@ void GUIComponent::createSimpleButtonGrid() {
         };
         lv_obj_set_style_bg_color(btn, colors[i], 0);
         
-        // Button label - get text from parameter (row i, column 0)
+        // Button label - get text from parameter using member pointer (row i, column 0)
         lv_obj_t* label = lv_label_create(btn);
-        StringParameter* name_param = getStringParam("button_names");
-        if (name_param) {
-            lv_label_set_text(label, name_param->getValue(i, 0).c_str());
+        if (buttonNames) {
+            lv_label_set_text(label, buttonNames->getValue(i, 0).c_str());
         } else {
             lv_label_set_text(label, ("Button " + std::to_string(i + 1)).c_str());
         }
@@ -747,14 +687,20 @@ void GUIComponent::simple_button_event_cb(lv_event_t* e) {
     
     // Get button index from user data
     int button_index = (int)(intptr_t)lv_event_get_user_data(e);
-    std::string trigger_name = "button_" + std::to_string(button_index);
     
-    // Trigger the button by setting its value (which will invoke callback)
-    TriggerParameter* trigger = g_gui_component->getTriggerParam(trigger_name);
-    if (trigger) {
-        // Get the current stored value and trigger with it
-        std::string trigger_value = trigger->getValue(0, 0);
-        trigger->setValue(0, 0, trigger_value);
+    // Pulse the button pressed state: set to true, notify subscribers
+    // External systems can subscribe to this and react accordingly
+    if (g_gui_component && g_gui_component->buttonPressed[button_index]) {
+        BoolParameter* btn = g_gui_component->buttonPressed[button_index];
+        btn->setValue(0, 0, true);  // Triggers onChange which broadcasts to subscribers
+        ESP_LOGI(TAG, "Button %d pressed - notifying subscribers", button_index);
+        
+        // Hold true briefly so it's visible in UI before resetting
+        vTaskDelay(pdMS_TO_TICKS(150));
+        
+        // Reset back to false (pulse behavior)
+        // Subscribers will see the true→false transition
+        btn->setValue(0, 0, false);
     }
     
 #ifdef DEBUG

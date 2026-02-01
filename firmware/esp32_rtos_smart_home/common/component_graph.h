@@ -3,6 +3,8 @@
 #include "component.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
+#include <unordered_map>
 #include <map>
 #include <string>
 #include <vector>
@@ -25,11 +27,19 @@ public:
     };
 
 private:
-    std::map<std::string, Component*> components;
+    // Owning map: name -> Component* (components owned externally, but registered here)
+    std::map<std::string, Component*> componentsByName;
+    
+    // Non-owning map: componentId -> Component* (same pointers as componentsByName)
+    std::unordered_map<uint32_t, Component*> componentsById;
+    
+    // Mutex for thread-safe access to component maps
+    mutable SemaphoreHandle_t componentsMutex;
     
     // Notification queues (shared across all components)
     QueueHandle_t notification_queue_gui;   // For GUI display
     QueueHandle_t notification_queue_uart;  // For UART logging
+    
 public:
     ComponentGraph();
     ~ComponentGraph();
@@ -40,11 +50,18 @@ public:
     // Get a component by name
     Component* getComponent(const std::string& name);
     
+    // Get a component by UUID
+    Component* getComponentById(uint32_t componentId);
+    
     // Get a parameter from any component by component name + parameter name
+    BaseParameter* getParam(const std::string& component_name, const std::string& param_name);
     IntParameter* getIntParam(const std::string& component_name, const std::string& param_name);
     FloatParameter* getFloatParam(const std::string& component_name, const std::string& param_name);
     BoolParameter* getBoolParam(const std::string& component_name, const std::string& param_name);
     StringParameter* getStringParam(const std::string& component_name, const std::string& param_name);
+    
+    // Get a parameter by UUID (searches all components)
+    BaseParameter* getParamById(uint32_t paramId);
     
     // Initialize all registered components in dependency order
     void initializeAll();

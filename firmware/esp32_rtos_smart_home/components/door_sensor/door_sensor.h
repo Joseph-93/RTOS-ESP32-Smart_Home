@@ -3,47 +3,44 @@
 #include "component.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/timers.h"
 
 #ifdef __cplusplus
 
-// DoorSensorComponent - manages door sensor reading and parameters
+/**
+ * DoorSensorComponent - Simple door state sensor
+ * 
+ * Exposes:
+ * - door_open (bool, read-only): Current door state (true = open, false = closed)
+ * - door_open_seconds (int, read-only): How long door has been open (0 if closed)
+ * - last_door_event_seconds (int, read-only): Timestamp of last state change
+ * 
+ * External systems (Raspberry Pi hub) can subscribe to these and implement
+ * any complex logic (entry/departure detection, alerts, etc.)
+ */
 class DoorSensorComponent : public Component {
 public:
     DoorSensorComponent();
     ~DoorSensorComponent() override;
     
-    void setUpDependencies(ComponentGraph* graph) override;
     void onInitialize() override;
     
-    // Static task entry point for FreeRTOS
-    static void doorSensorTaskWrapper(void* pvParameters);
-    static void doorSensorStateTaskWrapper(void* pvParameters);
-    
-    // Instance method that runs the task loop
-    void doorSensorTask();
-    void doorSensorStateTask();
-
     static constexpr const char* TAG = "DoorSensor";
     
     // Task handle needs to be public for ISR access
     TaskHandle_t door_sensor_task_handle = nullptr;
-    TaskHandle_t door_sensor_state_task_handle = nullptr;
 
 private:
-    // Add private members here as needed
-    TimerHandle_t door_sensor_timer_handle = nullptr;
-    Component* gui_component = nullptr;
+    // Read-only sensor state exposed to subscribers
+    BoolParameter* doorOpen = nullptr;           // Current state: true=open, false=closed
+    IntParameter* doorOpenSeconds = nullptr;     // How long it's been open (0 if closed)
+    IntParameter* lastDoorEventSeconds = nullptr; // Timestamp of last state change
     
-    // Actions to execute when door is opened
-    void executeDoorOpenedActions();
-
-    enum class DoorTrackingState {
-        CLOSED,
-        OPENED,
-        OPENED_TOO_LONG,
-    };
-    DoorTrackingState door_tracking_state = DoorTrackingState::CLOSED;
+    // Task functions
+    static void doorSensorTaskWrapper(void* pvParameters);
+    void doorSensorTask();
+    
+    // Track when door opened for duration calculation
+    int64_t doorOpenedTimestamp = 0;
 };
 
 #endif

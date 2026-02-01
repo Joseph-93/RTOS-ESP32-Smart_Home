@@ -25,7 +25,9 @@ public:
     static constexpr const char* TAG = "LightSensor";
 
 private:
-    // Add private members here as needed
+    // Typed parameter member pointers (assigned at init, never null after)
+    IntParameter* currentLightLevel = nullptr;
+
     TaskHandle_t light_sensor_task_handle = nullptr;
     TimerHandle_t light_sensor_timer_handle = nullptr;
     Component* gui_component = nullptr;

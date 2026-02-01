@@ -47,6 +47,21 @@ public:
     volatile bool button_label_update_pending = false;
 
 private:
+    // Typed parameter member pointers (assigned at init, never null after)
+    StringParameter* buttonNames = nullptr;
+    BoolParameter* buttonPressed[NUM_BUTTONS] = {nullptr};  // Read-only: pulses true when button pressed
+    IntParameter* userSetBrightness = nullptr;
+    IntParameter* autoSetBrightness = nullptr;
+    IntParameter* desiredLcdBrightness = nullptr;
+    IntParameter* currentLcdBrightness = nullptr;
+    IntParameter* brightnessChangePerSecond = nullptr;
+    IntParameter* lcdScreenTimeoutSeconds = nullptr;
+    IntParameter* motionInactivityScreenTimeoutSeconds = nullptr;
+    BoolParameter* lcdScreenOn = nullptr;
+    BoolParameter* overrideAutoBrightness = nullptr;
+    BoolParameter* overrideScreenTimeout = nullptr;
+    BoolParameter* overrideMotionInactivityScreenTimeout = nullptr;
+
     TaskHandle_t gui_status_task_handle = nullptr;
     TimerHandle_t gui_status_timer_handle = nullptr;
     TickType_t last_interaction_tick = 0;
