@@ -397,12 +397,14 @@ class WebServerComponent(Component):
             param_id = request.get('param_id')
             comp_name = request.get('comp')
             param_name = request.get('param')
+            param_type = request.get('param_type')
+            idx = request.get('idx')
             row = request.get('row', 0)
             col = request.get('col', 0)
             
             param = None
             
-            # Lookup by param_id
+            # Lookup by param_id (preferred)
             if param_id is not None:
                 for comp in self.hub.local_components.values():
                     param = comp.get_param_by_id(param_id)
@@ -413,6 +415,11 @@ class WebServerComponent(Component):
                 comp = self.hub.local_components.get(comp_name)
                 if comp:
                     param = comp.get_param(param_name)
+            # Lookup by comp + param_type + idx (ESP32 compatibility)
+            elif comp_name and param_type is not None and idx is not None:
+                comp = self.hub.local_components.get(comp_name)
+                if comp:
+                    param = comp.get_param_by_type_and_index(param_type, idx)
             
             if not param:
                 return {'error': 'parameter not found'}
@@ -431,6 +438,8 @@ class WebServerComponent(Component):
             param_id = request.get('param_id')
             comp_name = request.get('comp')
             param_name = request.get('param')
+            param_type = request.get('param_type')
+            idx = request.get('idx')
             row = request.get('row', 0)
             col = request.get('col', 0)
             value = request.get('value')
@@ -440,7 +449,7 @@ class WebServerComponent(Component):
             
             param = None
             
-            # Lookup by param_id
+            # Lookup by param_id (preferred)
             if param_id is not None:
                 for comp in self.hub.local_components.values():
                     param = comp.get_param_by_id(param_id)
@@ -451,6 +460,11 @@ class WebServerComponent(Component):
                 comp = self.hub.local_components.get(comp_name)
                 if comp:
                     param = comp.get_param(param_name)
+            # Lookup by comp + param_type + idx (ESP32 compatibility)
+            elif comp_name and param_type is not None and idx is not None:
+                comp = self.hub.local_components.get(comp_name)
+                if comp:
+                    param = comp.get_param_by_type_and_index(param_type, idx)
             
             if not param:
                 return {'success': False, 'error': 'parameter not found'}

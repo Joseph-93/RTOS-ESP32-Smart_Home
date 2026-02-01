@@ -254,6 +254,29 @@ class Component(ABC):
     def get_param_by_id(self, param_id: int) -> Optional[BaseParameter]:
         return self.params_by_id.get(param_id)
     
+    def get_param_by_type_and_index(self, param_type: str, idx: int) -> Optional[BaseParameter]:
+        """Get parameter by type and index (ESP32 compatibility)."""
+        # Map type string to ParameterType
+        type_map = {
+            'int': ParameterType.INT,
+            'float': ParameterType.FLOAT,
+            'bool': ParameterType.BOOL,
+            'str': ParameterType.STRING,
+            'string': ParameterType.STRING,
+        }
+        target_type = type_map.get(param_type.lower())
+        if not target_type:
+            return None
+        
+        # Find the idx-th parameter of this type
+        count = 0
+        for param in self.parameters.values():
+            if param.param_type == target_type:
+                if count == idx:
+                    return param
+                count += 1
+        return None
+    
     @abstractmethod
     async def initialize(self):
         """Initialize the component. Override in subclasses."""
