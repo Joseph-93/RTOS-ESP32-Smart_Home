@@ -444,12 +444,12 @@ class CentralHub:
             # Ensure devices dict has easy access to cached state
             pass  # Already stored in remote_state_cache
         
-        # Print the update
-        timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-        logger.info(
-            f"[{timestamp}] {ip} / {component.name} / {param.name}[{row}][{col}]: "
-            f"{old_value} -> {value}"
-        )
+        # Verbose logging disabled - uncomment for debugging parameter updates
+        # timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+        # logger.info(
+        #     f"[{timestamp}] {ip} / {component.name} / {param.name}[{row}][{col}]: "
+        #     f"{old_value} -> {value}"
+        # )
     
     def get_state_snapshot(self) -> dict:
         """Get a complete snapshot of all device states."""

@@ -44,7 +44,7 @@ class ActionManagerComponent(Component):
     {
         "device": "192.168.1.100",  # IP, nickname, or "self"
         "param_id": 123,  # OR use component + param names
-        "component": "LightSensor",
+        "comp": "LightSensor",
         "param": "threshold",
         "row": 0,
         "col": 0,
@@ -157,6 +157,16 @@ class ActionManagerComponent(Component):
                 logger.warning("No actions in action_to_send")
                 return
             
+            # Log actions being queued
+            logger.info(f"⚡ ActionManager received {len(actions)} action(s):")
+            for i, action in enumerate(actions):
+                device = action.get('device', 'self')
+                comp = action.get('component') or action.get('comp', '?')
+                param_name = action.get('param', '?')
+                value = action.get('value', '?')
+                wait = action.get('wait_after_ms') or action.get('delay_ms', 0)
+                logger.info(f"   {i+1}. {device}:{comp}.{param_name} = {value} (wait {wait}ms)")
+            
             self._queue_actions(actions)
             
         except json.JSONDecodeError as e:
@@ -166,11 +176,21 @@ class ActionManagerComponent(Component):
             self.action_to_send.set_value(0, 0, "", notify=False)
     
     def _queue_actions(self, actions: List[Dict[str, Any]]):
-        """Queue a list of actions with their delays."""
+        """Queue a list of actions with their delays.
+        
+        delay_ms = wait BEFORE this action executes
+        wait_after_ms = wait AFTER this action (before next)
+        """
         current_time = time.time()
         cumulative_delay = 0.0
         
-        for action in actions:
+        logger.info(f"⏱️ QUEUEING {len(actions)} actions at base time {current_time}")
+        
+        for i, action in enumerate(actions):
+            # delay_ms means "wait before THIS action"
+            delay_before = action.get('delay_ms', 0) or 0
+            cumulative_delay += delay_before / 1000.0
+            
             # Calculate execution time
             execute_at = current_time + cumulative_delay
             
@@ -178,9 +198,11 @@ class ActionManagerComponent(Component):
             queued = QueuedAction(execute_at=execute_at, action=action)
             heapq.heappush(self._action_queue, queued)
             
-            # Accumulate delay for next action
-            wait_ms = action.get('wait_after_ms', 0)
-            cumulative_delay += wait_ms / 1000.0
+            logger.info(f"   Action {i+1}: execute_at={execute_at} (in {cumulative_delay:.3f}s)")
+            
+            # wait_after_ms means "wait after THIS action, before next"
+            wait_after = action.get('wait_after_ms', 0) or 0
+            cumulative_delay += wait_after / 1000.0
         
         # Update queue length
         self.queue_length.set_value(0, 0, len(self._action_queue))
@@ -207,6 +229,7 @@ class ActionManagerComponent(Component):
                     heapq.heappop(self._action_queue)
                     self.queue_length.set_value(0, 0, len(self._action_queue))
                     
+                    logger.info(f"⏰ EXECUTING action now={now}, was scheduled for={next_action.execute_at}")
                     await self._execute_action(next_action.action)
                 else:
                     # Wait until next action time or 100ms, whichever is shorter
@@ -256,9 +279,9 @@ class ActionManagerComponent(Component):
             logger.error("No hub reference, cannot execute local action")
             return
         
-        # Find the parameter
+        # Find the parameter (accept both 'component' and 'comp')
         param_id = action.get('param_id')
-        component_name = action.get('component')
+        component_name = action.get('component') or action.get('comp')
         param_name = action.get('param')
         
         param = None
@@ -270,7 +293,7 @@ class ActionManagerComponent(Component):
                 if param:
                     break
         elif component_name and param_name:
-            # Look up by component and param name
+            # Look up by component and param name (accept both 'component' and 'comp')
             comp = self.hub.local_components.get(component_name)
             if comp:
                 param = comp.get_param(param_name)
@@ -301,8 +324,8 @@ class ActionManagerComponent(Component):
         param_id = action.get('param_id')
         
         if param_id is None:
-            # Need to look up by component/param name
-            component_name = action.get('component')
+            # Need to look up by component/param name (accept both 'component' and 'comp')
+            component_name = action.get('component') or action.get('comp')
             param_name = action.get('param')
             
             if component_name and param_name:
@@ -324,7 +347,7 @@ class ActionManagerComponent(Component):
             return
         
         request = {
-            'type': 'SET',
+            'type': 'set_param',
             'param_id': param_id,
             'row': row,
             'col': col,
@@ -332,10 +355,12 @@ class ActionManagerComponent(Component):
         }
         
         try:
-            await ws.send(json.dumps(request))
-            logger.debug(f"Sent SET to {device_ip}: {request}")
+            request_json = json.dumps(request)
+            logger.info(f"📤 SENDING TO {device_ip}: {request_json}")
+            await ws.send(request_json)
+            logger.info(f"✅ SENT SUCCESSFULLY")
         except Exception as e:
-            logger.error(f"Failed to send action to {device_ip}: {e}")
+            logger.error(f"❌ FAILED to send action to {device_ip}: {e}")
     
     # Convenience methods for programmatic use
     

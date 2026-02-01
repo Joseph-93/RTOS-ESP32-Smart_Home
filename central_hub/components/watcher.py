@@ -41,14 +41,14 @@ class WatcherComponent(Component):
     {
         "main_light": {
             "device": "192.168.1.100",  # IP, nickname, or "self"
-            "component": "LightSensor",
+            "comp": "LightSensor",
             "param": "current_light_level",
             "row": 0,
             "col": 0
         },
         "motion_detected": {
             "device": "ESP32_Motion",
-            "component": "MotionSensor", 
+            "comp": "MotionSensor", 
             "param": "motion_state",
             "row": 0,
             "col": 0
@@ -416,7 +416,7 @@ class WatcherComponent(Component):
             return
         
         request = {
-            'type': 'SET',
+            'type': 'set_param',
             'param_id': param_id,
             'row': action.get('row', 0),
             'col': action.get('col', 0),
@@ -424,9 +424,11 @@ class WatcherComponent(Component):
         }
         
         try:
-            await ws.send(json.dumps(request))
+            request_json = json.dumps(request)
+            logger.info(f"📤 WATCHER SENDING TO {device_ip}: {request_json}")
+            await ws.send(request_json)
         except Exception as e:
-            logger.error(f"Failed to send action to {device_ip}: {e}")
+            logger.error(f"❌ Failed to send action to {device_ip}: {e}")
     
     # Convenience methods
     

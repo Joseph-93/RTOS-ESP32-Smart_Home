@@ -302,6 +302,100 @@ class WebServerComponent(Component):
             return {'components': components}
         
         # ====================================================================
+        # get_all_devices - List local hub + all remote ESP32 devices
+        # ====================================================================
+        elif msg_type == 'get_all_devices':
+            devices = []
+            
+            # Add local hub as "self"
+            local_components = []
+            for name, comp in self.hub.local_components.items():
+                local_components.append({
+                    'name': name,
+                    'id': hash(name) & 0xFFFFFFFF
+                })
+            devices.append({
+                'device': 'self',
+                'name': 'Central Hub (local)',
+                'connected': True,
+                'components': local_components
+            })
+            
+            # Add remote ESP32 devices
+            for ip, esp_device in self.hub.devices.items():
+                remote_components = []
+                for comp_name, comp in esp_device.components.items():
+                    remote_components.append({
+                        'name': comp_name,
+                        'id': comp.component_id if hasattr(comp, 'component_id') else hash(comp_name) & 0xFFFFFFFF
+                    })
+                devices.append({
+                    'device': ip,
+                    'name': esp_device.nickname if hasattr(esp_device, 'nickname') and esp_device.nickname else ip,
+                    'connected': esp_device.connected if hasattr(esp_device, 'connected') else True,
+                    'components': remote_components
+                })
+            
+            return {'devices': devices}
+        
+        # ====================================================================
+        # get_device_component_params - Get params for a component on any device
+        # ====================================================================
+        elif msg_type == 'get_device_component_params':
+            device = request.get('device', 'self')
+            comp_name = request.get('comp')
+            
+            if not comp_name:
+                return {'error': 'missing comp field'}
+            
+            if device == 'self':
+                # Local component
+                comp = self.hub.local_components.get(comp_name)
+                if not comp:
+                    return {'error': 'component not found'}
+                
+                params_list = []
+                for param in comp.parameters.values():
+                    param_info = {
+                        'name': param.name,
+                        'id': param.param_id,
+                        'type': param.param_type.value,
+                        'rows': param.rows,
+                        'cols': param.cols,
+                        'readOnly': param.read_only
+                    }
+                    if hasattr(param, 'min_val'):
+                        param_info['min'] = param.min_val
+                    if hasattr(param, 'max_val'):
+                        param_info['max'] = param.max_val
+                    params_list.append(param_info)
+                
+                return {'device': device, 'component': comp_name, 'params': params_list}
+            else:
+                # Remote ESP32 device
+                esp_device = self.hub.devices.get(device)
+                if not esp_device:
+                    return {'error': f'device not found: {device}'}
+                
+                comp = esp_device.components.get(comp_name)
+                if not comp:
+                    return {'error': f'component not found: {comp_name}'}
+                
+                params_list = []
+                for param_name, param in comp.parameters.items():
+                    param_info = {
+                        'name': param_name,
+                        'id': param.param_id if hasattr(param, 'param_id') else 0,
+                        'type': param.param_type if hasattr(param, 'param_type') else 'unknown',
+                        'rows': param.rows if hasattr(param, 'rows') else 1,
+                        'cols': param.cols if hasattr(param, 'cols') else 1,
+                        'readOnly': param.read_only if hasattr(param, 'read_only') else False
+                    }
+                    params_list.append(param_info)
+                
+                return {'device': device, 'component': comp_name, 'params': params_list}
+        
+        # ====================================================================
         # get_component_params - Get all parameters for a component
         # ====================================================================
         elif msg_type == 'get_component_params':

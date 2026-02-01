@@ -116,6 +116,7 @@ class NetworkActionsComponent(Component):
     def _on_trigger_change(self, param, row, col, new_value, old_value):
         """Handle trigger changes - fire off network action."""
         if new_value >= 0:
+            logger.info(f"📡 NetworkActions triggered: message #{new_value}")
             # Schedule the network action
             asyncio.create_task(self._execute_action(new_value))
             # Reset trigger to -1
@@ -147,8 +148,10 @@ class NetworkActionsComponent(Component):
         await_response = config.get('await_response', False)
         timeout_ms = config.get('timeout_ms', 5000)
         timeout_sec = timeout_ms / 1000.0
+        body = config.get('body', '')[:100]  # Truncate for logging
         
-        logger.info(f"Executing network action {index}: {protocol} to {host}:{port}")
+        logger.info(f"📡 NetworkActions sending #{index}: {protocol} -> {host}:{port}")
+        logger.info(f"   Body: {body}{'...' if len(config.get('body', '')) > 100 else ''}")
         
         try:
             response = None
