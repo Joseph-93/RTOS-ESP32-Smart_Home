@@ -132,66 +132,101 @@ async function loadActions(deviceName, componentName) {
     const container = document.getElementById('actions-container');
     
     try {
-        // Get count first via WebSocket
-        console.log('[JS] Getting action count...');
-        const countData = await esp32ws.getParamInfo(componentName, 'actions', -1);
-        const actionCount = countData.count || 0;
+        let html = '';
+        
+        // Load LEGACY actions (deprecated)
+        console.log('[JS] Getting legacy action count...');
+        const actionCountData = await esp32ws.getParamInfo(componentName, 'actions', -1);
+        const actionCount = actionCountData.count || 0;
         await new Promise(r => setTimeout(r, 100));
         
-        if (actionCount === 0) {
-            container.innerHTML = '<p class="empty-state">No actions available</p>';
-            return;
-        }
-        
-        // Fetch each action ONE AT A TIME
-        const actions = [];
-        for (let i = 0; i < actionCount; i++) {
-            console.log(`[JS] Fetching action ${i}...`);
-            const data = await esp32ws.getParamInfo(componentName, 'actions', i);
-            console.log(`[JS] Action ${i} info:`, data);
-            if (data.name) {
-                // Also fetch the current argument
-                const argData = await esp32ws.getParam(componentName, 'actions', i, 0, 0);
-                console.log(`[JS] Action ${i} (${data.name}) argument data:`, argData);
-                console.log(`[JS] Action ${i} typeof argData:`, typeof argData);
-                
-                // The WebSocket returns the JSON string directly
-                let argument = '';
-                if (typeof argData === 'string') {
-                    // argData IS the JSON string - use it directly
-                    argument = argData;
-                } else if (typeof argData === 'object' && argData.type) {
-                    // Fallback: if it's already parsed, stringify it
-                    argument = JSON.stringify(argData, null, 2);
+        if (actionCount > 0) {
+            const actions = [];
+            for (let i = 0; i < actionCount; i++) {
+                console.log(`[JS] Fetching legacy action ${i}...`);
+                const data = await esp32ws.getParamInfo(componentName, 'actions', i);
+                if (data.name) {
+                    const argData = await esp32ws.getParam(componentName, 'actions', i, 0, 0);
+                    let argument = '';
+                    if (typeof argData === 'string') {
+                        argument = argData;
+                    } else if (typeof argData === 'object' && argData.type) {
+                        argument = JSON.stringify(argData, null, 2);
+                    }
+                    actions.push({
+                        index: i,
+                        name: data.name,
+                        argument: argument,
+                        type: 'action'
+                    });
                 }
-                
-                console.log(`[JS] Final argument for action ${i} (length ${argument.length}):`, argument);
-                actions.push({
-                    index: i,
-                    name: data.name,
-                    argument: argument
-                });
+                await new Promise(r => setTimeout(r, 100));
             }
-            await new Promise(r => setTimeout(r, 100));
+            
+            if (actions.length > 0) {
+                html += '<div class="param-group">';
+                html += '<h4>📝 Legacy Actions (Deprecated)</h4>';
+                for (const action of actions) {
+                    const inputId = `action_arg_${componentName}_${action.index}`;
+                    html += '<div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">';
+                    html += `<button class="action-btn" onclick="invokeAction('${deviceName}', '${componentName}', '${action.name}')">⚡ ${action.name}</button>`;
+                    const escapedArg = escapeHtml(action.argument);
+                    html += `<textarea id="${inputId}" placeholder="Enter argument for ${action.name}" style="flex: 1; min-height: 100px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #222; padding: 8px; border-radius: 4px; font-family: monospace; resize: vertical;">${escapedArg}</textarea>`;
+                    html += `<button class="save-btn" onclick="saveActionArgument('${deviceName}', '${componentName}', '${action.name}', ${action.index}, '${inputId}')">💾 Save</button>`;
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
         }
         
-        let html = '<div class="param-group">';
-        html += '<h4>📝 Action Arguments</h4>';
-        console.log(`[JS] Building HTML for ${actions.length} actions`);
-        for (const action of actions) {
-            console.log(`[JS] Building HTML for action ${action.name}, argument length: ${action.argument.length}`);
-            const inputId = `action_arg_${componentName}_${action.index}`;
-            html += '<div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">';
-            html += `<button class="action-btn" onclick="invokeAction('${deviceName}', '${componentName}', '${action.name}')">⚡ ${action.name}</button>`;
-            const escapedArg = escapeHtml(action.argument);
-            console.log(`[JS] Escaped argument for ${action.name}:`, escapedArg);
-            html += `<textarea id="${inputId}" placeholder="Enter argument for ${action.name}" style="flex: 1; min-height: 100px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #222; padding: 8px; border-radius: 4px; font-family: monospace; resize: vertical;">${escapedArg}</textarea>`;
-            html += `<button class="save-btn" onclick="saveActionArgument('${deviceName}', '${componentName}', '${action.name}', ${action.index}, '${inputId}')">💾 Save</button>`;
-            html += '</div>';
+        // Load TRIGGER parameters (new system)
+        console.log('[JS] Getting trigger count...');
+        const triggerCountData = await esp32ws.getParamInfo(componentName, 'trigger', -1);
+        const triggerCount = triggerCountData.count || 0;
+        await new Promise(r => setTimeout(r, 100));
+        
+        if (triggerCount > 0) {
+            const triggers = [];
+            for (let i = 0; i < triggerCount; i++) {
+                console.log(`[JS] Fetching trigger ${i}...`);
+                const data = await esp32ws.getParamInfo(componentName, 'trigger', i);
+                if (data.name) {
+                    const argData = await esp32ws.getParam(componentName, 'trigger', i, 0, 0);
+                    let argument = '';
+                    if (typeof argData === 'string') {
+                        argument = argData;
+                    }
+                    triggers.push({
+                        index: i,
+                        name: data.name,
+                        argument: argument,
+                        type: 'trigger'
+                    });
+                }
+                await new Promise(r => setTimeout(r, 100));
+            }
+            
+            if (triggers.length > 0) {
+                html += '<div class="param-group">';
+                html += '<h4>⚡ Triggers</h4>';
+                for (const trigger of triggers) {
+                    const inputId = `trigger_arg_${componentName}_${trigger.index}`;
+                    html += '<div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">';
+                    html += `<button class="action-btn" onclick="invokeTrigger('${deviceName}', '${componentName}', '${trigger.name}', ${trigger.index})">⚡ ${trigger.name}</button>`;
+                    const escapedArg = escapeHtml(trigger.argument);
+                    html += `<textarea id="${inputId}" placeholder="Enter argument for ${trigger.name}" style="flex: 1; min-height: 100px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #222; padding: 8px; border-radius: 4px; font-family: monospace; resize: vertical;">${escapedArg}</textarea>`;
+                    html += `<button class="save-btn" onclick="saveTriggerArgument('${deviceName}', '${componentName}', '${trigger.name}', ${trigger.index}, '${inputId}')">💾 Store</button>`;
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
         }
-        html += '</div>';
+        
+        if (!html) {
+            html = '<p class="empty-state">No actions or triggers available</p>';
+        }
+        
         console.log(`[JS] Final HTML length: ${html.length}`);
-        
         container.innerHTML = html;
         
     } catch (error) {
@@ -451,6 +486,45 @@ async function saveActionArgument(deviceName, comp, actionName, actionIndex, inp
     } catch (error) {
         console.error('Error setting action argument:', error);
         notifications.error('Error updating action argument');
+    }
+}
+
+async function invokeTrigger(deviceName, comp, triggerName, triggerIndex) {
+    try {
+        // Get the current value from the textarea
+        const inputId = `trigger_arg_${comp}_${triggerIndex}`;
+        const value = document.getElementById(inputId).value;
+        
+        // Setting a trigger parameter's value will invoke its callback
+        const success = await esp32ws.setParam(comp, 'trigger', triggerIndex, 0, 0, value);
+        
+        if (success) {
+            notifications.success(`Trigger "${triggerName}" activated!`);
+        } else {
+            notifications.error(`Trigger failed`);
+        }
+    } catch (error) {
+        console.error('Error invoking trigger:', error);
+        notifications.error(`Error: ${error.message}`);
+    }
+}
+
+async function saveTriggerArgument(deviceName, comp, triggerName, triggerIndex, inputId) {
+    try {
+        const value = document.getElementById(inputId).value;
+        
+        // Use set_param with param_type="trigger" - this stores AND triggers
+        const success = await esp32ws.setParam(comp, 'trigger', triggerIndex, 0, 0, value);
+        
+        if (success) {
+            console.log('Trigger argument stored and executed');
+            notifications.success(`Trigger "${triggerName}" stored & executed`);
+        } else {
+            notifications.error('Failed to store trigger argument');
+        }
+    } catch (error) {
+        console.error('Error setting trigger argument:', error);
+        notifications.error('Error storing trigger argument');
     }
 }
 

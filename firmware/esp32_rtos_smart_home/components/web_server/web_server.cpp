@@ -150,20 +150,21 @@ void WebServerComponent::setupParameterBroadcasting() {
         Component* comp = component_graph->getComponent(comp_name);
         if (!comp) continue;
         
+        // Get component name pointer (stable, doesn't need copying)
+        const char* comp_name_ptr = comp->getName().c_str();
+        
         // Set up int params
         const auto& int_params = comp->getIntParams();
         for (size_t idx = 0; idx < int_params.size(); idx++) {
             auto* param = int_params[idx].get();
-            // Wrap existing onChange callback
-            auto existing_cb = param->getOnChange();  // Copy the function
-            param->setOnChange([this, comp_name, idx, existing_cb](size_t row, size_t col, int val) {
-                // Call existing callback if it exists
-                if (existing_cb) {
-                    existing_cb(row, col, val);
-                }
+            // Skip read-only params and params with existing callbacks
+            if (param->isReadOnly() || param->hasCallback()) {
+                continue;
+            }
+            param->setOnChange([this, comp_name_ptr, idx](size_t row, size_t col, int val) {
                 // Broadcast update
                 cJSON* value = cJSON_CreateNumber(val);
-                broadcastParameterUpdate(comp_name.c_str(), "int", idx, row, col, value);
+                broadcastParameterUpdate(comp_name_ptr, "int", idx, row, col, value);
                 cJSON_Delete(value);
             });
         }
@@ -172,13 +173,12 @@ void WebServerComponent::setupParameterBroadcasting() {
         const auto& float_params = comp->getFloatParams();
         for (size_t idx = 0; idx < float_params.size(); idx++) {
             auto* param = float_params[idx].get();
-            auto existing_cb = param->getOnChange();  // Copy the function
-            param->setOnChange([this, comp_name, idx, existing_cb](size_t row, size_t col, float val) {
-                if (existing_cb) {
-                    existing_cb(row, col, val);
-                }
+            if (param->isReadOnly() || param->hasCallback()) {
+                continue;
+            }
+            param->setOnChange([this, comp_name_ptr, idx](size_t row, size_t col, float val) {
                 cJSON* value = cJSON_CreateNumber(val);
-                broadcastParameterUpdate(comp_name.c_str(), "float", idx, row, col, value);
+                broadcastParameterUpdate(comp_name_ptr, "float", idx, row, col, value);
                 cJSON_Delete(value);
             });
         }
@@ -187,13 +187,12 @@ void WebServerComponent::setupParameterBroadcasting() {
         const auto& bool_params = comp->getBoolParams();
         for (size_t idx = 0; idx < bool_params.size(); idx++) {
             auto* param = bool_params[idx].get();
-            auto existing_cb = param->getOnChange();  // Copy the function
-            param->setOnChange([this, comp_name, idx, existing_cb](size_t row, size_t col, bool val) {
-                if (existing_cb) {
-                    existing_cb(row, col, val);
-                }
+            if (param->isReadOnly() || param->hasCallback()) {
+                continue;
+            }
+            param->setOnChange([this, comp_name_ptr, idx](size_t row, size_t col, bool val) {
                 cJSON* value = cJSON_CreateBool(val);
-                broadcastParameterUpdate(comp_name.c_str(), "bool", idx, row, col, value);
+                broadcastParameterUpdate(comp_name_ptr, "bool", idx, row, col, value);
                 cJSON_Delete(value);
             });
         }
@@ -202,16 +201,18 @@ void WebServerComponent::setupParameterBroadcasting() {
         const auto& str_params = comp->getStringParams();
         for (size_t idx = 0; idx < str_params.size(); idx++) {
             auto* param = str_params[idx].get();
-            auto existing_cb = param->getOnChange();  // Copy the function
-            param->setOnChange([this, comp_name, idx, existing_cb](size_t row, size_t col, const std::string& val) {
-                if (existing_cb) {
-                    existing_cb(row, col, val);
-                }
+            if (param->isReadOnly() || param->hasCallback()) {
+                continue;
+            }
+            param->setOnChange([this, comp_name_ptr, idx](size_t row, size_t col, const std::string& val) {
                 cJSON* value = cJSON_CreateString(val.c_str());
-                broadcastParameterUpdate(comp_name.c_str(), "str", idx, row, col, value);
+                broadcastParameterUpdate(comp_name_ptr, "str", idx, row, col, value);
                 cJSON_Delete(value);
             });
         }
+        
+        // Note: TriggerParams are NOT broadcast since they always invoke callbacks immediately
+        // and don't store state that needs broadcasting
     }
     
     ESP_LOGI(TAG, "Parameter broadcasting set up for %d components", comp_names.size());

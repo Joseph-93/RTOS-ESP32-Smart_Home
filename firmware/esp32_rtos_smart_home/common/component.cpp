@@ -41,12 +41,14 @@ const std::vector<std::unique_ptr<IntParameter>>& Component::getIntParams() cons
 const std::vector<std::unique_ptr<FloatParameter>>& Component::getFloatParams() const { return floatParams; }
 const std::vector<std::unique_ptr<BoolParameter>>& Component::getBoolParams() const { return boolParams; }
 const std::vector<std::unique_ptr<StringParameter>>& Component::getStringParams() const { return stringParams; }
+const std::vector<std::unique_ptr<TriggerParameter>>& Component::getTriggerParams() const { return triggerParams; }
 
 // Non-const getters
 std::vector<std::unique_ptr<IntParameter>>& Component::getIntParams() { return intParams; }
 std::vector<std::unique_ptr<FloatParameter>>& Component::getFloatParams() { return floatParams; }
 std::vector<std::unique_ptr<BoolParameter>>& Component::getBoolParams() { return boolParams; }
 std::vector<std::unique_ptr<StringParameter>>& Component::getStringParams() { return stringParams; }
+std::vector<std::unique_ptr<TriggerParameter>>& Component::getTriggerParams() { return triggerParams; }
 
 // Get methods
 IntParameter* Component::getIntParam(const std::string &paramName) {
@@ -193,6 +195,42 @@ StringParameter* Component::getStringParam(int paramId) {
     return stringParams[paramId].get();
 }
 
+TriggerParameter* Component::getTriggerParam(const std::string &paramName) {
+#ifdef DEBUG
+    ESP_LOGI("Component", "[ENTER] getTriggerParam() - paramName: %s", paramName.c_str());
+#endif
+    for (auto &p : triggerParams) {
+        if (p->getName() == paramName) {
+#ifdef DEBUG
+            ESP_LOGI("Component", "[EXIT] getTriggerParam() - found");
+#endif
+            return p.get();
+        }
+    }
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] getTriggerParam() - not found");
+#endif
+    return nullptr;
+}
+
+TriggerParameter* Component::getTriggerParam(int paramId) {
+#ifdef DEBUG
+    ESP_LOGI("Component", "[ENTER] getTriggerParam() - paramId: %d", paramId);
+#endif
+    if (paramId < 0 || paramId >= static_cast<int>(triggerParams.size())) {
+        ESP_LOGE("Component", "Trigger parameter ID %d out of range (max: %zu) in component '%s'", 
+                 paramId, triggerParams.size(), this->name.c_str());
+#ifdef DEBUG
+        ESP_LOGI("Component", "[EXIT] getTriggerParam() - out of range");
+#endif
+        return nullptr;
+    }
+#ifdef DEBUG
+    ESP_LOGI("Component", "[EXIT] getTriggerParam() - found");
+#endif
+    return triggerParams[paramId].get();
+}
+
 // Protected add methods
 void Component::addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val, int max_val, int default_val, bool readOnly) {
 #ifdef DEBUG
@@ -235,227 +273,22 @@ void Component::addStringParam(const std::string &paramName, size_t rows, size_t
 #endif
 }
 
-// Action management
-
-const std::vector<ComponentAction>& Component::getActions() const {
-    return actions;
-}
-
-const std::vector<std::string> Component::getActionNames() const {
-    return actionNames;  // Return the separate names vector, not touching ComponentAction objects
-}
-
-void Component::addAction(const std::string& name, const std::string& description,
-                         std::function<bool(Component*, const std::string&)> callback) {
+void Component::addTriggerParam(const std::string &paramName, size_t rows, size_t cols,
+                               const std::string &default_val,
+                               std::function<void(Component*, size_t, size_t, const std::string&)> callback,
+                               bool readOnly) {
 #ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] addAction() - name: %s, desc: %s", name.c_str(), description.c_str());
+    ESP_LOGI("Component", "[ENTER] addTriggerParam() - paramName: %s", paramName.c_str());
 #endif
-    actions.emplace_back(name, description, callback);
-    actionNames.push_back(name);  // Store name separately to avoid std::function corruption
+    auto trigger = std::make_unique<TriggerParameter>(paramName, rows, cols, default_val, callback, readOnly);
+    trigger->setOwner(this);
+    triggerParams.push_back(std::move(trigger));
 #ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] addAction() - name: %s, desc: %s", name.c_str(), description.c_str());
+    ESP_LOGI("Component", "[EXIT] addTriggerParam() - paramName: %s", paramName.c_str());
 #endif
 }
 
-const ComponentAction& Component::getAction(int actionId) const {
-    if (actionId < 0 || actionId >= static_cast<int>(actions.size())) {
-        ESP_LOGE("Component", "Action ID %d out of range (max: %zu) in component '%s'", 
-                 actionId, actions.size(), this->name.c_str());
-        static ComponentAction dummy("", "", nullptr);
-        return dummy;
-    }
-    return actions[actionId];
-}
-
-const ComponentAction& Component::getAction(const std::string &actionName) const {
-    for (const auto& action : actions) {
-        if (action.name == actionName) {
-            return action;
-        }
-    }
-    ESP_LOGE("Component", "Action '%s' not found in component '%s'", 
-             actionName.c_str(), this->name.c_str());
-    static ComponentAction dummy("", "", nullptr);
-    return dummy;
-}
-
-const std::string Component::getActionName(int actionId) const {
-    if (actionId < 0 || actionId >= static_cast<int>(actionNames.size())) {
-        ESP_LOGE("Component", "Action ID %d out of range (max: %zu) in component '%s'", 
-                 actionId, actionNames.size(), this->name.c_str());
-        return "";
-    }
-    return actionNames[actionId];
-}
-
-const std::string Component::getActionName(const std::string &actionName) const {
-    // This returns the name if it exists, empty string otherwise
-    for (const auto& name : actionNames) {
-        if (name == actionName) {
-            return name;
-        }
-    }
-    return "";
-}
-
-const std::vector<std::string> Component::getActionDescriptions() const {
-    std::vector<std::string> descriptions;
-    descriptions.reserve(actions.size());
-    for (const auto& action : actions) {
-        descriptions.push_back(action.description);
-    }
-    return descriptions;
-}
-
-const std::string Component::getActionDescription(int actionId) const {
-    if (actionId < 0 || actionId >= static_cast<int>(actions.size())) {
-        ESP_LOGE("Component", "Action ID %d out of range (max: %zu) in component '%s'", 
-                 actionId, actions.size(), this->name.c_str());
-        return "";
-    }
-    return actions[actionId].description;
-}
-
-const std::string Component::getActionDescription(const std::string &actionName) const {
-    for (const auto& action : actions) {
-        if (action.name == actionName) {
-            return action.description;
-        }
-    }
-    ESP_LOGE("Component", "Action '%s' not found in component '%s'", 
-             actionName.c_str(), this->name.c_str());
-    return "";
-}
-
-void Component::invokeAction(size_t actionIndex) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] invokeAction() - actionIndex: %zu", actionIndex);
-#endif
-    if (actionIndex >= actions.size()) {
-        ESP_LOGE("Component", "Action index %zu out of range (max: %zu) in component '%s'", 
-                 actionIndex, actions.size(), this->name.c_str());
-#ifdef DEBUG
-        ESP_LOGI("Component", "[EXIT] invokeAction() - index out of range");
-#endif
-        return;
-    }
-    
-    auto& action = actions[actionIndex];
-    ESP_LOGI("Component", "Invoking action[%zu] '%s' on component '%s' with arg: '%s'", 
-             actionIndex, action.name.c_str(), this->name.c_str(), action.argument.c_str());
-    bool success = action.callback(this, action.argument);
-    ESP_LOGI("Component", "Action[%zu] '%s' %s", actionIndex, action.name.c_str(), 
-             success ? "succeeded" : "failed");
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] invokeAction() - success");
-#endif
-}
-
-void Component::invokeAction(const std::string &actionName) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] invokeAction() - actionName: %s", actionName.c_str());
-#endif
-    for (size_t i = 0; i < actions.size(); ++i) {
-        if (actions[i].name == actionName) {
-            invokeAction(i);
-#ifdef DEBUG
-            ESP_LOGI("Component", "[EXIT] invokeAction() - found and invoked");
-#endif
-            return;
-        }
-    }
-    ESP_LOGE("Component", "Action '%s' not found in component '%s'", 
-             actionName.c_str(), this->name.c_str());
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] invokeAction() - not found");
-#endif
-}
-
-void Component::invokeAction(size_t actionIndex, const std::string& arg) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] invokeAction() - actionIndex: %zu, arg: %s", actionIndex, arg.c_str());
-#endif
-    if (actionIndex >= actions.size()) {
-        ESP_LOGE("Component", "Action index %zu out of range (max: %zu) in component '%s'", 
-                 actionIndex, actions.size(), this->name.c_str());
-#ifdef DEBUG
-        ESP_LOGI("Component", "[EXIT] invokeAction() - index out of range");
-#endif
-        return;
-    }
-    
-    auto& action = actions[actionIndex];
-    ESP_LOGI("Component", "Invoking action[%zu] '%s' on component '%s' with temporary arg: '%s'", 
-             actionIndex, action.name.c_str(), this->name.c_str(), arg.c_str());
-    bool success = action.callback(this, arg);
-    ESP_LOGI("Component", "Action[%zu] '%s' %s", actionIndex, action.name.c_str(), 
-             success ? "succeeded" : "failed");
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] invokeAction() - success");
-#endif
-}
-
-void Component::invokeAction(const std::string &actionName, const std::string& arg) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] invokeAction() - actionName: %s, arg: %s", actionName.c_str(), arg.c_str());
-#endif
-    for (size_t i = 0; i < actions.size(); ++i) {
-        if (actions[i].name == actionName) {
-            invokeAction(i, arg);
-#ifdef DEBUG
-            ESP_LOGI("Component", "[EXIT] invokeAction() - found and invoked");
-#endif
-            return;
-        }
-    }
-    ESP_LOGE("Component", "Action '%s' not found in component '%s'", 
-             actionName.c_str(), this->name.c_str());
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] invokeAction() - not found");
-#endif
-}
-
-void Component::setActionArgument(const std::string &actionName, const std::string& arg) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] setActionArgument() - actionName: %s, arg: %s", actionName.c_str(), arg.c_str());
-#endif
-    for (size_t i = 0; i < actions.size(); ++i) {
-        if (actions[i].name == actionName) {
-            actions[i].argument = arg;
-            ESP_LOGI("Component", "Set argument for action '%s' to: '%s'", actionName.c_str(), arg.c_str());
-#ifdef DEBUG
-            ESP_LOGI("Component", "[EXIT] setActionArgument() - success");
-#endif
-            return;
-        }
-    }
-    ESP_LOGE("Component", "Action '%s' not found in component '%s'", 
-             actionName.c_str(), this->name.c_str());
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] setActionArgument() - not found");
-#endif
-}
-
-void Component::setActionArgument(size_t actionIndex, const std::string& arg) {
-#ifdef DEBUG
-    ESP_LOGI("Component", "[ENTER] setActionArgument() - actionIndex: %zu, arg: %s", actionIndex, arg.c_str());
-#endif
-    if (actionIndex >= actions.size()) {
-        ESP_LOGE("Component", "Action index %zu out of range (max: %zu) in component '%s'", 
-                 actionIndex, actions.size(), this->name.c_str());
-#ifdef DEBUG
-        ESP_LOGI("Component", "[EXIT] setActionArgument() - index out of range");
-#endif
-        return;
-    }
-    
-    actions[actionIndex].argument = arg;
-    ESP_LOGI("Component", "Set argument for action[%zu] '%s' to: '%s'", 
-             actionIndex, actions[actionIndex].name.c_str(), arg.c_str());
-#ifdef DEBUG
-    ESP_LOGI("Component", "[EXIT] setActionArgument() - success");
-#endif
-}
+// Action management section removed - replaced by TriggerParameter system
 
 size_t Component::getApproximateMemoryUsage() const {
     size_t total = 0;
@@ -493,11 +326,12 @@ size_t Component::getApproximateMemoryUsage() const {
         total += param->getRows() * param->getCols() * 32;  // Assume avg 32 bytes per string
     }
     
-    // Actions
-    total += actions.capacity() * sizeof(ComponentAction);
-    for (const auto& action : actions) {
-        total += action.name.capacity();
-        total += action.description.capacity();
+    // Trigger parameters (similar to string parameters)
+    for (const auto& param : triggerParams) {
+        total += sizeof(TriggerParameter);
+        total += param->getName().capacity();
+        // Estimate average string size (rough)
+        total += param->getRows() * param->getCols() * 32;  // Assume avg 32 bytes per string
     }
     
     return total;

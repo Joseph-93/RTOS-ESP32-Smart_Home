@@ -502,67 +502,81 @@ bool NetworkActionsComponent::getWsMessage(const std::string& name, WsMessage& o
     return parseWsMessageAt(idx, out);
 }
 
-// Register actions for GUI
+// Register triggers for GUI
 
 void NetworkActionsComponent::registerActions() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] registerActions");
 #endif
-    // Register TCP actions - parse each message to get name/host/port for description
+    size_t total_triggers = 0;
+    
+    // Register TCP triggers - parse each message to get name/host/port for description
     size_t tcp_count = getTcpMessageCount();
     for (size_t i = 0; i < tcp_count; i++) {
         TcpMessage msg;
         if (parseTcpMessageAt(i, msg)) {
-            std::string action_name = "Send TCP: " + msg.name;
-            std::string action_desc = "Send TCP message to " + msg.host + ":" + std::to_string(msg.port);
-            addAction(
-                action_name,
-                action_desc,
-                [i](Component* comp, const std::string& arg) -> bool {
+            std::string trigger_name = "Send TCP: " + msg.name;
+            
+            // Add trigger parameter (no separate description to save memory)
+            addTriggerParam(
+                trigger_name,
+                1, 1,
+                "",  // default empty value
+                [i](Component* comp, size_t row, size_t col, const std::string& arg) {
                     auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
-                    return net_comp->sendTcp(i);
-                }
+                    net_comp->sendTcp(i);
+                },
+                false  // not read-only
             );
+            total_triggers++;
         }
     }
     
-    // Register HTTP actions
+    // Register HTTP triggers
     size_t http_count = getHttpMessageCount();
     for (size_t i = 0; i < http_count; i++) {
         HttpMessage msg;
         if (parseHttpMessageAt(i, msg)) {
-            std::string action_name = "Send HTTP: " + msg.name;
-            std::string action_desc = "Send HTTP " + msg.method + " to " + msg.url;
-            addAction(
-                action_name,
-                action_desc,
-                [i](Component* comp, const std::string& arg) -> bool {
+            std::string trigger_name = "Send HTTP: " + msg.name;
+            
+            // Add trigger parameter (no separate description to save memory)
+            addTriggerParam(
+                trigger_name,
+                1, 1,
+                "",  // default empty value
+                [i](Component* comp, size_t row, size_t col, const std::string& arg) {
                     auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
-                    return net_comp->sendHttp(i);
-                }
+                    net_comp->sendHttp(i);
+                },
+                false  // not read-only
             );
+            total_triggers++;
         }
     }
     
-    // Register WebSocket actions
+    // Register WebSocket triggers
     size_t ws_count = getWsMessageCount();
     for (size_t i = 0; i < ws_count; i++) {
         WsMessage msg;
         if (parseWsMessageAt(i, msg)) {
-            std::string action_name = "Send WS: " + msg.name;
-            std::string action_desc = "Send WebSocket message to " + msg.url;
-            addAction(
-                action_name,
-                action_desc,
-                [i](Component* comp, const std::string& arg) -> bool {
+            std::string trigger_name = "Send WS: " + msg.name;
+            
+            // Add trigger parameter (no separate description to save memory)
+            addTriggerParam(
+                trigger_name,
+                1, 1,
+                "",  // default empty value
+                [i](Component* comp, size_t row, size_t col, const std::string& arg) {
                     auto* net_comp = static_cast<NetworkActionsComponent*>(comp);
-                    return net_comp->sendWs(i);
-                }
+                    net_comp->sendWs(i);
+                },
+                false  // not read-only
             );
+            total_triggers++;
         }
     }
     
-    ESP_LOGI(TAG, "Registered %zu actions", actions.size());
+    ESP_LOGI(TAG, "Registered %zu triggers", total_triggers);
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] registerActions");
 #endif

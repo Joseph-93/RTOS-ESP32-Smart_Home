@@ -144,46 +144,47 @@ void GUIComponent::onInitialize() {
         });
     }
     
-    // Register button actions - argument will contain the JSON message to execute
+    // Register button triggers - value contains the JSON message to execute
     for (int i = 0; i < NUM_BUTTONS; i++) {
-        std::string action_name = "button_" + std::to_string(i);
-        std::string action_desc = "Press Button " + std::to_string(i);
-        addAction(
-            action_name,
-            action_desc,
-            [i](Component* comp, const std::string& arg) -> bool {
+        std::string trigger_name = "button_" + std::to_string(i);
+        
+        // Add trigger parameter (no separate description to save memory)
+        addTriggerParam(
+            trigger_name,
+            1, 1,
+            "",  // default empty value
+            [i](Component* comp, size_t row, size_t col, const std::string& arg) {
                 GUIComponent* gui = static_cast<GUIComponent*>(comp);
-                ESP_LOGI("GUI", "Button action %d invoked with arg: %s", i, arg.c_str());
+                ESP_LOGI("GUI", "Button trigger %d invoked with arg: %s", i, arg.c_str());
                 
                 // If argument is empty, do nothing
                 if (arg.empty()) {
                     ESP_LOGI("GUI", "No action configured for button %d", i);
-                    return true;
+                    return;
                 }
                 
                 // Execute the JSON message from the argument
-                ESP_LOGI("GUI", "Executing button %d action: %s", i, arg.c_str());
+                ESP_LOGI("GUI", "Executing button %d trigger: %s", i, arg.c_str());
                 cJSON* response = gui->component_graph->executeMessage(arg.c_str());
                 if (response) {
                     char* response_str = cJSON_PrintUnformatted(response);
                     if (response_str) {
-                        ESP_LOGI("GUI", "Button action response: %s", response_str);
+                        ESP_LOGI("GUI", "Button trigger response: %s", response_str);
                         free(response_str);
                     }
                     cJSON_Delete(response);
                 } else {
-                    ESP_LOGW("GUI", "Button action returned no response");
+                    ESP_LOGW("GUI", "Button trigger returned no response");
                 }
 
                 // Send notification
                 if (gui->component_graph) {
                     char msg[64];
-                    snprintf(msg, sizeof(msg), "Button %d action triggered", i);
+                    snprintf(msg, sizeof(msg), "Button %d trigger activated", i);
                     gui->component_graph->sendNotification(msg, false, 3, 2000);
                 }
-                
-                return true;
-            }
+            },
+            false  // not read-only
         );
     }
 
@@ -746,10 +747,15 @@ void GUIComponent::simple_button_event_cb(lv_event_t* e) {
     
     // Get button index from user data
     int button_index = (int)(intptr_t)lv_event_get_user_data(e);
-    std::string action_name = "button_" + std::to_string(button_index);
+    std::string trigger_name = "button_" + std::to_string(button_index);
     
-    // Invoke the corresponding action (which will send its own notification)
-    g_gui_component->invokeAction(action_name);
+    // Trigger the button by setting its value (which will invoke callback)
+    TriggerParameter* trigger = g_gui_component->getTriggerParam(trigger_name);
+    if (trigger) {
+        // Get the current stored value and trigger with it
+        std::string trigger_value = trigger->getValue(0, 0);
+        trigger->setValue(0, 0, trigger_value);
+    }
     
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] simple_button_event_cb");

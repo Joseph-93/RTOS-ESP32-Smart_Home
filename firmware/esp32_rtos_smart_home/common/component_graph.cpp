@@ -285,13 +285,16 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
                 cJSON_AddNumberToObject(response, "cols", list[idx]->getCols());
                 cJSON_AddBoolToObject(response, "readOnly", list[idx]->isReadOnly());
             }
-        } else if (strcmp(param_type, "actions") == 0) {
-            std::vector<std::string> actionNames = comp->getActionNames();
+        } else if (strcmp(param_type, "trigger") == 0) {
+            const auto& list = comp->getTriggerParams();
             if (idx == -1) {
-                cJSON_AddNumberToObject(response, "count", actionNames.size());
-            } else if (idx >= 0 && idx < actionNames.size()) {
-                cJSON_AddStringToObject(response, "name", actionNames[idx].c_str());
+                cJSON_AddNumberToObject(response, "count", list.size());
+            } else if (idx >= 0 && idx < list.size()) {
+                cJSON_AddStringToObject(response, "name", list[idx]->getName().c_str());
                 cJSON_AddNumberToObject(response, "idx", idx);
+                cJSON_AddNumberToObject(response, "rows", list[idx]->getRows());
+                cJSON_AddNumberToObject(response, "cols", list[idx]->getCols());
+                cJSON_AddBoolToObject(response, "readOnly", list[idx]->isReadOnly());
             }
         }
         
@@ -349,11 +352,11 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
                 std::string value = list[idx]->getValue(row, col);
                 cJSON_AddStringToObject(response, "value", value.c_str());
             }
-        } else if (strcmp(param_type, "actions") == 0) {
-            const auto& actions = comp->getActions();
-            if (idx < actions.size()) {
-                // For actions, return the stored argument (row/col ignored)
-                cJSON_AddStringToObject(response, "value", actions[idx].argument.c_str());
+        } else if (strcmp(param_type, "trigger") == 0) {
+            const auto& list = comp->getTriggerParams();
+            if (idx < list.size()) {
+                std::string value = list[idx]->getValue(row, col);
+                cJSON_AddStringToObject(response, "value", value.c_str());
             }
         }
         
@@ -473,12 +476,16 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
                     success = true;
                 }
             }
-        } else if (strcmp(param_type, "actions") == 0) {
-            const auto& actions = comp->getActions();
-            if (idx < actions.size()) {
-                if (cJSON_IsString(value_item)) {
-                    comp->setActionArgument(idx, value_item->valuestring);
-                    ESP_LOGI(TAG, "Set action argument [%d] = %s", idx, value_item->valuestring);
+        } else if (strcmp(param_type, "trigger") == 0) {
+            const auto& list = comp->getTriggerParams();
+            if (idx < list.size()) {
+                if (list[idx]->isReadOnly()) {
+                    ESP_LOGW(TAG, "Rejecting set on read-only trigger parameter [%d]", idx);
+                    error_msg = "parameter is read-only";
+                } else if (cJSON_IsString(value_item)) {
+                    // Setting a trigger parameter's value will invoke its callback
+                    list[idx]->setValue(row, col, value_item->valuestring);
+                    ESP_LOGI(TAG, "Set trigger parameter [%d][%d,%d] = %s", idx, row, col, value_item->valuestring);
                     success = true;
                 }
             }
@@ -497,6 +504,8 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
         return response;
         
     } else if (strcmp(msg_type, "invoke_action") == 0) {
+        // DEPRECATED: Actions replaced by TriggerParameter
+        // For backward compatibility, map to trigger parameter
         cJSON* comp_item = cJSON_GetObjectItem(request, "comp");
         cJSON* action_item = cJSON_GetObjectItem(request, "action");
         cJSON* arg_item = cJSON_GetObjectItem(request, "arg");
@@ -510,6 +519,7 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
         
         const char* comp_name = comp_item->valuestring;
         const char* action_name = action_item->valuestring;
+        const char* arg = arg_item && cJSON_IsString(arg_item) ? arg_item->valuestring : "";
         
         Component* comp = getComponent(comp_name);
         if (!comp) {
@@ -519,28 +529,23 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
             return error;
         }
         
-        const std::vector<ComponentAction>& actions = comp->getActions();
-        for (size_t i = 0; i < actions.size(); i++) {
-            if (actions[i].name == action_name) {
-                // If arg provided in message, use it as temporary argument
-                // Otherwise use the action's stored argument
-                if (arg_item && cJSON_IsString(arg_item)) {
-                    comp->invokeAction(i, arg_item->valuestring);
-                } else {
-                    comp->invokeAction(i);
-                }
-                cJSON* response = cJSON_CreateObject();
-                cJSON_AddBoolToObject(response, "success", true);
-                return response;
-            }
+        // Try to find trigger parameter with this name
+        TriggerParameter* trigger = comp->getTriggerParam(action_name);
+        if (trigger) {
+            trigger->setValue(0, 0, arg);
+            cJSON* response = cJSON_CreateObject();
+            cJSON_AddBoolToObject(response, "success", true);
+            return response;
         }
         
         cJSON* error = cJSON_CreateObject();
         cJSON_AddBoolToObject(error, "success", false);
-        cJSON_AddStringToObject(error, "error", "action not found");
+        cJSON_AddStringToObject(error, "error", "trigger not found");
         return error;
         
     } else if (strcmp(msg_type, "set_action_arg") == 0) {
+        // DEPRECATED: Actions replaced by TriggerParameter
+        // This is now equivalent to setting a trigger parameter's stored value
         cJSON* comp_item = cJSON_GetObjectItem(request, "comp");
         cJSON* action_item = cJSON_GetObjectItem(request, "action");
         cJSON* arg_item = cJSON_GetObjectItem(request, "arg");
@@ -564,9 +569,18 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
             return error;
         }
         
-        comp->setActionArgument(action_name, arg);
+        // Find the trigger and set value via setValueQuiet to avoid triggering
+        TriggerParameter* trigger = comp->getTriggerParam(action_name);
+        if (trigger) {
+            trigger->setValueQuiet(0, 0, arg);
+            cJSON* response = cJSON_CreateObject();
+            cJSON_AddBoolToObject(response, "success", true);
+            return response;
+        }
+        
         cJSON* response = cJSON_CreateObject();
-        cJSON_AddBoolToObject(response, "success", true);
+        cJSON_AddBoolToObject(response, "success", false);
+        cJSON_AddStringToObject(response, "error", "trigger not found");
         return response;
     }
     

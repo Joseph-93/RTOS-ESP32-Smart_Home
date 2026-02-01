@@ -192,14 +192,14 @@ void DoorSensorComponent::executeDoorOpenedActions() {
             static IntParameter* threshold_param = getIntParam("entry_departure_motion_threshold_seconds");
             int threshold = threshold_param ? threshold_param->getValue(0, 0) : 30;
             
-            const auto& actions = net_component->getActions();
+            const auto& triggers = net_component->getTriggerParams();
             
             if (time_diff >= 0 && time_diff <= threshold) {
                 // DEPARTURE - turn lights off
                 ESP_LOGI(TAG, "Door classified as DEPARTURE (motion %d s before door)", time_diff);
-                for (size_t i = 0; i < actions.size(); i++) {
-                    if (actions[i].name == "Send HTTP: Living Room Off") {
-                        net_component->invokeAction(i);
+                for (size_t i = 0; i < triggers.size(); i++) {
+                    if (triggers[i]->getName() == "Send HTTP: Living Room Off") {
+                        triggers[i]->setValue(0, 0, "");
                         break;
                     }
                 }
@@ -207,9 +207,9 @@ void DoorSensorComponent::executeDoorOpenedActions() {
             else {
                 // ENTRY - turn lights to cool bright
                 ESP_LOGI(TAG, "Door classified as ENTRY (no recent motion before door)");
-                for (size_t i = 0; i < actions.size(); i++) {
-                    if (actions[i].name == "Send HTTP: Living Room Cool Bright") {
-                        net_component->invokeAction(i);
+                for (size_t i = 0; i < triggers.size(); i++) {
+                    if (triggers[i]->getName() == "Send HTTP: Living Room Cool Bright") {
+                        triggers[i]->setValue(0, 0, "");
                         break;
                     }
                 }
@@ -231,8 +231,8 @@ void DoorSensorComponent::doorSensorStateTask() {
     IntParameter* door_state_param = nullptr;
     IntParameter* door_open_too_long_thresh_param = nullptr;
     Component* network_actions_component = nullptr;
-    int door_opened_too_long_action = -1;
-    int door_finally_closed_action = -1;
+    TriggerParameter* door_opened_too_long_trigger = nullptr;
+    TriggerParameter* door_finally_closed_trigger = nullptr;
     uint64_t door_opened_timestamp = 0;
     
     while (1) {
@@ -248,14 +248,14 @@ void DoorSensorComponent::doorSensorStateTask() {
             continue;
         }
 
-        if (door_opened_too_long_action == -1 && door_finally_closed_action == -1) {
-            const auto& actions = network_actions_component->getActions();
-            for (size_t i = 0; i < actions.size(); i++) {
-                if (actions[i].name == "Send TCP: Shut The Front Door Mark Ruffalo") {
-                    door_opened_too_long_action = i;
+        if (door_opened_too_long_trigger == nullptr && door_finally_closed_trigger == nullptr) {
+            const auto& triggers = network_actions_component->getTriggerParams();
+            for (size_t i = 0; i < triggers.size(); i++) {
+                if (triggers[i]->getName() == "Send TCP: Shut The Front Door Mark Ruffalo") {
+                    door_opened_too_long_trigger = triggers[i].get();
                 }
-                else if (actions[i].name == "Send TCP: Door Closed Comedian") {
-                    door_finally_closed_action = i;
+                else if (triggers[i]->getName() == "Send TCP: Door Closed Comedian") {
+                    door_finally_closed_trigger = triggers[i].get();
                 }
             }
         }
@@ -292,7 +292,9 @@ void DoorSensorComponent::doorSensorStateTask() {
                 uint64_t elapsed_sec = (now - door_opened_timestamp) / 1000000;
                 if (elapsed_sec >= door_open_too_long_thresh_param->getValue(0, 0)) {
                     door_tracking_state = DoorTrackingState::OPENED_TOO_LONG;
-                    network_actions_component->invokeAction(door_opened_too_long_action);
+                    if (door_opened_too_long_trigger) {
+                        door_opened_too_long_trigger->setValue(0, 0, "");
+                    }
                 }
             } else {
                 // Door closed again
@@ -303,7 +305,9 @@ void DoorSensorComponent::doorSensorStateTask() {
             if (current_state == 0) {
                 // Door finally closed
                 door_tracking_state = DoorTrackingState::CLOSED;
-                network_actions_component->invokeAction(door_finally_closed_action);
+                if (door_finally_closed_trigger) {
+                    door_finally_closed_trigger->setValue(0, 0, "");
+                }
             }
         }
     }

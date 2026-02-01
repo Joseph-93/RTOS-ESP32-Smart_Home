@@ -272,17 +272,45 @@ using StringParameter = Parameter<std::string>;
 // Forward declaration
 class Component;
 
-// ComponentAction - represents a user-invokable action
-struct ComponentAction {
-    std::string name;                                  // Display name of the action
-    std::string description;                           // Optional description
-    std::string argument;                              // String argument passed to callback
-    std::function<bool(Component*, const std::string&)> callback;  // Function to call when action is invoked
+// TriggerParameter - a string parameter that ALWAYS invokes its callback on setValue
+// Used for actions/triggers where we want to execute code regardless of value change
+class TriggerParameter : public Parameter<std::string> {
+public:
+    TriggerParameter(const std::string &name, size_t rows, size_t cols,
+                    const std::string &default_val,
+                    std::function<void(Component*, size_t, size_t, const std::string&)> trigger_callback,
+                    bool read_only = false)
+        : Parameter<std::string>(name, rows, cols, default_val, default_val, default_val, read_only),
+          triggerCallback(trigger_callback),
+          ownerComponent(nullptr) {
+        if (!trigger_callback) {
+            ESP_LOGE("TriggerParameter", "TriggerParameter '%s' created without callback!", name.c_str());
+            assert(false && "TriggerParameter requires a callback");
+        }
+    }
     
-    ComponentAction(const std::string& name, 
-                   const std::string& description,
-                   std::function<bool(Component*, const std::string&)> callback)
-        : name(name), description(description), argument(""), callback(callback) {}
+    // Set the owning component (called by Component::addTriggerParam)
+    void setOwner(Component* owner) { ownerComponent = owner; }
+    
+    // Override setValue to ALWAYS call the callback
+    void setValue(size_t row, size_t col, const std::string& val) {
+        // First call base class to actually set the value
+        Parameter<std::string>::setValue(row, col, val);
+        
+        // Then ALWAYS invoke our trigger callback
+        if (triggerCallback && ownerComponent) {
+            triggerCallback(ownerComponent, row, col, val);
+        }
+    }
+    
+    // Set value WITHOUT triggering callback (for initialization/configuration)
+    void setValueQuiet(size_t row, size_t col, const std::string& val) {
+        Parameter<std::string>::setValue(row, col, val);
+    }
+    
+private:
+    std::function<void(Component*, size_t, size_t, const std::string&)> triggerCallback;
+    Component* ownerComponent;
 };
 
 // Component base class
@@ -319,37 +347,24 @@ public:
     const std::vector<std::unique_ptr<FloatParameter>>& getFloatParams() const;
     const std::vector<std::unique_ptr<BoolParameter>>& getBoolParams() const;
     const std::vector<std::unique_ptr<StringParameter>>& getStringParams() const;
+    const std::vector<std::unique_ptr<TriggerParameter>>& getTriggerParams() const;
     
     std::vector<std::unique_ptr<IntParameter>>& getIntParams();
     std::vector<std::unique_ptr<FloatParameter>>& getFloatParams();
     std::vector<std::unique_ptr<BoolParameter>>& getBoolParams();
     std::vector<std::unique_ptr<StringParameter>>& getStringParams();
+    std::vector<std::unique_ptr<TriggerParameter>>& getTriggerParams();
     
     IntParameter* getIntParam(const std::string &paramName);
     FloatParameter* getFloatParam(const std::string &paramName);
     BoolParameter* getBoolParam(const std::string &paramName);
     StringParameter* getStringParam(const std::string &paramName);
+    TriggerParameter* getTriggerParam(const std::string &paramName);
     IntParameter* getIntParam(int paramId);
     FloatParameter* getFloatParam(int paramId);
     BoolParameter* getBoolParam(int paramId);
     StringParameter* getStringParam(int paramId);
-    
-    // Action management
-    const std::vector<ComponentAction>& getActions() const;
-    const ComponentAction& getAction(int actionId) const;
-    const ComponentAction& getAction(const std::string &actionName) const;
-    const std::vector<std::string> getActionNames() const;
-    const std::string getActionName(int actionId) const;
-    const std::string getActionName(const std::string &actionName) const;
-    const std::vector<std::string> getActionDescriptions() const;
-    const std::string getActionDescription(int actionId) const;
-    const std::string getActionDescription(const std::string &actionName) const;
-    void invokeAction(size_t actionIndex);
-    void invokeAction(const std::string &actionName);
-    void invokeAction(size_t actionIndex, const std::string& arg);
-    void invokeAction(const std::string &actionName, const std::string& arg);
-    void setActionArgument(const std::string &actionName, const std::string& arg);
-    void setActionArgument(size_t actionIndex, const std::string& arg);
+    TriggerParameter* getTriggerParam(int paramId);
     
     // Memory diagnostics - calculate approximate memory usage
     size_t getApproximateMemoryUsage() const;
@@ -359,20 +374,20 @@ protected:
     ComponentGraph* component_graph = nullptr; // Pointer to the component graph
     std::string name;
     bool initialized;
-    std::vector<ComponentAction> actions;
-    std::vector<std::string> actionNames;  // Store names separately to avoid std::function corruption
     
     // Parameter storage - using unique_ptr for stable heap addresses
     std::vector<std::unique_ptr<IntParameter>> intParams;
     std::vector<std::unique_ptr<FloatParameter>> floatParams;
     std::vector<std::unique_ptr<BoolParameter>> boolParams;
     std::vector<std::unique_ptr<StringParameter>> stringParams;
+    std::vector<std::unique_ptr<TriggerParameter>> triggerParams;
     
     void addIntParam(const std::string &paramName, size_t rows, size_t cols, int min_val = INT_MIN, int max_val = INT_MAX, int default_val = 0, bool readOnly = false);
     void addFloatParam(const std::string &paramName, size_t rows, size_t cols, float min_val = -FLT_MAX, float max_val = FLT_MAX, float default_val = 0.0f, bool readOnly = false);
     void addBoolParam(const std::string &paramName, size_t rows, size_t cols, bool default_val = false, bool readOnly = false);
     void addStringParam(const std::string &paramName, size_t rows, size_t cols, const std::string &default_val = "", bool readOnly = false);
-    
-    void addAction(const std::string& name, const std::string& description, 
-                   std::function<bool(Component*, const std::string&)> callback);
+    void addTriggerParam(const std::string &paramName, size_t rows, size_t cols, 
+                        const std::string &default_val,
+                        std::function<void(Component*, size_t, size_t, const std::string&)> callback,
+                        bool readOnly = false);
 };
