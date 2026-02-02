@@ -1,0 +1,77 @@
+{
+  "components": {
+    "NetworkActions": {
+      "network_messages": {
+        "0,0": "{\"name\": \"Living Room Off\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/84/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"on\\\":false}\", \"timeout_ms\": 10000}",
+        "1,0": "{\"name\": \"Living Room On\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/84/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"on\\\":true}\", \"timeout_ms\": 10000}",
+        "2,0": "{\"name\": \"Living Room Dimmed\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/84/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"7D-uDH-nPx-UAXWq\\\"}\", \"timeout_ms\": 10000}",
+        "3,0": "{\"name\": \"Living Room Cool Bright\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/84/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"htWF1mlooiTmMn5x\\\"}\", \"timeout_ms\": 10000}",
+        "4,0": "{\"name\": \"Living Room Warm Bright\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/84/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"eopN9qL7LrGVran2\\\"}\", \"timeout_ms\": 10000}",
+        "5,0": "{\"name\": \"Living Room Nightlight\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/84/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"WUCLsVrk5kAiP5ZT\\\"}\", \"timeout_ms\": 10000}",
+        "6,0": "{\"name\": \"Bedroom Off\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/83/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"on\\\":false}\", \"timeout_ms\": 10000}",
+        "7,0": "{\"name\": \"Bedroom On\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/83/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"on\\\":true}\", \"timeout_ms\": 10000}",
+        "8,0": "{\"name\": \"Bedroom Bright\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/83/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"PxXknmpgC1mhLxKN\\\"}\", \"timeout_ms\": 10000}",
+        "9,0": "{\"name\": \"Bedroom Dimmed\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/83/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"uKqYX1Z4mXE6co5o\\\"}\", \"timeout_ms\": 10000}",
+        "10,0": "{\"name\": \"Bedroom Nightlight\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/83/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"EE2RDN4XrzSvAPXF\\\"}\", \"timeout_ms\": 10000}",
+        "11,0": "{\"name\": \"Bedroom Cool Bright\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/83/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"UpWdmp4QNmBLELpl\\\"}\", \"timeout_ms\": 10000}",
+        "12,0": "{\"name\": \"Bathroom Off\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/81/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"on\\\":false}\", \"timeout_ms\": 10000}",
+        "13,0": "{\"name\": \"Bathroom On\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/81/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"on\\\":true}\", \"timeout_ms\": 10000}",
+        "14,0": "{\"name\": \"Bathroom Dimmed\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/81/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"YASLkUGp8VLu1f31\\\"}\", \"timeout_ms\": 10000}",
+        "15,0": "{\"name\": \"Bathroom Nightlight\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/81/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"iUH35iqqQRHIRVWb\\\"}\", \"timeout_ms\": 10000}",
+        "16,0": "{\"name\": \"Bathroom Cool Bright\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/81/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"ob5uV3HFaSxTMdj1\\\"}\", \"timeout_ms\": 10000}",
+        "17,0": "{\"name\": \"Kitchen/Fridge Off\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/82/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"on\\\":false}\", \"timeout_ms\": 10000}",
+        "18,0": "{\"name\": \"Kitchen/Fridge On\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/82/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"on\\\":true}\", \"timeout_ms\": 10000}",
+        "19,0": "{\"name\": \"Kitchen/Fridge Energize\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/82/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"wdIDZsY7FW8h8NFi\\\"}\", \"timeout_ms\": 10000}",
+        "20,0": "{\"name\": \"Kitchen/Fridge Nightlight\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.101\", \"port\": 80, \"path\": \"/api/3XQGgYfdSPuErtNKtA3iRYKLxP3etEF6QPOMRnct/groups/82/action\", \"method\": \"PUT\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \"{\\\"scene\\\":\\\"aPnYT85mZErseE15\\\"}\", \"timeout_ms\": 10000}",
+        "21,0": "{\"name\": \"Dwelo Kitchen On\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.183\", \"port\": 8080, \"path\": \"/dwelo/kitchen/on\", \"method\": \"POST\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \" \", \"timeout_ms\": 10000}",
+        "22,0": "{\"name\": \"Dwelo Kitchen Off\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.183\", \"port\": 8080, \"path\": \"/dwelo/kitchen/off\", \"method\": \"POST\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \" \", \"timeout_ms\": 10000}",
+        "23,0": "{\"name\": \"Dwelo Entryway On\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.183\", \"port\": 8080, \"path\": \"/dwelo/entryway/on\", \"method\": \"POST\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \" \", \"timeout_ms\": 10000}",
+        "24,0": "{\"name\": \"Dwelo Entryway Off\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.183\", \"port\": 8080, \"path\": \"/dwelo/entryway/off\", \"method\": \"POST\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \" \", \"timeout_ms\": 10000}",
+        "25,0": "{\"name\": \"Lock Front Door\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.183\", \"port\": 8080, \"path\": \"/dwelo/frontdoor/lock\", \"method\": \"POST\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \" \", \"timeout_ms\": 10000}",
+        "26,0": "{\"name\": \"Unlock Front Door\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.183\", \"port\": 8080, \"path\": \"/dwelo/frontdoor/unlock\", \"method\": \"POST\", \"headers\": {\"Content-Type\": \"application/json\"}, \"body\": \" \", \"timeout_ms\": 10000}",
+        "27,0": "{\"name\": \"Study Lamp On\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.45\", \"port\": 80, \"path\": \"/relay/0?turn=on\", \"method\": \"GET\", \"headers\": {}, \"body\": \"\", \"timeout_ms\": 10000}",
+        "28,0": "{\"name\": \"Study Lamp Off\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.45\", \"port\": 80, \"path\": \"/relay/0?turn=off\", \"method\": \"GET\", \"headers\": {}, \"body\": \"\", \"timeout_ms\": 10000}",
+        "29,0": "{\"name\": \"Desk Electronics On\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.239\", \"port\": 80, \"path\": \"/relay/0?turn=on\", \"method\": \"GET\", \"headers\": {}, \"body\": \"\", \"timeout_ms\": 10000}",
+        "30,0": "{\"name\": \"Desk Electronics Off\", \"protocol\": \"HTTP\", \"host\": \"10.0.0.239\", \"port\": 80, \"path\": \"/relay/0?turn=off\", \"method\": \"GET\", \"headers\": {}, \"body\": \"\", \"timeout_ms\": 10000}",
+        "31,0": "{\"name\": \"Mute Zone Audio\", \"protocol\": \"TCP\", \"host\": \"10.0.0.156\", \"port\": 5321, \"body\": \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"method\\\":\\\"set\\\",\\\"params\\\":{\\\"param\\\":\\\"ZoneMute_0\\\",\\\"val\\\":1},\\\"id\\\":1}\\n\\n\", \"timeout_ms\": 5000}",
+        "32,0": "{\"name\": \"Unmute Zone Audio\", \"protocol\": \"TCP\", \"host\": \"10.0.0.156\", \"port\": 5321, \"body\": \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"method\\\":\\\"set\\\",\\\"params\\\":{\\\"param\\\":\\\"ZoneMute_0\\\",\\\"val\\\":0},\\\"id\\\":1}\\n\\n\", \"timeout_ms\": 5000}",
+        "33,0": "{\"name\": \"Play Door Message (Dirty)\", \"protocol\": \"TCP\", \"host\": \"10.0.0.156\", \"port\": 5321, \"body\": \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"method\\\":\\\"set\\\",\\\"params\\\":{\\\"param\\\":\\\"PlayMessage_3\\\",\\\"val\\\":1},\\\"id\\\":1}\\n\\n\", \"timeout_ms\": 5000}",
+        "34,0": "{\"name\": \"Play Door Message (Mark Ruffalo)\", \"protocol\": \"TCP\", \"host\": \"10.0.0.156\", \"port\": 5321, \"body\": \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"method\\\":\\\"set\\\",\\\"params\\\":{\\\"param\\\":\\\"PlayMessage_2\\\",\\\"val\\\":1},\\\"id\\\":1}\\n\\n\", \"timeout_ms\": 5000}",
+        "35,0": "{\"name\": \"Play Door Closed (Comedian)\", \"protocol\": \"TCP\", \"host\": \"10.0.0.156\", \"port\": 5321, \"body\": \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"method\\\":\\\"set\\\",\\\"params\\\":{\\\"param\\\":\\\"PlayMessage_4\\\",\\\"val\\\":1},\\\"id\\\":1}\\n\\n\", \"timeout_ms\": 5000}",
+        "36,0": "{\"name\": \"Bedroom Bluetooth Source\", \"protocol\": \"WS\", \"host\": \"10.0.0.156\", \"port\": 1235, \"path\": \"/\", \"body\": \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"method\\\":\\\"set\\\",\\\"params\\\":{\\\"obj\\\":\\\"Control Wallplate\\\",\\\"param\\\":\\\"Bluetooth Button\\\",\\\"device\\\":3,\\\"val\\\":1},\\\"id\\\":1}\\n\\n\", \"timeout_ms\": 10000}",
+        "37,0": "{\"name\": \"Pegasus Bluetooth Source\", \"protocol\": \"WS\", \"host\": \"10.0.0.156\", \"port\": 1235, \"path\": \"/\", \"body\": \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"method\\\":\\\"set\\\",\\\"params\\\":{\\\"obj\\\":\\\"Control Wallplate\\\",\\\"param\\\":\\\"Bluetooth Button\\\",\\\"device\\\":2,\\\"val\\\":1},\\\"id\\\":1}\\n\\n\", \"timeout_ms\": 10000}"
+      },
+      "trigger": {
+        "0,0": -1
+      },
+      "device_nicknames": {
+        "0,0": "{}"
+      }
+    },
+    "ActionManager": {
+      "enabled": {
+        "0,0": true
+      },
+      "device_nicknames": {
+        "0,0": "{}"
+      }
+    },
+    "Watcher": {
+      "variables": {
+        "0,0": "{\"Button1\":{\"device\":\"10.0.0.46\",\"component\":\"GUI\",\"param\":\"button_0_pressed\",\"row\":0,\"col\":0},\"ActionsOn\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0}}"
+      },
+      "expressions": {
+        "0,0": "Button1 == True and ActionsOn == True"
+      },
+      "rising_actions": {
+        "0,0": "{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":0,\"wait_after_ms\":0}]}"
+      },
+      "falling_actions": {
+        "0,0": "{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":1,\"wait_after_ms\":0}]}"
+      },
+      "enabled": {
+        "0,0": true
+      }
+    }
+  }
+}

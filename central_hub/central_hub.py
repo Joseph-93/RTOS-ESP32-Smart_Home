@@ -36,6 +36,7 @@ from components import (
     WatcherComponent,
     WebServerComponent
 )
+from persistence import PersistenceManager
 
 # Configure logging
 logging.basicConfig(
@@ -153,6 +154,9 @@ class CentralHub:
         # Share nickname map between components
         # When ActionManager updates nicknames, Watcher should see them too
         self.watcher.set_nickname_map(self.action_manager._nickname_map)
+        
+        # Initialize persistence manager
+        self.persistence = PersistenceManager(self)
     
     def _get_local_ip(self) -> str:
         """Get the local IP address of this machine."""
@@ -176,10 +180,16 @@ class CentralHub:
         for comp in self.local_components.values():
             await comp.initialize()
         
+        # Load saved state AFTER components are initialized
+        self.persistence.load()
+        
         # Start local component background tasks
         await self.action_manager.start()
         await self.watcher.start()
         await self.web_server.start()
+        
+        # Start persistence manager (periodic saves)
+        await self.persistence.start()
         
         logger.info("Local components initialized and started")
         
@@ -199,6 +209,9 @@ class CentralHub:
         """Stop the central hub."""
         logger.info("Stopping Central Hub")
         self.running = False
+        
+        # Stop persistence manager (does final save)
+        await self.persistence.stop()
         
         # Stop local component background tasks
         await self.web_server.stop()
@@ -382,6 +395,12 @@ class CentralHub:
                             subscription_count += 1
                             await asyncio.sleep(SUBSCRIBE_DELAY)  # Rate limit
                             
+                        except asyncio.TimeoutError:
+                            logger.warning(f"[{ip}] Timeout subscribing to {comp.name}.{param.name}[{row}][{col}]")
+                            # Continue trying other params
+                        except websockets.exceptions.ConnectionClosed as e:
+                            logger.error(f"[{ip}] Connection closed during subscribe: {e}")
+                            raise  # Stop subscribing, connection is dead
                         except Exception as e:
                             logger.warning(f"[{ip}] Failed to subscribe to {comp.name}.{param.name}[{row}][{col}]: {e}")
         
@@ -450,6 +469,87 @@ class CentralHub:
         #     f"[{timestamp}] {ip} / {component.name} / {param.name}[{row}][{col}]: "
         #     f"{old_value} -> {value}"
         # )
+    
+    async def request_reconnect(self, ip: str) -> bool:
+        """
+        Request reconnection to a device. Returns True if device exists.
+        The _manage_device loop will handle the actual reconnection.
+        """
+        if ip not in self.devices:
+            logger.warning(f"Cannot reconnect to unknown device: {ip}")
+            return False
+        
+        device = self.devices[ip]
+        if device.connected and device.websocket:
+            logger.info(f"[{ip}] Forcing reconnection...")
+            try:
+                await device.websocket.close()
+            except Exception as e:
+                logger.debug(f"[{ip}] Error closing websocket: {e}")
+            device.connected = False
+        else:
+            logger.info(f"[{ip}] Device already disconnected, reconnect will happen automatically")
+        return True
+    
+    async def subscribe_param_by_name(self, ip: str, component_name: str, param_name: str, row: int = 0, col: int = 0) -> Optional[Any]:
+        """
+        Subscribe to a specific parameter by name (not UUID).
+        Returns the value if successful, None if failed.
+        """
+        if ip not in self.devices:
+            logger.warning(f"Cannot subscribe to param on unknown device: {ip}")
+            return None
+        
+        device = self.devices[ip]
+        if not device.connected or not device.websocket:
+            logger.warning(f"[{ip}] Cannot subscribe - device not connected")
+            return None
+        
+        # Find the component and parameter
+        if component_name not in device.components:
+            logger.warning(f"[{ip}] Component not found: {component_name}")
+            return None
+        
+        comp = device.components[component_name]
+        if param_name not in comp.parameters:
+            logger.warning(f"[{ip}] Parameter not found: {component_name}.{param_name}")
+            return None
+        
+        param = comp.parameters[param_name]
+        
+        try:
+            response = await self._send_request(device, {
+                'type': 'subscribe',
+                'param_id': param.param_id,
+                'row': row,
+                'col': col
+            })
+            
+            if 'value' in response:
+                value = response['value']
+                param.set_value(row, col, value)
+                
+                # Update cache
+                if ip not in self.remote_state_cache:
+                    self.remote_state_cache[ip] = {}
+                cache_key = f"{component_name}.{param_name}[{row},{col}]"
+                self.remote_state_cache[ip][cache_key] = value
+                
+                logger.info(f"[{ip}] Re-subscribed to {component_name}.{param_name}[{row}][{col}] = {value}")
+                return value
+            else:
+                logger.warning(f"[{ip}] Subscribe response had no value: {response}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"[{ip}] Failed to re-subscribe to {component_name}.{param_name}: {e}")
+            return None
+    
+    def is_device_connected(self, ip: str) -> bool:
+        """Check if a device is currently connected."""
+        if ip not in self.devices:
+            return False
+        return self.devices[ip].connected
     
     def get_state_snapshot(self) -> dict:
         """Get a complete snapshot of all device states."""

@@ -340,8 +340,10 @@
             componentSelect.innerHTML = '<option value="">-- Select Component --</option>';
             components.forEach(comp => {
                 const option = document.createElement('option');
-                option.value = comp;
-                option.textContent = comp;
+                // Handle both string format and object format {name, id}
+                const compName = typeof comp === 'string' ? comp : comp.name;
+                option.value = compName;
+                option.textContent = compName;
                 componentSelect.appendChild(option);
             });
         }
@@ -349,21 +351,21 @@
         function selectComponent(comp) {
             selectedComponent = comp;
             
-            // Load parameters and actions for this component
-            loadParametersAndActions();
+            // Load parameters for this component
+            loadParameters();
             
             document.getElementById('paramSection').style.display = 'block';
             document.getElementById('controlsSection').style.display = 'none';
             document.getElementById('messageOutput').style.display = 'none';
         }
-        // Load parameters and actions
+        // Load parameters
         let currentParamTypeIndex = 0;
-        const paramTypes = ['int', 'float', 'bool', 'str', 'actions'];
+        const paramTypes = ['int', 'float', 'bool', 'str'];
         let currentParamType = null;
         let expectedCount = null;
         let receivedCount = 0;
         
-        function loadParametersAndActions() {
+        function loadParameters() {
             paramInfo = {};
             currentParamTypeIndex = 0;
             
@@ -444,7 +446,7 @@
         
         function populateParamDropdown() {
             const paramSelect = document.getElementById('paramSelect');
-            paramSelect.innerHTML = '<option value="">-- Select Parameter/Action --</option>';
+            paramSelect.innerHTML = '<option value="">-- Select Parameter --</option>';
             
             Object.entries(paramInfo).forEach(([key, info]) => {
                 const [type, idx] = key.split('_');
@@ -465,23 +467,12 @@
             // Build controls based on parameter type
             buildParamControls(info);
             
-            // Only show controls section for parameters, not actions
-            const [type, idx] = key.split('_');
-            if (type !== 'actions') {
-                document.getElementById('controlsSection').style.display = 'block';
-            }
+            document.getElementById('controlsSection').style.display = 'block';
         }
         
         function buildParamControls(info) {
             const controls = document.getElementById('paramControls');
             const [type, idx] = selectedParam.split('_');
-            
-            if (type === 'actions') {
-                // Action - hide controls section entirely and just generate message
-                document.getElementById('controlsSection').style.display = 'none';
-                generateMessage();
-                return;
-            }
             
             let html = '';
             
@@ -589,45 +580,37 @@
             const info = paramInfo[selectedParam];
             let message = {};
             
-            if (type === 'actions') {
-                message = {
-                    type: 'invoke_action',
-                    comp: selectedComponent,
-                    action: info.name
-                };
-            } else {
-                const row = document.getElementById('rowSelect')?.value || 0;
-                const col = document.getElementById('colSelect')?.value || 0;
-                
-                let value;
-                if (type === 'bool') {
-                    const boolTrueBtn = document.getElementById('boolTrue');
-                    if (!boolTrueBtn) return; // Controls not ready yet
-                    value = boolTrueBtn.classList.contains('active');
-                } else if (type === 'int') {
-                    const valueInput = document.getElementById('valueInput');
-                    if (!valueInput) return; // Controls not ready yet
-                    value = parseInt(valueInput.value);
-                } else if (type === 'float') {
-                    const valueInput = document.getElementById('valueInput');
-                    if (!valueInput) return; // Controls not ready yet
-                    value = parseFloat(valueInput.value);
-                } else if (type === 'str') {
-                    const valueInput = document.getElementById('valueInput');
-                    if (!valueInput) return; // Controls not ready yet
-                    value = valueInput.value;
-                }
-                
-                message = {
-                    type: 'set_param',
-                    comp: selectedComponent,
-                    param_type: type,
-                    idx: parseInt(idx),
-                    row: parseInt(row),
-                    col: parseInt(col),
-                    value: value
-                };
+            const row = document.getElementById('rowSelect')?.value || 0;
+            const col = document.getElementById('colSelect')?.value || 0;
+            
+            let value;
+            if (type === 'bool') {
+                const boolTrueBtn = document.getElementById('boolTrue');
+                if (!boolTrueBtn) return; // Controls not ready yet
+                value = boolTrueBtn.classList.contains('active');
+            } else if (type === 'int') {
+                const valueInput = document.getElementById('valueInput');
+                if (!valueInput) return; // Controls not ready yet
+                value = parseInt(valueInput.value);
+            } else if (type === 'float') {
+                const valueInput = document.getElementById('valueInput');
+                if (!valueInput) return; // Controls not ready yet
+                value = parseFloat(valueInput.value);
+            } else if (type === 'str') {
+                const valueInput = document.getElementById('valueInput');
+                if (!valueInput) return; // Controls not ready yet
+                value = valueInput.value;
             }
+            
+            message = {
+                type: 'set_param',
+                comp: selectedComponent,
+                param_type: type,
+                idx: parseInt(idx),
+                row: parseInt(row),
+                col: parseInt(col),
+                value: value
+            };
             
             const messageText = document.getElementById('messageText');
             messageText.textContent = JSON.stringify(message, null, 2);

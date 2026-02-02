@@ -12,6 +12,7 @@ import json
 import logging
 import socket
 import ssl
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import aiohttp
@@ -23,6 +24,9 @@ logger = logging.getLogger('NetworkActions')
 
 # Number of network action slots
 NUM_NETWORK_ACTIONS = 100
+
+# Path to message examples file (relative to central_hub directory)
+MESSAGE_EXAMPLES_FILE = Path(__file__).parent.parent / "message_examples.json"
 
 
 class NetworkActionsComponent(Component):
@@ -94,7 +98,52 @@ class NetworkActionsComponent(Component):
         """Initialize the component."""
         # Load initial nickname map
         self._parse_nicknames()
+        
+        # Auto-inject message examples from JSON file
+        self._load_message_examples()
+        
         logger.info("NetworkActions component initialized")
+    
+    def _load_message_examples(self):
+        """Load pre-configured message examples from JSON file."""
+        if not MESSAGE_EXAMPLES_FILE.exists():
+            logger.warning(f"Message examples file not found: {MESSAGE_EXAMPLES_FILE}")
+            return
+        
+        try:
+            with open(MESSAGE_EXAMPLES_FILE, 'r') as f:
+                data = json.load(f)
+            
+            messages = data.get('messages', [])
+            loaded_count = 0
+            
+            for msg in messages:
+                index = msg.get('index')
+                config = msg.get('config', {})
+                name = config.get('name', f'Message {index}')
+                
+                if index is None or not (0 <= index < NUM_NETWORK_ACTIONS):
+                    logger.warning(f"Invalid index for message '{name}': {index}")
+                    continue
+                
+                # Only load if slot is empty (don't overwrite user configs)
+                existing = self.network_messages.get_value(index, 0)
+                if existing:
+                    logger.debug(f"Slot {index} already configured, skipping '{name}'")
+                    continue
+                
+                # Store the config as JSON string
+                config_str = json.dumps(config)
+                self.network_messages.set_value(index, 0, config_str, notify=False)
+                loaded_count += 1
+                logger.debug(f"Loaded message #{index}: {name}")
+            
+            logger.info(f"📥 Loaded {loaded_count} message examples from {MESSAGE_EXAMPLES_FILE.name}")
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in message examples file: {e}")
+        except Exception as e:
+            logger.error(f"Failed to load message examples: {e}")
     
     def _parse_nicknames(self):
         """Parse the device_nicknames JSON into the shadow dict."""
@@ -116,7 +165,16 @@ class NetworkActionsComponent(Component):
     def _on_trigger_change(self, param, row, col, new_value, old_value):
         """Handle trigger changes - fire off network action."""
         if new_value >= 0:
-            logger.info(f"📡 NetworkActions triggered: message #{new_value}")
+            # Get the name for logging
+            config_str = self.network_messages.get_value(new_value, 0)
+            name = f"Message #{new_value}"
+            if config_str:
+                try:
+                    config = json.loads(config_str)
+                    name = config.get('name', name)
+                except:
+                    pass
+            logger.info(f"📡 NetworkActions triggered: {name}")
             # Schedule the network action
             asyncio.create_task(self._execute_action(new_value))
             # Reset trigger to -1
@@ -143,6 +201,7 @@ class NetworkActionsComponent(Component):
             return
         
         protocol = config.get('protocol', 'HTTP').upper()
+        name = config.get('name', f'Message #{index}')
         host = self.resolve_host(config.get('host', 'localhost'))
         port = config.get('port', 80)
         await_response = config.get('await_response', False)
@@ -150,7 +209,7 @@ class NetworkActionsComponent(Component):
         timeout_sec = timeout_ms / 1000.0
         body = config.get('body', '')[:100]  # Truncate for logging
         
-        logger.info(f"📡 NetworkActions sending #{index}: {protocol} -> {host}:{port}")
+        logger.info(f"📡 NetworkActions sending '{name}': {protocol} -> {host}:{port}")
         logger.info(f"   Body: {body}{'...' if len(config.get('body', '')) > 100 else ''}")
         
         try:

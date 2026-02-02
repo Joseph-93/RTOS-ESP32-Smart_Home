@@ -9,6 +9,7 @@
     <script src="{% static 'js/notifications.js' %}"></script>
     <script src="{% static 'js/websocket.js' %}"></script>
     <script src="{% static 'js/debug.js' %}"></script>
+    <script src="{% static 'js/config-builder.js' %}"></script>
     <script src="{% static 'js/component.js' %}"></script>
 </head>
 <body>
@@ -25,41 +26,356 @@
         <main>
             <div id="error-banner" class="error-banner" style="display:none;"></div>
             
-            <!-- Actions Accordion -->
-            <div class="accordion">
-                <button class="accordion-header" onclick="toggleAccordion(this)">
-                    <span class="accordion-title">⚡ Actions</span>
-                    <span class="accordion-icon">▼</span>
+            <!-- Special controls for Watcher component -->
+            <div id="watcher-controls" class="special-controls" style="display:none;">
+                <h3>🔍 Watcher Configuration</h3>
+                <p class="help-text">Configure watch slots to monitor parameter changes and trigger actions.</p>
+                <button class="btn-primary" onclick="openWatchSlotEditor()">
+                    ➕ Configure Watch Slot
                 </button>
-                <div class="accordion-content">
-                    <div id="actions-container">
-                        <div class="loading">Loading actions...</div>
-                    </div>
-                </div>
             </div>
             
-            <!-- Parameters Accordion -->
-            <div class="accordion">
-                <button class="accordion-header" onclick="toggleAccordion(this)">
-                    <span class="accordion-title">⚙️ Parameters</span>
-                    <span class="accordion-icon">▼</span>
+            <!-- Special controls for ActionManager component -->
+            <div id="action-manager-controls" class="special-controls" style="display:none;">
+                <h3>⚡ Action Manager</h3>
+                <p class="help-text">Build and queue action sequences with timing.</p>
+                <button class="btn-primary" onclick="openActionManagerEditor()">
+                    ➕ Build Action Sequence
                 </button>
-                <div class="accordion-content">
-                    <div id="params-container">
-                        <div class="loading">Loading parameters...</div>
-                    </div>
-                </div>
+            </div>
+            
+            <!-- Pagination Controls -->
+            <div class="pagination-controls">
+                <button id="prevPage" onclick="prevPage()" disabled>← Previous</button>
+                <span id="pageInfo">Page 1</span>
+                <button id="nextPage" onclick="nextPage()">Next →</button>
+                <select id="pageSizeSelect" onchange="changePageSize(this.value)">
+                    <option value="10">10 per page</option>
+                    <option value="25" selected>25 per page</option>
+                    <option value="50">50 per page</option>
+                    <option value="100">100 per page</option>
+                </select>
+            </div>
+            
+            <!-- Parameters List -->
+            <div id="params-container">
+                <div class="loading">Loading parameters...</div>
+            </div>
+            
+            <!-- Bottom Pagination -->
+            <div class="pagination-controls" id="bottom-pagination">
+                <button id="prevPageBottom" onclick="prevPage()" disabled>← Previous</button>
+                <span id="pageInfoBottom">Page 1</span>
+                <button id="nextPageBottom" onclick="nextPage()">Next →</button>
             </div>
         </main>
     </div>
     
-    <script src="{% static 'js/component.js' %}"></script>
+    <!-- Modal container for config builders -->
+    <div id="config-modal-container"></div>
+    
+
     <script>
         const deviceName = '{{ device_name }}';
         const componentName = '{{ component_name }}';
         const esp32Host = '{{ device.host }}';  // ESP32 IP address for WebSocket
         window.esp32Host = esp32Host;
+        window.deviceName = deviceName;
+        window.componentName = componentName;
+        
+        // Initialize component and show special controls if needed
         initComponent(deviceName, componentName);
+        
+        // Show special controls based on component type
+        if (componentName === 'Watcher') {
+            document.getElementById('watcher-controls').style.display = 'block';
+        } else if (componentName === 'ActionManager') {
+            document.getElementById('action-manager-controls').style.display = 'block';
+        }
+        
+        // Global functions for modal editors
+        let watchSlotEditor = null;
+        let actionManagerEditor = null;
+        
+        async function openWatchSlotEditor(slotIndex = null) {
+            // Make sure WebSocket is connected
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            
+            try {
+                // Fetch available components
+                const components = await esp32ws.getComponents();
+                
+                // Show slot selection modal
+                const slotModal = document.createElement('div');
+                slotModal.className = 'config-modal-overlay';
+                slotModal.innerHTML = `
+                    <div class="config-modal" style="max-width: 400px;">
+                        <div class="config-modal-header">
+                            <h2>👁️ Select Watch Slot</h2>
+                            <button class="close-btn" onclick="this.closest('.config-modal-overlay').remove()">✕</button>
+                        </div>
+                        <div class="config-modal-body">
+                            <label style="display: block; margin-bottom: 10px;">
+                                <strong>Slot Number (0-49):</strong>
+                                <input type="number" id="slot-select-input" value="${slotIndex !== null ? slotIndex : 0}" min="0" max="49" style="width: 100%; padding: 8px; margin-top: 5px; font-size: 16px;">
+                            </label>
+                            <div id="slot-status" style="padding: 10px; background: #f0f0f0; border-radius: 4px; margin-top: 10px;">
+                                <em>Loading slot info...</em>
+                            </div>
+                        </div>
+                        <div class="config-modal-footer">
+                            <button class="btn btn-secondary" onclick="this.closest('.config-modal-overlay').remove()">Cancel</button>
+                            <button class="btn btn-danger" id="slot-clear-btn" style="display: none;">🗑️ Clear & Start Fresh</button>
+                            <button class="btn btn-primary" id="slot-edit-btn">Edit Slot</button>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('config-modal-container').appendChild(slotModal);
+                
+                const slotInput = slotModal.querySelector('#slot-select-input');
+                const statusDiv = slotModal.querySelector('#slot-status');
+                const clearBtn = slotModal.querySelector('#slot-clear-btn');
+                const editBtn = slotModal.querySelector('#slot-edit-btn');
+                
+                let currentSlotData = null;
+                
+                // Function to load slot info
+                async function loadSlotInfo(slot) {
+                    statusDiv.innerHTML = '<em>Loading...</em>';
+                    try {
+                        const [exprResp, risingResp, fallingResp, varsResp] = await Promise.all([
+                            esp32ws.send({ type: 'get_param', comp: 'Watcher', param: 'expressions', row: slot, col: 0 }),
+                            esp32ws.send({ type: 'get_param', comp: 'Watcher', param: 'rising_actions', row: slot, col: 0 }),
+                            esp32ws.send({ type: 'get_param', comp: 'Watcher', param: 'falling_actions', row: slot, col: 0 }),
+                            esp32ws.send({ type: 'get_param', comp: 'Watcher', param: 'variables', row: 0, col: 0 })
+                        ]);
+                        
+                        const expr = exprResp.value || '';
+                        const risingActions = risingResp.value ? JSON.parse(risingResp.value).actions || [] : [];
+                        const fallingActions = fallingResp.value ? JSON.parse(fallingResp.value).actions || [] : [];
+                        const variables = varsResp.value ? JSON.parse(varsResp.value) : {};
+                        
+                        currentSlotData = { expression: expr, risingActions, fallingActions, variables };
+                        
+                        const hasConfig = expr || risingActions.length > 0 || fallingActions.length > 0;
+                        
+                        if (hasConfig) {
+                            statusDiv.innerHTML = `
+                                <div style="color: #2196F3;"><strong>✓ Slot ${slot} has existing config:</strong></div>
+                                <div style="margin-top: 5px; font-family: monospace; font-size: 12px;">
+                                    <div>Expression: <code>${expr || '(none)'}</code></div>
+                                    <div>Rising actions: ${risingActions.length}</div>
+                                    <div>Falling actions: ${fallingActions.length}</div>
+                                </div>
+                            `;
+                            clearBtn.style.display = 'inline-block';
+                            editBtn.textContent = '✏️ Edit Existing';
+                        } else {
+                            statusDiv.innerHTML = `<div style="color: #666;">Slot ${slot} is empty - ready to configure</div>`;
+                            clearBtn.style.display = 'none';
+                            editBtn.textContent = '➕ Create New';
+                        }
+                    } catch (e) {
+                        statusDiv.innerHTML = `<div style="color: #666;">Slot ${slot} is empty - ready to configure</div>`;
+                        currentSlotData = { expression: '', risingActions: [], fallingActions: [], variables: {} };
+                        clearBtn.style.display = 'none';
+                        editBtn.textContent = '➕ Create New';
+                    }
+                }
+                
+                // Load initial slot info
+                loadSlotInfo(parseInt(slotInput.value) || 0);
+                
+                // Update on slot change
+                slotInput.onchange = slotInput.oninput = () => {
+                    loadSlotInfo(parseInt(slotInput.value) || 0);
+                };
+                
+                // Clear button - start fresh
+                clearBtn.onclick = () => {
+                    currentSlotData = { 
+                        expression: '', 
+                        risingActions: [], 
+                        fallingActions: [], 
+                        variables: currentSlotData.variables  // Keep variables
+                    };
+                    slotModal.remove();
+                    openEditor(parseInt(slotInput.value) || 0, currentSlotData);
+                };
+                
+                // Edit button - use existing or create new
+                editBtn.onclick = () => {
+                    slotModal.remove();
+                    openEditor(parseInt(slotInput.value) || 0, currentSlotData);
+                };
+                
+                // Helper to open the actual editor
+                function openEditor(slot, data) {
+                    watchSlotEditor = new WatchSlotEditor(
+                        document.getElementById('config-modal-container'),
+                        components,
+                        esp32ws,
+                        (result) => {
+                            console.log('Watch slot configured:', result);
+                            applyWatchSlotConfig(result);
+                        }
+                    );
+                    watchSlotEditor.show(slot, data);
+                }
+                
+            } catch (error) {
+                console.error('Failed to open watch slot editor:', error);
+                showNotification('Failed to load components', 'error');
+            }
+        }
+        
+        async function openActionManagerEditor() {
+            // Make sure WebSocket is connected
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            
+            try {
+                // Fetch available components
+                const components = await esp32ws.getComponents();
+                
+                actionManagerEditor = new ActionManagerEditor(
+                    document.getElementById('config-modal-container'),
+                    components,
+                    esp32ws,
+                    (result) => {
+                        console.log('Action sequence built:', result);
+                        applyActionSequence(result);
+                    }
+                );
+                actionManagerEditor.show();
+            } catch (error) {
+                console.error('Failed to open action manager editor:', error);
+                showNotification('Failed to load components', 'error');
+            }
+        }
+        
+        // Transform UI actions to backend format
+        function transformActionsForBackend(actions, forWatcher = false) {
+            return actions.map(a => ({
+                device: a.device || 'self',
+                component: a.comp,
+                param: a.param,
+                row: a.row,
+                col: a.col,
+                value: a.value,
+                wait_after_ms: forWatcher ? 0 : (a.delay_ms || 0)
+            }));
+        }
+        
+        async function applyWatchSlotConfig(config) {
+            // Send set_param commands for expression, rising_actions, falling_actions, and variables
+            const slotIndex = config.slotIndex || 0;
+            
+            try {
+                // First, update the variables parameter (merge with existing)
+                // Get current variables
+                let existingVariables = {};
+                try {
+                    const currentVarsResponse = await esp32ws.send({
+                        type: 'get_param',
+                        comp: 'Watcher',
+                        param: 'variables',
+                        row: 0,
+                        col: 0
+                    });
+                    if (currentVarsResponse.value) {
+                        existingVariables = JSON.parse(currentVarsResponse.value);
+                    }
+                } catch (e) {
+                    console.log('No existing variables, starting fresh');
+                }
+                
+                // Merge new variables from this slot's configuration
+                const newVariables = config.variables || {};
+                const mergedVariables = { ...existingVariables, ...newVariables };
+                
+                // Set merged variables
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'Watcher',
+                    param: 'variables',
+                    row: 0,
+                    col: 0,
+                    value: JSON.stringify(mergedVariables)
+                });
+                console.log('Set Watcher variables:', mergedVariables);
+                
+                // Set expression (now using variable names)
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'Watcher',
+                    param: 'expressions',
+                    row: slotIndex,
+                    col: 0,
+                    value: config.expression
+                });
+                console.log(`Set Watcher expression slot ${slotIndex}:`, config.expression);
+                
+                // Transform and set rising actions
+                const risingActionsForBackend = transformActionsForBackend(config.risingActions || [], true);
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'Watcher',
+                    param: 'rising_actions',
+                    row: slotIndex,
+                    col: 0,
+                    value: risingActionsForBackend.length > 0 
+                        ? JSON.stringify({ actions: risingActionsForBackend }) 
+                        : ''
+                });
+                
+                // Transform and set falling actions
+                const fallingActionsForBackend = transformActionsForBackend(config.fallingActions || [], true);
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'Watcher',
+                    param: 'falling_actions',
+                    row: slotIndex,
+                    col: 0,
+                    value: fallingActionsForBackend.length > 0 
+                        ? JSON.stringify({ actions: fallingActionsForBackend }) 
+                        : ''
+                });
+                
+                showNotification(`Watch slot ${slotIndex} configured`, 'success');
+                
+                // Reload parameters to show changes
+                setTimeout(() => loadParameters(deviceName, componentName), 500);
+            } catch (error) {
+                console.error('Failed to apply watch slot config:', error);
+                showNotification('Failed to save configuration', 'error');
+            }
+        }
+        
+        async function applyActionSequence(actions) {
+            try {
+                // Transform and send the action sequence to ActionManager
+                const actionsForBackend = transformActionsForBackend(actions, false);
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'ActionManager',
+                    param: 'action_to_send',  // Correct parameter name
+                    row: 0,
+                    col: 0,
+                    value: JSON.stringify({ actions: actionsForBackend })
+                });
+                
+                showNotification(`Queued ${actions.length} action(s)`, 'success');
+            } catch (error) {
+                console.error('Failed to queue actions:', error);
+                showNotification('Failed to queue actions', 'error');
+            }
+        }
     </script>
 </body>
 </html>

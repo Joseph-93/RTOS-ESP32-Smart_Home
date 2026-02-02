@@ -1,11 +1,17 @@
 /**
  * ESP32 Component Detail View
- * Handles dynamic loading of component actions and parameters via WebSocket
+ * Handles dynamic loading of component parameters via WebSocket with pagination
  */
 
 let currentDevice = null;
 let currentComponent = null;
 let activeSubscriptions = [];  // Track active subscriptions for cleanup
+
+// Pagination state
+let allParams = [];  // All parameters loaded from device
+let currentPage = 1;
+let pageSize = 25;
+let totalPages = 1;
 
 function showError(message, details = null) {
     const banner = document.getElementById('error-banner');
@@ -23,20 +29,6 @@ function showError(message, details = null) {
 function hideError() {
     const banner = document.getElementById('error-banner');
     if (banner) banner.style.display = 'none';
-}
-
-function toggleAccordion(btn) {
-    const content = btn.nextElementSibling;
-    const icon = btn.querySelector('.accordion-icon');
-    const isOpen = content.classList.contains('open');
-    
-    if (isOpen) {
-        content.classList.remove('open');
-        icon.textContent = '▼';
-    } else {
-        content.classList.add('open');
-        icon.textContent = '▲';
-    }
 }
 
 async function initComponent(deviceName, componentName) {
@@ -61,10 +53,6 @@ async function initComponent(deviceName, componentName) {
         showError('Failed to connect to ESP32 WebSocket', error.message);
         return;
     }
-    
-    console.log('[JS] Loading actions...');
-    await loadActions(deviceName, componentName);
-    await new Promise(r => setTimeout(r, 100)); // WAIT 100ms before loading params
     
     console.log('[JS] Loading parameters...');
     await loadParameters(deviceName, componentName);
@@ -131,14 +119,6 @@ function handleParameterUpdate(event) {
     // No notification for push updates - they happen frequently and would spam the user
 }
 
-async function loadActions(deviceName, componentName) {
-    const container = document.getElementById('actions-container');
-    
-    // Triggers have been removed - this section is now empty
-    // Components only expose read-only state and writable settings
-    container.innerHTML = '<p class="empty-state">No actions available (triggers removed)</p>';
-}
-
 async function loadParameters(deviceName, componentName) {
     const container = document.getElementById('params-container');
     
@@ -160,80 +140,65 @@ async function loadParameters(deviceName, componentName) {
         const strCount = (await esp32ws.getParamInfo(componentName, 'str', -1)).count || 0;
         await new Promise(r => setTimeout(r, 100));
         
-        // Now fetch each parameter ONE AT A TIME
-        const intParams = [];
+        // Collect all parameter entries as a flat list of [row][col] entries
+        allParams = [];
+        
+        // Fetch each parameter and expand to individual entries
         for (let i = 0; i < intCount; i++) {
             console.log(`[JS] Fetching int param ${i}...`);
-            intParams.push(await esp32ws.getParamInfo(componentName, 'int', i));
+            const param = await esp32ws.getParamInfo(componentName, 'int', i);
+            // Expand to individual row/col entries
+            for (let r = 0; r < param.rows; r++) {
+                for (let c = 0; c < param.cols; c++) {
+                    allParams.push({ ...param, row: r, col: c, category: 'int' });
+                }
+            }
             await new Promise(r => setTimeout(r, 100));
         }
         
-        const floatParams = [];
         for (let i = 0; i < floatCount; i++) {
             console.log(`[JS] Fetching float param ${i}...`);
-            floatParams.push(await esp32ws.getParamInfo(componentName, 'float', i));
+            const param = await esp32ws.getParamInfo(componentName, 'float', i);
+            for (let r = 0; r < param.rows; r++) {
+                for (let c = 0; c < param.cols; c++) {
+                    allParams.push({ ...param, row: r, col: c, category: 'float' });
+                }
+            }
             await new Promise(r => setTimeout(r, 100));
         }
         
-        const boolParams = [];
         for (let i = 0; i < boolCount; i++) {
             console.log(`[JS] Fetching bool param ${i}...`);
-            boolParams.push(await esp32ws.getParamInfo(componentName, 'bool', i));
+            const param = await esp32ws.getParamInfo(componentName, 'bool', i);
+            for (let r = 0; r < param.rows; r++) {
+                for (let c = 0; c < param.cols; c++) {
+                    allParams.push({ ...param, row: r, col: c, category: 'bool' });
+                }
+            }
             await new Promise(r => setTimeout(r, 100));
         }
         
-        const stringParams = [];
         for (let i = 0; i < strCount; i++) {
             console.log(`[JS] Fetching string param ${i}...`);
-            stringParams.push(await esp32ws.getParamInfo(componentName, 'str', i));
+            const param = await esp32ws.getParamInfo(componentName, 'str', i);
+            for (let r = 0; r < param.rows; r++) {
+                for (let c = 0; c < param.cols; c++) {
+                    allParams.push({ ...param, row: r, col: c, category: 'str' });
+                }
+            }
             await new Promise(r => setTimeout(r, 100));
         }
         
-        if (intParams.length === 0 && floatParams.length === 0 && 
-            boolParams.length === 0 && stringParams.length === 0) {
+        if (allParams.length === 0) {
             container.innerHTML = '<p class="empty-state">No parameters available</p>';
+            document.getElementById('bottom-pagination').style.display = 'none';
             return;
         }
         
-        let html = '';
-        
-        // Integer parameters - use param.id for subscriptions
-        if (intParams.length > 0) {
-            html += '<div class="param-group"><h4>📊 Integer Parameters</h4>';
-            for (const param of intParams) {
-                html += await createParamSectionById(deviceName, componentName, param);
-            }
-            html += '</div>';
-        }
-        
-        // Float parameters
-        if (floatParams.length > 0) {
-            html += '<div class="param-group"><h4>📈 Float Parameters</h4>';
-            for (const param of floatParams) {
-                html += await createParamSectionById(deviceName, componentName, param);
-            }
-            html += '</div>';
-        }
-        
-        // Boolean parameters
-        if (boolParams.length > 0) {
-            html += '<div class="param-group"><h4>🔘 Boolean Parameters</h4>';
-            for (const param of boolParams) {
-                html += await createParamSectionById(deviceName, componentName, param);
-            }
-            html += '</div>';
-        }
-        
-        // String parameters
-        if (stringParams.length > 0) {
-            html += '<div class="param-group"><h4>📝 String Parameters</h4>';
-            for (const param of stringParams) {
-                html += await createParamSectionById(deviceName, componentName, param);
-            }
-            html += '</div>';
-        }
-        
-        container.innerHTML = html;
+        // Calculate total pages and render first page
+        totalPages = Math.ceil(allParams.length / pageSize);
+        currentPage = 1;
+        await renderCurrentPage();
         
     } catch (error) {
         console.error('[JS] Error loading parameters:', error);
@@ -242,60 +207,137 @@ async function loadParameters(deviceName, componentName) {
     }
 }
 
-// Create param section using param.param_id for subscriptions and updates
-async function createParamSectionById(deviceName, component, param) {
-    const { name, param_id: paramId, type, rows, cols, min, max, readOnly } = param;
+// Render the current page of parameters
+async function renderCurrentPage() {
+    const container = document.getElementById('params-container');
+    container.innerHTML = '<div class="loading">Loading page...</div>';
+    
+    // Unsubscribe from previous page's subscriptions
+    for (const sub of activeSubscriptions) {
+        try {
+            await esp32ws.unsubscribeById(sub.param_id, sub.row, sub.col);
+        } catch (error) {
+            console.error('Error unsubscribing:', error);
+        }
+    }
+    activeSubscriptions = [];
+    
+    // Calculate page slice
+    const startIdx = (currentPage - 1) * pageSize;
+    const endIdx = Math.min(startIdx + pageSize, allParams.length);
+    const pageParams = allParams.slice(startIdx, endIdx);
     
     let html = '';
     
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const value = await getParamValueById(paramId, r, c);
-            const inputId = `param_${paramId}_${r}_${c}`;
-            
-            // Add read-only class if parameter is read-only
-            const readOnlyClass = readOnly ? ' read-only' : '';
-            const disabledAttr = readOnly ? ' disabled' : '';
-            const readOnlyLabel = readOnly ? ' <span class="read-only-badge">🔒</span>' : '';
-            
-            html += `<div class="param-item${readOnlyClass}">`;
-            html += `<label><strong>${name}[${r}][${c}]:</strong>${readOnlyLabel}</label>`;
-            html += '<div class="param-control">';
-            
-            if (type === 'bool') {
-                const isTrue = (value === 'true' || value === true);
-                html += `<div class="bool-buttons" id="${inputId}">`;
-                if (readOnly) {
-                    html += `<button class="bool-btn ${isTrue ? 'active' : ''}" disabled>True</button>`;
-                    html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" disabled>False</button>`;
-                } else {
-                    html += `<button class="bool-btn ${isTrue ? 'active' : ''}" onclick="setParamValueById(${paramId}, ${r}, ${c}, true); this.classList.add('active'); this.nextElementSibling.classList.remove('active');">True</button>`;
-                    html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" onclick="setParamValueById(${paramId}, ${r}, ${c}, false); this.classList.add('active'); this.previousElementSibling.classList.remove('active');">False</button>`;
-                }
-                html += '</div>';
-            } else if (type === 'str') {
-                html += `<textarea id="${inputId}"${disabledAttr}>${escapeHtml(value)}</textarea>`;
-                if (!readOnly) {
-                    html += `<button class="save-btn" onclick="saveStringParamById(${paramId}, ${r}, ${c}, '${inputId}')">💾 Save</button>`;
-                }
-            } else if (type === 'int' || type === 'float') {
-                const step = type === 'float' ? '0.01' : '1';
-                const minVal = min !== undefined ? min : 0;
-                const maxVal = max !== undefined ? max : 100;
-                html += '<div class="number-control">';
-                if (readOnly) {
-                    html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" disabled>`;
-                    html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" disabled>`;
-                } else {
-                    html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncNumberInput('${inputId}', this.value)" onchange="setParamValueById(${paramId}, ${r}, ${c}, this.value)">`;
-                    html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncSlider('${inputId}_slider', this.value)" onchange="setParamValueById(${paramId}, ${r}, ${c}, this.value)">`;
-                }
-                html += '</div>';
-            }
-            
-            html += '</div></div>';
-        }
+    for (const entry of pageParams) {
+        html += await createParamEntryById(currentDevice, currentComponent, entry);
     }
+    
+    container.innerHTML = html || '<p class="empty-state">No parameters on this page</p>';
+    
+    // Update pagination controls
+    updatePaginationControls();
+}
+
+// Update pagination button states and info
+function updatePaginationControls() {
+    const prevBtn = document.getElementById('prevPage');
+    const nextBtn = document.getElementById('nextPage');
+    const pageInfo = document.getElementById('pageInfo');
+    const prevBtnBottom = document.getElementById('prevPageBottom');
+    const nextBtnBottom = document.getElementById('nextPageBottom');
+    const pageInfoBottom = document.getElementById('pageInfoBottom');
+    
+    const infoText = `Page ${currentPage} of ${totalPages} (${allParams.length} entries)`;
+    
+    if (prevBtn) prevBtn.disabled = currentPage <= 1;
+    if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+    if (pageInfo) pageInfo.textContent = infoText;
+    
+    if (prevBtnBottom) prevBtnBottom.disabled = currentPage <= 1;
+    if (nextBtnBottom) nextBtnBottom.disabled = currentPage >= totalPages;
+    if (pageInfoBottom) pageInfoBottom.textContent = infoText;
+}
+
+// Pagination navigation functions
+async function nextPage() {
+    if (currentPage < totalPages) {
+        currentPage++;
+        await renderCurrentPage();
+        window.scrollTo(0, 0);
+    }
+}
+
+async function prevPage() {
+    if (currentPage > 1) {
+        currentPage--;
+        await renderCurrentPage();
+        window.scrollTo(0, 0);
+    }
+}
+
+async function changePageSize(newSize) {
+    pageSize = parseInt(newSize);
+    totalPages = Math.ceil(allParams.length / pageSize);
+    currentPage = 1;  // Reset to first page
+    await renderCurrentPage();
+}
+
+// Create a single param entry (one [row][col] value)
+async function createParamEntryById(deviceName, component, entry) {
+    const { name, param_id: paramId, type, rows, cols, min, max, readOnly, row: r, col: c } = entry;
+    
+    // Type badge for visual identification
+    const typeIcons = { int: '📊', float: '📈', bool: '🔘', str: '📝' };
+    const typeIcon = typeIcons[type] || '📋';
+    
+    const value = await getParamValueById(paramId, r, c);
+    const inputId = `param_${paramId}_${r}_${c}`;
+    
+    // Add read-only class if parameter is read-only
+    const readOnlyClass = readOnly ? ' read-only' : '';
+    const disabledAttr = readOnly ? ' disabled' : '';
+    const readOnlyLabel = readOnly ? ' <span class="read-only-badge">🔒</span>' : '';
+    
+    // Show row/col only for multi-dimensional params
+    const dimLabel = (rows > 1 || cols > 1) ? `[${r}][${c}]` : '';
+    
+    let html = `<div class="param-item${readOnlyClass}">`;
+    html += `<label><span class="type-icon">${typeIcon}</span> <strong>${name}${dimLabel}:</strong>${readOnlyLabel}</label>`;
+    html += '<div class="param-control">';
+    
+    if (type === 'bool') {
+        const isTrue = (value === 'true' || value === true);
+        html += `<div class="bool-buttons" id="${inputId}">`;
+        if (readOnly) {
+            html += `<button class="bool-btn ${isTrue ? 'active' : ''}" disabled>True</button>`;
+            html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" disabled>False</button>`;
+        } else {
+            html += `<button class="bool-btn ${isTrue ? 'active' : ''}" onclick="setParamValueById(${paramId}, ${r}, ${c}, true); this.classList.add('active'); this.nextElementSibling.classList.remove('active');">True</button>`;
+            html += `<button class="bool-btn ${!isTrue ? 'active' : ''}" onclick="setParamValueById(${paramId}, ${r}, ${c}, false); this.classList.add('active'); this.previousElementSibling.classList.remove('active');">False</button>`;
+        }
+        html += '</div>';
+    } else if (type === 'str') {
+        html += `<textarea id="${inputId}"${disabledAttr}>${escapeHtml(value)}</textarea>`;
+        if (!readOnly) {
+            html += `<button class="save-btn" onclick="saveStringParamById(${paramId}, ${r}, ${c}, '${inputId}')">💾 Save</button>`;
+        }
+    } else if (type === 'int' || type === 'float') {
+        const step = type === 'float' ? '0.01' : '1';
+        const minVal = min !== undefined ? min : 0;
+        const maxVal = max !== undefined ? max : 100;
+        html += '<div class="number-control">';
+        if (readOnly) {
+            html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" disabled>`;
+            html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" disabled>`;
+        } else {
+            html += `<input type="range" id="${inputId}_slider" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncNumberInput('${inputId}', this.value)" onchange="setParamValueById(${paramId}, ${r}, ${c}, this.value)">`;
+            html += `<input type="number" id="${inputId}" min="${minVal}" max="${maxVal}" step="${step}" value="${value}" oninput="syncSlider('${inputId}_slider', this.value)" onchange="setParamValueById(${paramId}, ${r}, ${c}, this.value)">`;
+        }
+        html += '</div>';
+    }
+    
+    html += '</div></div>';
     
     return html;
 }

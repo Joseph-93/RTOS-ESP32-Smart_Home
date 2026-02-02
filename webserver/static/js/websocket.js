@@ -201,15 +201,6 @@ class ESP32WebSocket {
         return response.success;
     }
 
-    async invokeAction(comp, action) {
-        const response = await this.send({
-            type: 'invoke_action',
-            comp,
-            action
-        });
-        return response.success;
-    }
-
     async subscribe(comp, param_type, idx, row, col) {
         const response = await this.send({
             type: 'subscribe',

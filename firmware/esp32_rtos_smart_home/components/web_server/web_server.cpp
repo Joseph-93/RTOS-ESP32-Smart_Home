@@ -249,9 +249,50 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
         return ESP_OK;
     }
     
-    ESP_LOGI("WebServer", "WebSocket frame received");
+    // Respond to PING with PONG (must echo back any payload)
+    if (ws_pkt.type == HTTPD_WS_TYPE_PING) {
+        ESP_LOGI("WebServer", "WebSocket PING received (len=%d)", ws_pkt.len);
+        
+        // Control frame payloads are max 125 bytes per WebSocket spec
+        uint8_t ping_payload[125];
+        size_t ping_len = ws_pkt.len;
+        
+        // Read PING payload if any
+        if (ping_len > 0) {
+            if (ping_len > 125) ping_len = 125;
+            ws_pkt.payload = ping_payload;
+            esp_err_t recv_ret = httpd_ws_recv_frame(req, &ws_pkt, ping_len);
+            if (recv_ret != ESP_OK) {
+                ESP_LOGE("WebServer", "Failed to read PING payload: %d", recv_ret);
+                return recv_ret;
+            }
+        }
+        
+        // Send PONG with same payload
+        httpd_ws_frame_t pong_pkt;
+        memset(&pong_pkt, 0, sizeof(httpd_ws_frame_t));
+        pong_pkt.type = HTTPD_WS_TYPE_PONG;
+        pong_pkt.payload = ping_len > 0 ? ping_payload : NULL;
+        pong_pkt.len = ping_len;
+        
+        esp_err_t pong_ret = httpd_ws_send_frame(req, &pong_pkt);
+        ESP_LOGI("WebServer", "Sent PONG (len=%d), ret=%d", ping_len, pong_ret);
+        return pong_ret;
+    }
     
-    ESP_LOGI("WebServer", "WS frame len: %d", ws_pkt.len);
+    // Ignore PONG frames (response to our pings, if any)
+    if (ws_pkt.type == HTTPD_WS_TYPE_PONG) {
+        ESP_LOGI("WebServer", "WebSocket PONG received");
+        return ESP_OK;
+    }
+    
+    // Only process TEXT frames - reject anything else
+    if (ws_pkt.type != HTTPD_WS_TYPE_TEXT) {
+        ESP_LOGW("WebServer", "Ignoring non-TEXT frame type: %d", ws_pkt.type);
+        return ESP_OK;
+    }
+    
+    ESP_LOGI("WebServer", "WebSocket TEXT frame received, len: %d", ws_pkt.len);
     
     if (ws_pkt.len) {
         uint8_t* buf = (uint8_t*)calloc(1, ws_pkt.len + 1);
@@ -320,10 +361,17 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
             char* response_str = cJSON_PrintUnformatted(response);
             if (response_str) {
                 ESP_LOGI("WebServer", "WS sending: %s", response_str);
-                ws_pkt.payload = (uint8_t*)response_str;
-                ws_pkt.len = strlen(response_str);
-                ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-                ret = httpd_ws_send_frame(req, &ws_pkt);
+                // Use fresh frame struct for sending (avoid any corruption from received frame)
+                httpd_ws_frame_t send_pkt;
+                memset(&send_pkt, 0, sizeof(httpd_ws_frame_t));
+                send_pkt.payload = (uint8_t*)response_str;
+                send_pkt.len = strlen(response_str);
+                send_pkt.type = HTTPD_WS_TYPE_TEXT;
+                send_pkt.final = true;  // Explicitly mark as final frame
+                ret = httpd_ws_send_frame(req, &send_pkt);
+                if (ret != ESP_OK) {
+                    ESP_LOGE("WebServer", "Failed to send WS frame: %d", ret);
+                }
                 free(response_str);
             }
             cJSON_Delete(response);

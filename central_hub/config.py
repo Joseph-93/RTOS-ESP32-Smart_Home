@@ -17,8 +17,8 @@ WS_PING_TIMEOUT = 20   # seconds
 RECONNECT_DELAY = 5    # seconds
 
 # Rate limiting (to avoid overwhelming ESP32)
-DISCOVERY_DELAY = 0.05   # seconds between param info requests
-SUBSCRIBE_DELAY = 0.02   # seconds between subscribe requests
+DISCOVERY_DELAY = 0.15   # seconds between param info requests
+SUBSCRIBE_DELAY = 0.2    # seconds between subscribe requests (higher to prevent memory exhaustion)
 
 # Logging level: 'DEBUG', 'INFO', 'WARNING', 'ERROR'
 LOG_LEVEL = 'INFO'

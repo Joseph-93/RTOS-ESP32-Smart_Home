@@ -121,15 +121,15 @@
                 
                 // Iterate through each component
                 for (let i = 0; i < components.length; i++) {
-                    const compName = components[i];
+                    // Handle both string format and object format {name, id}
+                    const compName = typeof components[i] === 'string' ? components[i] : components[i].name;
                     updateProgress(`Processing ${compName} (${i+1}/${components.length})...`);
                     
                     exportData.components[compName] = {
                         int: [],
                         float: [],
                         bool: [],
-                        str: [],
-                        actions: []
+                        str: []
                     };
                     
                     // Get each parameter type
@@ -186,39 +186,6 @@
                             
                             exportData.components[compName][paramType].push(paramData);
                         }
-                    }
-                    
-                    // Export action arguments
-                    updateProgress(`Reading ${compName} actions...`);
-                    const actionsCountResp = await deviceWs.send({
-                        type: 'get_param_info',
-                        comp: compName,
-                        param_type: 'actions',
-                        idx: -1
-                    });
-                    
-                    const actionCount = actionsCountResp.count || 0;
-                    for (let idx = 0; idx < actionCount; idx++) {
-                        const actionInfo = await deviceWs.send({
-                            type: 'get_param_info',
-                            comp: compName,
-                            param_type: 'actions',
-                            idx: idx
-                        });
-                        
-                        const actionArg = await deviceWs.send({
-                            type: 'get_param',
-                            comp: compName,
-                            param_type: 'actions',
-                            idx: idx,
-                            row: 0,
-                            col: 0
-                        });
-                        
-                        exportData.components[compName].actions.push({
-                            name: actionInfo.name,
-                            argument: actionArg.value || ''
-                        });
                     }
                 }
                 
@@ -372,53 +339,6 @@
                                     updateStats(`${completedParams} / ${totalParams} parameters`);
                                 }
                             }
-                        }
-                    }
-                    
-                    // Import action arguments
-                    if (comp.actions) {
-                        updateProgress(`Setting ${compName} action arguments...`);
-                        
-                        // Get action count from device
-                        const actionsCountResp = await deviceWs.send({
-                            type: 'get_param_info',
-                            comp: compName,
-                            param_type: 'actions',
-                            idx: -1
-                        });
-                        
-                        const actionCount = actionsCountResp.count || 0;
-                        const actionNameToIdx = {};
-                        
-                        // Build name -> index map
-                        for (let i = 0; i < actionCount; i++) {
-                            const info = await deviceWs.send({
-                                type: 'get_param_info',
-                                comp: compName,
-                                param_type: 'actions',
-                                idx: i
-                            });
-                            actionNameToIdx[info.name] = i;
-                        }
-                        
-                        // Set each action argument
-                        for (const action of comp.actions) {
-                            const actualIdx = actionNameToIdx[action.name];
-                            
-                            if (actualIdx === undefined) {
-                                console.warn(`Action ${compName}.${action.name} not found on device, skipping`);
-                                continue;
-                            }
-                            
-                            await deviceWs.send({
-                                type: 'set_param',
-                                comp: compName,
-                                param_type: 'actions',
-                                idx: actualIdx,
-                                row: 0,
-                                col: 0,
-                                value: action.argument
-                            });
                         }
                     }
                 }

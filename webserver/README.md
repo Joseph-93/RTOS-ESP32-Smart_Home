@@ -65,36 +65,29 @@ The ESP32 communicates via JSON over TCP (port 8888). Each command is a JSON obj
 **Get Components:**
 ```json
 {"cmd": "get_components"}
-→ {"components": ["DoorSensor", "MotionSensor", ...]}
+→ {"components": ["DoorSensor", "MotionSensor", "LightSensor", ...]}
 ```
 
 **Get Parameter Info:**
 ```json
-{"cmd": "get_param_info", "comp": "NetworkActions"}
+{"cmd": "get_param_info", "comp": "LightSensor"}
 → {
-    "int_params": [{"name": "retry_count", "rows": 1, "cols": 1}],
+    "int_params": [{"name": "light_level", "rows": 1, "cols": 1}],
     "float_params": [...],
     "bool_params": [...],
-    "string_params": [{"name": "http_messages", "rows": 31, "cols": 1}],
-    "actions": ["send_http", "connect_websocket"]
+    "string_params": [...]
 }
 ```
 
 **Get Parameter Value:**
 ```json
-{"cmd": "get_param", "comp": "NetworkActions", "type": "str", "idx": 0, "row": 5, "col": 0}
-→ {"value": "{\"name\":\"...\", \"url\":\"...\"}"}
+{"cmd": "get_param", "comp": "LightSensor", "type": "int", "idx": 0, "row": 0, "col": 0}
+→ {"value": 512}
 ```
 
 **Set Parameter Value:**
 ```json
-{"cmd": "set_param", "comp": "NetworkActions", "type": "int", "idx": 0, "row": 0, "col": 0, "value": 5}
-→ {"success": true}
-```
-
-**Invoke Action:**
-```json
-{"cmd": "invoke_action", "comp": "NetworkActions", "action": "send_http"}
+{"cmd": "set_param", "comp": "LightSensor", "type": "int", "idx": 0, "row": 0, "col": 0, "value": 5}
 → {"success": true}
 ```
 

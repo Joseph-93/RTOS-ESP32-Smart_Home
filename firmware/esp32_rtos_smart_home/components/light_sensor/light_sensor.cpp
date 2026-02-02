@@ -5,6 +5,7 @@
 #include <cmath>
 
 #define LIGHT_SENSOR_PIN ADC1_CHANNEL_0 // GPIO36
+#define LIGHT_SENSOR_PERIOD_MS 500      // Sampling period in milliseconds
 
 LightSensorComponent::LightSensorComponent() 
     : Component("LightSensor") {
@@ -67,7 +68,7 @@ void LightSensorComponent::onInitialize() {
 
     light_sensor_timer_handle = xTimerCreate(
         "light_sensor_timer",
-        pdMS_TO_TICKS(50), // 50 millisecond interval
+        pdMS_TO_TICKS(LIGHT_SENSOR_PERIOD_MS),
         pdTRUE,              // Auto-reload
         this,                // Pass 'this' as timer ID so we can access it in callback
         [](TimerHandle_t timer) {

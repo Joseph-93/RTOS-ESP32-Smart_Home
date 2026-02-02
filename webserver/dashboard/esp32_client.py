@@ -93,26 +93,6 @@ class ESP32Device:
         except Exception as e:
             print(f"[ESP32 {self.host}] Error setting param value: {e}")
             return False
-    
-    def invoke_action(self, comp: str, action: str) -> bool:
-        """
-        Invoke component action
-        POST /api/invoke_action
-        Body: {comp, action}
-        """
-        try:
-            payload = {
-                'comp': comp,
-                'action': action
-            }
-            response = self.session.post(f"{self.base_url}/api/invoke_action", json=payload, timeout=5)
-            response.raise_for_status()
-            data = response.json()
-            print(f"[ESP32 {self.host}] Invoke action {comp}/{action}: {data}")
-            return data.get("success", False)
-        except Exception as e:
-            print(f"[ESP32 {self.host}] Error invoking action: {e}")
-            return False
 
 
 class ESP32Manager:
