@@ -614,6 +614,52 @@ class WebServerComponent(Component):
             return {'success': True}
         
         # ====================================================================
+        # get_watcher_state - Get live state of a Watcher expression slot
+        # ====================================================================
+        elif msg_type == 'get_watcher_state':
+            slot = request.get('slot', 0)
+            
+            # Get the Watcher component
+            watcher = self.hub.local_components.get('Watcher')
+            if not watcher:
+                return {'error': 'Watcher component not found'}
+            
+            # Get expression for this slot
+            expr = watcher.expressions.get_value(slot, 0)
+            if not expr:
+                return {
+                    'slot': slot,
+                    'expression': '',
+                    'result': None,
+                    'variable_values': {},
+                    'variable_definitions': watcher._var_defs
+                }
+            
+            # Get variable values and definitions
+            var_values = dict(watcher._var_values)
+            var_defs = dict(watcher._var_defs)
+            
+            # Try to evaluate the expression
+            try:
+                result = watcher._evaluate_expression(expr)
+                return {
+                    'slot': slot,
+                    'expression': expr,
+                    'result': result,
+                    'variable_values': var_values,
+                    'variable_definitions': var_defs
+                }
+            except Exception as e:
+                return {
+                    'slot': slot,
+                    'expression': expr,
+                    'result': None,
+                    'error': str(e),
+                    'variable_values': var_values,
+                    'variable_definitions': var_defs
+                }
+        
+        # ====================================================================
         # Unknown message type
         # ====================================================================
         else:

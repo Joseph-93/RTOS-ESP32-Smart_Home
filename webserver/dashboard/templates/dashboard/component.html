@@ -30,9 +30,21 @@
             <div id="watcher-controls" class="special-controls" style="display:none;">
                 <h3>🔍 Watcher Configuration</h3>
                 <p class="help-text">Configure watch slots to monitor parameter changes and trigger actions.</p>
-                <button class="btn-primary" onclick="openWatchSlotEditor()">
-                    ➕ Configure Watch Slot
-                </button>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
+                    <button class="btn-primary" onclick="openWatchSlotEditor()">
+                        ➕ Configure Watch Slot
+                    </button>
+                    <button class="btn-secondary" onclick="loadActiveExpressions()">
+                        🔄 Refresh Active Slots
+                    </button>
+                </div>
+                
+                <div id="active-expressions" style="margin-top: 15px;">
+                    <h4>👁️ Active Expression Slots (click to monitor)</h4>
+                    <div id="expression-slots-list" style="margin-top: 10px;">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
             </div>
             
             <!-- Special controls for ActionManager component -->
@@ -89,6 +101,8 @@
         // Show special controls based on component type
         if (componentName === 'Watcher') {
             document.getElementById('watcher-controls').style.display = 'block';
+            // Load active expressions after WebSocket connects
+            setTimeout(() => loadActiveExpressions(), 1000);
         } else if (componentName === 'ActionManager') {
             document.getElementById('action-manager-controls').style.display = 'block';
         }
@@ -96,6 +110,86 @@
         // Global functions for modal editors
         let watchSlotEditor = null;
         let actionManagerEditor = null;
+        
+        // Load and display active watch expressions
+        async function loadActiveExpressions() {
+            const container = document.getElementById('expression-slots-list');
+            if (!esp32ws || !esp32ws.connected) {
+                container.innerHTML = '<div class="empty-hint">Connect to device first</div>';
+                return;
+            }
+            
+            container.innerHTML = '<div class="loading">Loading slots...</div>';
+            
+            try {
+                // Scan all 50 slots for expressions
+                const activeSlots = [];
+                
+                // Check slots in batches to avoid flooding
+                for (let i = 0; i < 50; i++) {
+                    const resp = await esp32ws.send({
+                        type: 'get_param',
+                        comp: 'Watcher',
+                        param: 'expressions',
+                        row: i,
+                        col: 0
+                    });
+                    
+                    if (resp.value && resp.value.trim()) {
+                        activeSlots.push({ slot: i, expression: resp.value });
+                    }
+                }
+                
+                if (activeSlots.length === 0) {
+                    container.innerHTML = '<div class="empty-hint">No active expressions. Click "Configure Watch Slot" to create one.</div>';
+                    return;
+                }
+                
+                // Render the active slots
+                container.innerHTML = activeSlots.map(s => `
+                    <div class="expression-slot-card" onclick="openExpressionMonitor(${s.slot})" style="
+                        background: var(--bg-secondary);
+                        border: 1px solid var(--border-color);
+                        border-radius: 6px;
+                        padding: 10px 15px;
+                        margin-bottom: 8px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                    " onmouseover="this.style.borderColor='var(--accent-primary)'" onmouseout="this.style.borderColor='var(--border-color)'">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span style="color: var(--text-secondary); font-size: 0.9em;">Slot ${s.slot}</span>
+                                <div style="font-family: monospace; margin-top: 4px;">${escapeHtml(s.expression)}</div>
+                            </div>
+                            <span style="color: var(--accent-primary);">👁️</span>
+                        </div>
+                    </div>
+                `).join('');
+                
+            } catch (e) {
+                console.error('Failed to load expressions:', e);
+                container.innerHTML = '<div class="error-hint">Error loading expressions</div>';
+            }
+        }
+        
+        // Helper to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Open expression monitor modal
+        function openExpressionMonitor(slot) {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            
+            // Create global expression monitor instance
+            expressionMonitor = new ExpressionMonitor(esp32ws);
+            expressionMonitor.show(slot);
+        }
         
         async function openWatchSlotEditor(slotIndex = null) {
             // Make sure WebSocket is connected
@@ -154,8 +248,11 @@
                         ]);
                         
                         const expr = exprResp.value || '';
-                        const risingActions = risingResp.value ? JSON.parse(risingResp.value).actions || [] : [];
-                        const fallingActions = fallingResp.value ? JSON.parse(fallingResp.value).actions || [] : [];
+                        // Parse actions and normalize: backend uses 'component', frontend uses 'comp'
+                        const risingActionsRaw = risingResp.value ? JSON.parse(risingResp.value).actions || [] : [];
+                        const fallingActionsRaw = fallingResp.value ? JSON.parse(fallingResp.value).actions || [] : [];
+                        const risingActions = risingActionsRaw.map(a => ({...a, comp: a.component || a.comp}));
+                        const fallingActions = fallingActionsRaw.map(a => ({...a, comp: a.component || a.comp}));
                         const variables = varsResp.value ? JSON.parse(varsResp.value) : {};
                         
                         currentSlotData = { expression: expr, risingActions, fallingActions, variables };

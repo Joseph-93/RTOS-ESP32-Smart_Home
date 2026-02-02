@@ -1052,11 +1052,248 @@ class ActionManagerEditor {
 }
 
 
+// ============================================================================
+// EXPRESSION MONITOR - Live view of watch expression status
+// ============================================================================
+class ExpressionMonitor {
+    constructor(wsConnection) {
+        this.ws = wsConnection;
+        this.modal = null;
+        this.slotIndex = null;
+        this.expression = '';
+        this.variables = {};
+        this.refreshInterval = null;
+        this.autoRefresh = true;
+    }
+
+    async show(slotIndex) {
+        this.slotIndex = slotIndex;
+        
+        // Load slot data
+        await this._loadSlotData();
+        
+        // Create and show modal
+        this._createModal();
+        
+        // Start auto-refresh
+        this._startAutoRefresh();
+    }
+
+    hide() {
+        this._stopAutoRefresh();
+        if (this.modal) {
+            this.modal.remove();
+            this.modal = null;
+        }
+    }
+
+    async _loadSlotData() {
+        try {
+            const [exprResp, varsResp] = await Promise.all([
+                this.ws.send({ type: 'get_param', comp: 'Watcher', param: 'expressions', row: this.slotIndex, col: 0 }),
+                this.ws.send({ type: 'get_param', comp: 'Watcher', param: 'variables', row: 0, col: 0 })
+            ]);
+            
+            this.expression = exprResp.value || '';
+            this.variables = varsResp.value ? JSON.parse(varsResp.value) : {};
+        } catch (e) {
+            console.error('Failed to load slot data:', e);
+            this.expression = '(error loading)';
+            this.variables = {};
+        }
+    }
+
+    _createModal() {
+        this.modal = document.createElement('div');
+        this.modal.className = 'config-modal-overlay';
+        this.modal.innerHTML = `
+            <div class="config-modal expr-monitor">
+                <div class="config-modal-header">
+                    <h2>👁️ Expression Monitor - Slot ${this.slotIndex}</h2>
+                    <button class="close-btn" onclick="expressionMonitor.hide()">✕</button>
+                </div>
+                <div class="config-modal-body">
+                    <div class="expr-monitor-header">
+                        <span>Current Status:</span>
+                        <div id="expr-status" class="expr-monitor-status status-unknown">
+                            ⏳ Loading...
+                        </div>
+                    </div>
+                    
+                    <div class="expr-monitor-expression">
+                        <strong>Expression:</strong><br>
+                        <code id="expr-text">${this.expression || '(no expression)'}</code>
+                    </div>
+                    
+                    <div id="expr-errors" class="expr-monitor-errors" style="display: none;">
+                        <h4>⚠️ Errors</h4>
+                        <ul id="expr-error-list"></ul>
+                    </div>
+                    
+                    <div class="expr-monitor-variables">
+                        <h4>📊 Variable Values</h4>
+                        <div id="var-list">
+                            <div class="loading">Loading variable values...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="expr-monitor-auto-refresh">
+                        <label>
+                            <input type="checkbox" id="auto-refresh-check" checked>
+                            Auto-refresh every 500ms
+                        </label>
+                    </div>
+                </div>
+                <div class="config-modal-footer">
+                    <button class="btn btn-secondary" onclick="openWatchSlotEditor(${this.slotIndex})">✏️ Edit Slot</button>
+                    <button class="btn btn-primary" onclick="expressionMonitor.hide()">Close</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(this.modal);
+        
+        // Auto-refresh toggle
+        this.modal.querySelector('#auto-refresh-check').onchange = (e) => {
+            this.autoRefresh = e.target.checked;
+            if (this.autoRefresh) {
+                this._startAutoRefresh();
+            } else {
+                this._stopAutoRefresh();
+            }
+        };
+        
+        // Initial refresh
+        this._refresh();
+    }
+
+    _startAutoRefresh() {
+        this._stopAutoRefresh();
+        if (this.autoRefresh) {
+            this.refreshInterval = setInterval(() => this._refresh(), 500);
+        }
+    }
+
+    _stopAutoRefresh() {
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+            this.refreshInterval = null;
+        }
+    }
+
+    async _refresh() {
+        if (!this.modal) return;
+        
+        try {
+            // Get Watcher's internal state via a special request
+            const response = await this.ws.send({
+                type: 'get_watcher_state',
+                slot: this.slotIndex
+            });
+            
+            // Update status
+            const statusDiv = this.modal.querySelector('#expr-status');
+            const errorsDiv = this.modal.querySelector('#expr-errors');
+            const errorList = this.modal.querySelector('#expr-error-list');
+            
+            if (response.error) {
+                statusDiv.className = 'expr-monitor-status status-error';
+                statusDiv.innerHTML = '❌ Error';
+                errorsDiv.style.display = 'block';
+                errorList.innerHTML = `<li>${response.error}</li>`;
+            } else if (response.result === true) {
+                statusDiv.className = 'expr-monitor-status status-true';
+                statusDiv.innerHTML = '✅ TRUE';
+                errorsDiv.style.display = 'none';
+            } else if (response.result === false) {
+                statusDiv.className = 'expr-monitor-status status-false';
+                statusDiv.innerHTML = '○ FALSE';
+                errorsDiv.style.display = 'none';
+            } else {
+                statusDiv.className = 'expr-monitor-status status-unknown';
+                statusDiv.innerHTML = '⏳ Unknown';
+                errorsDiv.style.display = 'none';
+            }
+            
+            // Update variable values
+            const varList = this.modal.querySelector('#var-list');
+            const varValues = response.variable_values || {};
+            const varDefs = response.variable_definitions || this.variables;
+            
+            // Find which variables are used in this expression
+            const usedVars = this._extractVariablesFromExpression(this.expression, Object.keys(varDefs));
+            
+            if (usedVars.length === 0) {
+                varList.innerHTML = '<div class="empty-hint">No variables in this expression</div>';
+            } else {
+                varList.innerHTML = usedVars.map(varName => {
+                    const def = varDefs[varName] || {};
+                    const value = varValues[varName];
+                    const hasValue = value !== undefined && value !== null;
+                    
+                    const deviceLabel = def.device === 'self' ? '🏠 local' : `📡 ${def.device}`;
+                    const source = `${deviceLabel} / ${def.component || '?'}.${def.param || '?'}`;
+                    
+                    let valueClass = 'value-missing';
+                    let valueText = '❌ NO VALUE';
+                    
+                    if (hasValue) {
+                        if (typeof value === 'boolean') {
+                            valueClass = 'type-bool';
+                            valueText = value ? '✓ true' : '✗ false';
+                        } else if (typeof value === 'number') {
+                            valueClass = Number.isInteger(value) ? 'type-int' : 'type-float';
+                            valueText = value.toString();
+                        } else {
+                            valueClass = 'type-str';
+                            valueText = `"${value}"`;
+                        }
+                    }
+                    
+                    return `
+                        <div class="var-row">
+                            <div>
+                                <span class="var-name">${varName}</span>
+                                <span class="var-source">${source}</span>
+                            </div>
+                            <div class="var-value">
+                                <span class="var-value-badge ${valueClass}">${valueText}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+        } catch (e) {
+            console.error('Failed to refresh expression state:', e);
+            // Don't show error on every refresh failure
+        }
+    }
+
+    _extractVariablesFromExpression(expr, knownVars) {
+        // Find all variable names used in the expression
+        const used = [];
+        for (const varName of knownVars) {
+            // Use word boundary matching
+            const pattern = new RegExp(`\\b${varName}\\b`);
+            if (pattern.test(expr)) {
+                used.push(varName);
+            }
+        }
+        return used;
+    }
+}
+
+// Global instance for easy access
+let expressionMonitor = null;
+
+
 // Export for use
 window.ConfigBuilder = {
     ParameterPicker,
     ExpressionBuilder,
     ActionBuilder,
     WatchSlotEditor,
-    ActionManagerEditor
+    ActionManagerEditor,
+    ExpressionMonitor
 };

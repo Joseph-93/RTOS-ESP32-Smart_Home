@@ -18,7 +18,7 @@ import logging
 import os
 import socket
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Set, Tuple
 from datetime import datetime
 
 import websockets
@@ -98,6 +98,8 @@ class ESP32Device:
     websocket: Optional[WebSocketClientProtocol] = None
     message_id: int = 0
     pending_requests: Dict[int, asyncio.Future] = field(default_factory=dict)
+    # Track active subscriptions: set of (component_name, param_name, row, col)
+    active_subscriptions: Set[Tuple[str, str, int, int]] = field(default_factory=set)
     
     def get_param_by_id(self, param_id: int) -> Optional[tuple]:
         """Find parameter by ID across all components. Returns (component, param) or None."""
@@ -242,7 +244,7 @@ class CentralHub:
                 await asyncio.sleep(RECONNECT_DELAY)
     
     async def _connect_and_subscribe(self, device: ESP32Device):
-        """Connect to device, discover components/params, subscribe to all."""
+        """Connect to device and discover components/params (no automatic subscriptions)."""
         ip = device.ip
         uri = f"ws://{ip}/ws"
         
@@ -251,6 +253,7 @@ class CentralHub:
         async with websockets.connect(uri, ping_interval=WS_PING_INTERVAL, ping_timeout=WS_PING_TIMEOUT) as ws:
             device.websocket = ws
             device.connected = True
+            device.active_subscriptions = set()  # Reset subscriptions on reconnect
             logger.info(f"[{ip}] Connected!")
             
             # Start listener task FIRST so we can receive responses
@@ -260,8 +263,8 @@ class CentralHub:
                 # Discover all components and parameters
                 await self._discover_device(device)
                 
-                # Subscribe to all parameters
-                await self._subscribe_all(device)
+                # Subscribe to needed parameters (based on Watcher variables)
+                await self._subscribe_needed(device)
                 
                 # Wait for listener to complete (will run until disconnect)
                 await listener_task
@@ -370,41 +373,157 @@ class CentralHub:
             component.add_parameter(param)
             await asyncio.sleep(DISCOVERY_DELAY)
     
-    async def _subscribe_all(self, device: ESP32Device):
-        """Subscribe to all parameters on the device."""
+    async def _subscribe_needed(self, device: ESP32Device):
+        """Subscribe only to parameters that are actually needed (used by Watcher)."""
         ip = device.ip
         subscription_count = 0
         
-        for comp in device.components.values():
-            for param in comp.parameters.values():
-                # Subscribe to each cell of the parameter
-                for row in range(param.rows):
-                    for col in range(param.cols):
-                        try:
-                            response = await self._send_request(device, {
-                                'type': 'subscribe',
-                                'param_id': param.param_id,
-                                'row': row,
-                                'col': col
-                            })
-                            
-                            # Store initial value
-                            if 'value' in response:
-                                param.set_value(row, col, response['value'])
-                            
-                            subscription_count += 1
-                            await asyncio.sleep(SUBSCRIBE_DELAY)  # Rate limit
-                            
-                        except asyncio.TimeoutError:
-                            logger.warning(f"[{ip}] Timeout subscribing to {comp.name}.{param.name}[{row}][{col}]")
-                            # Continue trying other params
-                        except websockets.exceptions.ConnectionClosed as e:
-                            logger.error(f"[{ip}] Connection closed during subscribe: {e}")
-                            raise  # Stop subscribing, connection is dead
-                        except Exception as e:
-                            logger.warning(f"[{ip}] Failed to subscribe to {comp.name}.{param.name}[{row}][{col}]: {e}")
+        # Get the list of needed subscriptions from Watcher
+        needed = self._get_needed_subscriptions_for_device(ip)
+        
+        if not needed:
+            logger.info(f"[{ip}] No subscriptions needed for this device")
+            return
+        
+        logger.info(f"[{ip}] Subscribing to {len(needed)} needed parameters...")
+        
+        for comp_name, param_name, row, col in needed:
+            # Check if already subscribed
+            sub_key = (comp_name, param_name, row, col)
+            if sub_key in device.active_subscriptions:
+                continue
+            
+            # Find the parameter
+            if comp_name not in device.components:
+                logger.warning(f"[{ip}] Component not found for subscription: {comp_name}")
+                continue
+            
+            comp = device.components[comp_name]
+            if param_name not in comp.parameters:
+                logger.warning(f"[{ip}] Parameter not found for subscription: {comp_name}.{param_name}")
+                continue
+            
+            param = comp.parameters[param_name]
+            
+            try:
+                response = await self._send_request(device, {
+                    'type': 'subscribe',
+                    'param_id': param.param_id,
+                    'row': row,
+                    'col': col
+                })
+                
+                # Store initial value
+                if 'value' in response:
+                    param.set_value(row, col, response['value'])
+                    
+                    # Update cache
+                    if ip not in self.remote_state_cache:
+                        self.remote_state_cache[ip] = {}
+                    cache_key = f"{comp_name}.{param_name}[{row},{col}]"
+                    self.remote_state_cache[ip][cache_key] = response['value']
+                
+                device.active_subscriptions.add(sub_key)
+                subscription_count += 1
+                await asyncio.sleep(SUBSCRIBE_DELAY)
+                
+            except asyncio.TimeoutError:
+                logger.warning(f"[{ip}] Timeout subscribing to {comp_name}.{param_name}[{row}][{col}]")
+            except websockets.exceptions.ConnectionClosed as e:
+                logger.error(f"[{ip}] Connection closed during subscribe: {e}")
+                raise
+            except Exception as e:
+                logger.warning(f"[{ip}] Failed to subscribe to {comp_name}.{param_name}[{row}][{col}]: {e}")
         
         logger.info(f"[{ip}] Subscribed to {subscription_count} parameter cells")
+    
+    def _get_needed_subscriptions_for_device(self, ip: str) -> List[Tuple[str, str, int, int]]:
+        """Get list of (component, param, row, col) that need to be subscribed for a device."""
+        needed = []
+        
+        # Check Watcher variables
+        if hasattr(self, 'watcher') and self.watcher._var_defs:
+            for var_name, var_def in self.watcher._var_defs.items():
+                device = var_def.get('device', 'self')
+                
+                # Resolve device (might be nickname)
+                resolved_device = device
+                if device != 'self' and hasattr(self, 'action_manager'):
+                    resolved_device = self.action_manager._nickname_map.get(device, device)
+                
+                if resolved_device == ip:
+                    comp = var_def.get('component')
+                    param = var_def.get('param')
+                    row = var_def.get('row', 0)
+                    col = var_def.get('col', 0)
+                    if comp and param:
+                        needed.append((comp, param, row, col))
+        
+        return needed
+    
+    async def subscribe_to_param(self, ip: str, component_name: str, param_name: str, row: int = 0, col: int = 0) -> Optional[Any]:
+        """
+        Dynamically subscribe to a specific parameter.
+        Called by Watcher when new variables are added.
+        Returns the value if successful, None if failed.
+        """
+        if ip not in self.devices:
+            logger.warning(f"Cannot subscribe to param on unknown device: {ip}")
+            return None
+        
+        device = self.devices[ip]
+        if not device.connected or not device.websocket:
+            logger.warning(f"[{ip}] Cannot subscribe - device not connected")
+            return None
+        
+        # Check if already subscribed
+        sub_key = (component_name, param_name, row, col)
+        if sub_key in device.active_subscriptions:
+            # Already subscribed, just return cached value if available
+            cache_key = f"{component_name}.{param_name}[{row},{col}]"
+            if ip in self.remote_state_cache and cache_key in self.remote_state_cache[ip]:
+                return self.remote_state_cache[ip][cache_key]
+        
+        # Find the parameter
+        if component_name not in device.components:
+            logger.warning(f"[{ip}] Component not found: {component_name}")
+            return None
+        
+        comp = device.components[component_name]
+        if param_name not in comp.parameters:
+            logger.warning(f"[{ip}] Parameter not found: {component_name}.{param_name}")
+            return None
+        
+        param = comp.parameters[param_name]
+        
+        try:
+            response = await self._send_request(device, {
+                'type': 'subscribe',
+                'param_id': param.param_id,
+                'row': row,
+                'col': col
+            })
+            
+            if 'value' in response:
+                value = response['value']
+                param.set_value(row, col, value)
+                
+                # Update cache
+                if ip not in self.remote_state_cache:
+                    self.remote_state_cache[ip] = {}
+                cache_key = f"{component_name}.{param_name}[{row},{col}]"
+                self.remote_state_cache[ip][cache_key] = value
+                
+                device.active_subscriptions.add(sub_key)
+                logger.info(f"[{ip}] Subscribed to {component_name}.{param_name}[{row}][{col}] = {value}")
+                return value
+            else:
+                logger.warning(f"[{ip}] Subscribe response had no value: {response}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"[{ip}] Failed to subscribe to {component_name}.{param_name}: {e}")
+            return None
     
     async def _listen_for_updates(self, device: ESP32Device):
         """Listen for parameter updates from the device."""
@@ -495,55 +614,9 @@ class CentralHub:
         """
         Subscribe to a specific parameter by name (not UUID).
         Returns the value if successful, None if failed.
+        Alias for subscribe_to_param for backwards compatibility.
         """
-        if ip not in self.devices:
-            logger.warning(f"Cannot subscribe to param on unknown device: {ip}")
-            return None
-        
-        device = self.devices[ip]
-        if not device.connected or not device.websocket:
-            logger.warning(f"[{ip}] Cannot subscribe - device not connected")
-            return None
-        
-        # Find the component and parameter
-        if component_name not in device.components:
-            logger.warning(f"[{ip}] Component not found: {component_name}")
-            return None
-        
-        comp = device.components[component_name]
-        if param_name not in comp.parameters:
-            logger.warning(f"[{ip}] Parameter not found: {component_name}.{param_name}")
-            return None
-        
-        param = comp.parameters[param_name]
-        
-        try:
-            response = await self._send_request(device, {
-                'type': 'subscribe',
-                'param_id': param.param_id,
-                'row': row,
-                'col': col
-            })
-            
-            if 'value' in response:
-                value = response['value']
-                param.set_value(row, col, value)
-                
-                # Update cache
-                if ip not in self.remote_state_cache:
-                    self.remote_state_cache[ip] = {}
-                cache_key = f"{component_name}.{param_name}[{row},{col}]"
-                self.remote_state_cache[ip][cache_key] = value
-                
-                logger.info(f"[{ip}] Re-subscribed to {component_name}.{param_name}[{row}][{col}] = {value}")
-                return value
-            else:
-                logger.warning(f"[{ip}] Subscribe response had no value: {response}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"[{ip}] Failed to re-subscribe to {component_name}.{param_name}: {e}")
-            return None
+        return await self.subscribe_to_param(ip, component_name, param_name, row, col)
     
     def is_device_connected(self, ip: str) -> bool:
         """Check if a device is currently connected."""

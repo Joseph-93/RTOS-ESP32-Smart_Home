@@ -202,9 +202,40 @@ class WatcherComponent(Component):
             self._var_defs = {}
     
     def _on_variables_change(self, param, row, col, new_value, old_value):
-        """Update variable definitions when changed."""
+        """Update variable definitions when changed and trigger subscriptions for new variables."""
         logger.info(f"🔄 WATCHER VARIABLES CHANGED - re-parsing...")
+        old_vars = set(self._var_defs.keys())
         self._parse_variables()
+        new_vars = set(self._var_defs.keys())
+        
+        # Find newly added variables and trigger subscriptions
+        added_vars = new_vars - old_vars
+        if added_vars and self.hub:
+            logger.info(f"📡 New variables added, requesting subscriptions: {added_vars}")
+            asyncio.create_task(self._subscribe_to_new_variables(added_vars))
+    
+    async def _subscribe_to_new_variables(self, var_names: set):
+        """Subscribe to remote parameters for newly added variables."""
+        for var_name in var_names:
+            var_def = self._var_defs.get(var_name)
+            if not var_def:
+                continue
+            
+            device = self._resolve_device(var_def.get('device', 'self'))
+            if device == 'self':
+                continue  # Local variables don't need subscriptions
+            
+            comp = var_def.get('component')
+            param = var_def.get('param')
+            row = var_def.get('row', 0)
+            col = var_def.get('col', 0)
+            
+            if comp and param:
+                logger.info(f"📡 Subscribing to {device}/{comp}.{param}[{row}][{col}] for variable '{var_name}'")
+                value = await self.hub.subscribe_to_param(device, comp, param, row, col)
+                if value is not None:
+                    self._var_values[var_name] = value
+                    logger.info(f"✅ {var_name} = {value}")
     
     def _resolve_device(self, device: str) -> str:
         """Resolve device identifier."""
@@ -417,14 +448,29 @@ class WatcherComponent(Component):
         """
         Safely evaluate a logic expression with variable substitution.
         
-        Only allows safe operators and variable references.
+        Supports:
+        - Boolean variables used directly: `Button1` means `Button1 == True`
+        - Comparison operators: ==, !=, <, >, <=, >=
+        - Logic operators: and, or, not
+        - Parentheses for grouping: (Button1 or Button2) and ActionsOn
+        - Numeric comparisons: sensor_value > 50
+        
+        Order of operations (PEMDAS-like):
+        1. Parentheses (innermost first)
+        2. not
+        3. Comparisons (==, !=, <, >, <=, >=)
+        4. and
+        5. or
         """
         # FIRST: Find all variable names used in the expression and check they have values
         missing_vars = []
+        used_vars = set()
+        
         for var_name, var_def in self._var_defs.items():
             # Check if this variable is used in the expression
             pattern = r'\b' + re.escape(var_name) + r'\b'
             if re.search(pattern, expr):
+                used_vars.add(var_name)
                 # Variable is used - check if we have a value for it
                 if var_name not in self._var_values:
                     device = var_def.get('device', 'unknown')
@@ -438,9 +484,11 @@ class WatcherComponent(Component):
         if missing_vars:
             raise ValueError(f"Variables have no value: {', '.join(missing_vars)}")
         
-        # Replace variable names with their values
-        result_expr = expr
+        # Pre-process expression to handle bare boolean variables
+        # A variable that's not followed by an operator should be treated as `var == True`
+        result_expr = self._preprocess_bare_booleans(expr, used_vars)
         
+        # Replace variable names with their values
         for var_name, value in self._var_values.items():
             # Use word boundaries to avoid partial matches
             pattern = r'\b' + re.escape(var_name) + r'\b'
@@ -462,8 +510,11 @@ class WatcherComponent(Component):
         result_expr = re.sub(r'\bor\b', ' or ', result_expr, flags=re.IGNORECASE)
         result_expr = re.sub(r'\bnot\b', ' not ', result_expr, flags=re.IGNORECASE)
         
+        # Clean up multiple spaces
+        result_expr = re.sub(r'\s+', ' ', result_expr).strip()
+        
         # Validate expression contains only safe characters
-        allowed_chars = set('0123456789.+-*/()<=>&|! TrueFalsandor\t\n ')
+        allowed_chars = set('0123456789.+-*/()<=>&|! TrueFalsandor\t\n "\'')
         if not all(c in allowed_chars or c.isalpha() for c in result_expr):
             raise ValueError(f"Expression contains disallowed characters: {result_expr}")
         
@@ -473,9 +524,57 @@ class WatcherComponent(Component):
             return bool(result)
         except NameError as e:
             # This should never happen now, but catch it just in case
-            raise ValueError(f"Undefined variable in expression (this is a bug - all vars should be checked first): {e}")
+            raise ValueError(f"Undefined variable in expression: {e}")
+        except SyntaxError as e:
+            raise ValueError(f"Syntax error in expression '{result_expr}': {e}")
         except Exception as e:
             raise ValueError(f"Failed to evaluate '{result_expr}': {e}")
+    
+    def _preprocess_bare_booleans(self, expr: str, var_names: set) -> str:
+        """
+        Pre-process expression to handle bare boolean variables.
+        
+        Converts:
+          - "Button1 and ActionsOn" -> "(Button1 == True) and (ActionsOn == True)"
+          - "not Button1" -> "not (Button1 == True)"
+          - "Button1 == false" -> stays as is (already has comparison)
+          
+        Variables followed by a comparison operator are left alone.
+        """
+        if not var_names:
+            return expr
+        
+        result = expr
+        
+        # Sort by length descending to handle longer names first (avoid partial matches)
+        sorted_vars = sorted(var_names, key=len, reverse=True)
+        
+        for var_name in sorted_vars:
+            # Pattern: variable name NOT followed by a comparison operator
+            # We want to match: VarName that is NOT followed by ==, !=, <, >, <=, >=
+            # But IS followed by: end of string, whitespace, ), 'and', 'or', etc.
+            
+            # First, find all occurrences of the variable
+            pattern = r'\b' + re.escape(var_name) + r'\b'
+            
+            # Check each match to see if it needs wrapping
+            def replace_bare(match):
+                start = match.start()
+                end = match.end()
+                
+                # Check what comes after (skip whitespace)
+                after = result[end:].lstrip()
+                
+                # If followed by a comparison operator, leave it alone
+                if after.startswith(('==', '!=', '<=', '>=', '<', '>')):
+                    return match.group(0)
+                
+                # Otherwise, wrap it as a boolean check
+                return f'({var_name} == True)'
+            
+            result = re.sub(pattern, replace_bare, result)
+        
+        return result
     
     async def _trigger_actions(self, slot: int, rising: bool):
         """Trigger rising or falling edge actions for a slot."""
