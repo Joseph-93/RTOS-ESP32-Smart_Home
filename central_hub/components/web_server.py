@@ -626,11 +626,28 @@ class WebServerComponent(Component):
             
             # Get expression for this slot
             expr = watcher.expressions.get_value(slot, 0)
+            
+            # Get timing parameters (in seconds)
+            hold_high_sec = watcher.hold_high_sec.get_value(slot, 0)
+            cooldown_sec = watcher.cooldown_sec.get_value(slot, 0)
+            
+            # Get timing state
+            import time
+            now = time.time()
+            hold_until = watcher._hold_until.get(slot, 0)
+            cooldown_until = watcher._cooldown_until.get(slot, 0)
+            in_hold = now < hold_until
+            in_cooldown = now < cooldown_until
+            
             if not expr:
                 return {
                     'slot': slot,
                     'expression': '',
                     'result': None,
+                    'hold_high_sec': hold_high_sec,
+                    'cooldown_sec': cooldown_sec,
+                    'in_hold': False,
+                    'in_cooldown': False,
                     'variable_values': {},
                     'variable_definitions': watcher._var_defs
                 }
@@ -641,11 +658,19 @@ class WebServerComponent(Component):
             
             # Try to evaluate the expression
             try:
-                result = watcher._evaluate_expression(expr)
+                raw_result = watcher._evaluate_expression(expr)
+                effective_result = watcher._apply_timing_logic(slot, raw_result, now)
                 return {
                     'slot': slot,
                     'expression': expr,
-                    'result': result,
+                    'raw_result': raw_result,
+                    'result': effective_result,
+                    'hold_high_sec': hold_high_sec,
+                    'cooldown_sec': cooldown_sec,
+                    'in_hold': in_hold,
+                    'in_cooldown': in_cooldown,
+                    'hold_remaining_sec': round(max(0, hold_until - now), 1) if in_hold else 0,
+                    'cooldown_remaining_sec': round(max(0, cooldown_until - now), 1) if in_cooldown else 0,
                     'variable_values': var_values,
                     'variable_definitions': var_defs
                 }
@@ -655,6 +680,10 @@ class WebServerComponent(Component):
                     'expression': expr,
                     'result': None,
                     'error': str(e),
+                    'hold_high_sec': hold_high_sec,
+                    'cooldown_sec': cooldown_sec,
+                    'in_hold': in_hold,
+                    'in_cooldown': in_cooldown,
                     'variable_values': var_values,
                     'variable_definitions': var_defs
                 }

@@ -116,6 +116,22 @@ class WatcherComponent(Component):
             read_only=True
         )
         
+        # Hold-high time per slot (seconds) - expression result stays TRUE for at least this long
+        self.hold_high_sec = self.add_float_param(
+            "hold_high_sec",
+            rows=NUM_WATCH_SLOTS, cols=1,
+            min_val=0.0, max_val=86400.0,  # Up to 24 hours
+            default_val=0.0
+        )
+        
+        # Cooldown time per slot (seconds) - after going FALSE, can't go TRUE again for this long
+        self.cooldown_sec = self.add_float_param(
+            "cooldown_sec",
+            rows=NUM_WATCH_SLOTS, cols=1,
+            min_val=0.0, max_val=86400.0,  # Up to 24 hours
+            default_val=0.0
+        )
+        
         # Parsed variable definitions
         self._var_defs: Dict[str, Dict[str, Any]] = {}
         
@@ -124,6 +140,10 @@ class WatcherComponent(Component):
         
         # Previous expression results for edge detection
         self._prev_results: Dict[int, bool] = {}
+        
+        # Timing state per slot
+        self._hold_until: Dict[int, float] = {}  # slot -> timestamp when hold-high ends
+        self._cooldown_until: Dict[int, float] = {}  # slot -> timestamp when cooldown ends
         
         # Background task
         self._eval_task: Optional[asyncio.Task] = None
@@ -245,6 +265,54 @@ class WatcherComponent(Component):
             return self._nickname_map[device]
         return device
     
+    def _apply_timing_logic(self, slot: int, raw_result: bool, now: float) -> bool:
+        """
+        Apply hold-high and cooldown timing logic to a raw expression result.
+        
+        Hold-high: When result goes TRUE, it stays TRUE for at least hold_high_sec,
+                   even if the raw expression goes FALSE.
+        
+        Cooldown: After result goes FALSE (including after hold-high ends),
+                  it cannot go TRUE again for cooldown_sec.
+        
+        Returns the effective (modified) result.
+        """
+        hold_sec = self.hold_high_sec.get_value(slot, 0)
+        cool_sec = self.cooldown_sec.get_value(slot, 0)
+        
+        # Get previous effective result
+        prev_result = self._prev_results.get(slot, False)
+        
+        # Check if we're in hold-high period
+        hold_until = self._hold_until.get(slot, 0)
+        in_hold = now < hold_until
+        
+        # Check if we're in cooldown period
+        cooldown_until = self._cooldown_until.get(slot, 0)
+        in_cooldown = now < cooldown_until
+        
+        # Determine effective result
+        if in_hold:
+            # Still in hold-high period - force TRUE
+            return True
+        
+        if in_cooldown:
+            # In cooldown period - force FALSE (can't go high yet)
+            return False
+        
+        # Not in any timing period - use raw result
+        if raw_result and not prev_result:
+            # Rising edge - start hold-high timer if configured
+            if hold_sec > 0:
+                self._hold_until[slot] = now + hold_sec
+        
+        elif not raw_result and prev_result:
+            # Falling edge (or hold-high just ended) - start cooldown if configured
+            if cool_sec > 0:
+                self._cooldown_until[slot] = now + cool_sec
+        
+        return raw_result
+
     async def _evaluation_loop(self):
         """Main loop for evaluating expressions."""
         loop_count = 0
@@ -275,6 +343,8 @@ class WatcherComponent(Component):
                 
                 # Evaluate all expressions
                 active_expressions = 0
+                now = time.time()
+                
                 for slot in range(NUM_WATCH_SLOTS):
                     expr = self.expressions.get_value(slot, 0)
                     if not expr:
@@ -283,12 +353,25 @@ class WatcherComponent(Component):
                     active_expressions += 1
                     
                     try:
-                        result = self._evaluate_expression(expr)
+                        # Get raw expression result
+                        raw_result = self._evaluate_expression(expr)
+                        
+                        # Apply hold-high and cooldown logic
+                        result = self._apply_timing_logic(slot, raw_result, now)
+                        
                         prev_result = self._prev_results.get(slot)
                         
                         # Log expression evaluation periodically
                         if loop_count % 50 == 1:
-                            logger.info(f"   🧮 Slot {slot}: '{expr}' => {result} (prev={prev_result})")
+                            hold_sec = self.hold_high_sec.get_value(slot, 0)
+                            cool_sec = self.cooldown_sec.get_value(slot, 0)
+                            timing_info = ""
+                            if hold_sec > 0 or cool_sec > 0:
+                                timing_info = f" [hold={hold_sec}s, cool={cool_sec}s]"
+                            if raw_result != result:
+                                logger.info(f"   🧮 Slot {slot}: '{expr}' => raw={raw_result}, effective={result} (prev={prev_result}){timing_info}")
+                            else:
+                                logger.info(f"   🧮 Slot {slot}: '{expr}' => {result} (prev={prev_result}){timing_info}")
                         
                         # Check for edge transitions
                         if prev_result is not None:
