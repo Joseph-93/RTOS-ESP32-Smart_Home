@@ -25,6 +25,7 @@
 #include "light_sensor.h"
 #include "motion_sensor.h"
 #include "door_sensor.h"
+#include "rgb_led.h"
 #include "web_server.h"
 #include "wifi_init.h"
 #include <vector>
@@ -50,6 +51,7 @@ static HeartbeatComponent heartbeat_component;
 static LightSensorComponent light_sensor_component;
 static MotionSensorComponent motion_sensor_component;
 static DoorSensorComponent door_sensor_component;
+static RgbLedComponent rgb_led_component;
 static WebServerComponent web_server_component;
 
 extern "C" void app_main(void)
@@ -89,6 +91,7 @@ extern "C" void app_main(void)
     component_graph->registerComponent(&light_sensor_component);
     component_graph->registerComponent(&motion_sensor_component);
     component_graph->registerComponent(&door_sensor_component);
+    component_graph->registerComponent(&rgb_led_component);
     component_graph->registerComponent(&web_server_component);
     
     log_memory_checkpoint("AFTER ALL REGISTERS");
