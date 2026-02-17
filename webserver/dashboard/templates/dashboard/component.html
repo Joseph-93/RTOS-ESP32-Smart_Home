@@ -56,6 +56,27 @@
                 </button>
             </div>
             
+            <!-- Special controls for NetworkActions component -->
+            <div id="network-actions-controls" class="special-controls" style="display:none;">
+                <h3>📡 Network Actions</h3>
+                <p class="help-text">Configure network messages to send via HTTP, UDP, TCP, or WebSocket.</p>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
+                    <button class="btn-primary" onclick="openNetworkActionEditor()">
+                        ➕ Configure Action
+                    </button>
+                    <button class="btn-secondary" onclick="loadNetworkActions()">
+                        🔄 Refresh List
+                    </button>
+                </div>
+                
+                <div id="network-actions-list-container" style="margin-top: 15px;">
+                    <h4>📋 Configured Network Actions (click to edit)</h4>
+                    <div id="network-actions-list" style="margin-top: 10px;">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Pagination Controls -->
             <div class="pagination-controls">
                 <button id="prevPage" onclick="prevPage()" disabled>← Previous</button>
@@ -105,6 +126,10 @@
             setTimeout(() => loadActiveExpressions(), 1000);
         } else if (componentName === 'ActionManager') {
             document.getElementById('action-manager-controls').style.display = 'block';
+        } else if (componentName === 'NetworkActions') {
+            document.getElementById('network-actions-controls').style.display = 'block';
+            // Load network actions after WebSocket connects
+            setTimeout(() => loadNetworkActions(), 1000);
         }
         
         // Global functions for modal editors
@@ -240,11 +265,13 @@
                 async function loadSlotInfo(slot) {
                     statusDiv.innerHTML = '<em>Loading...</em>';
                     try {
-                        const [exprResp, risingResp, fallingResp, varsResp] = await Promise.all([
+                        const [exprResp, risingResp, fallingResp, varsResp, holdResp, coolResp] = await Promise.all([
                             esp32ws.send({ type: 'get_param', comp: 'Watcher', param: 'expressions', row: slot, col: 0 }),
                             esp32ws.send({ type: 'get_param', comp: 'Watcher', param: 'rising_actions', row: slot, col: 0 }),
                             esp32ws.send({ type: 'get_param', comp: 'Watcher', param: 'falling_actions', row: slot, col: 0 }),
-                            esp32ws.send({ type: 'get_param', comp: 'Watcher', param: 'variables', row: 0, col: 0 })
+                            esp32ws.send({ type: 'get_param', comp: 'Watcher', param: 'variables', row: 0, col: 0 }),
+                            esp32ws.send({ type: 'get_param', comp: 'Watcher', param: 'hold_high_sec', row: slot, col: 0 }),
+                            esp32ws.send({ type: 'get_param', comp: 'Watcher', param: 'cooldown_sec', row: slot, col: 0 })
                         ]);
                         
                         const expr = exprResp.value || '';
@@ -254,18 +281,24 @@
                         const risingActions = risingActionsRaw.map(a => ({...a, comp: a.component || a.comp}));
                         const fallingActions = fallingActionsRaw.map(a => ({...a, comp: a.component || a.comp}));
                         const variables = varsResp.value ? JSON.parse(varsResp.value) : {};
+                        const holdHighSec = holdResp.value || 0;
+                        const cooldownSec = coolResp.value || 0;
                         
-                        currentSlotData = { expression: expr, risingActions, fallingActions, variables };
+                        currentSlotData = { expression: expr, risingActions, fallingActions, variables, holdHighSec, cooldownSec };
                         
                         const hasConfig = expr || risingActions.length > 0 || fallingActions.length > 0;
                         
                         if (hasConfig) {
+                            const timingInfo = (holdHighSec > 0 || cooldownSec > 0) 
+                                ? `<div>Timing: hold=${holdHighSec}s, cooldown=${cooldownSec}s</div>` 
+                                : '';
                             statusDiv.innerHTML = `
                                 <div style="color: #2196F3;"><strong>✓ Slot ${slot} has existing config:</strong></div>
                                 <div style="margin-top: 5px; font-family: monospace; font-size: 12px;">
                                     <div>Expression: <code>${expr || '(none)'}</code></div>
                                     <div>Rising actions: ${risingActions.length}</div>
                                     <div>Falling actions: ${fallingActions.length}</div>
+                                    ${timingInfo}
                                 </div>
                             `;
                             clearBtn.style.display = 'inline-block';
@@ -277,7 +310,7 @@
                         }
                     } catch (e) {
                         statusDiv.innerHTML = `<div style="color: #666;">Slot ${slot} is empty - ready to configure</div>`;
-                        currentSlotData = { expression: '', risingActions: [], fallingActions: [], variables: {} };
+                        currentSlotData = { expression: '', risingActions: [], fallingActions: [], variables: {}, holdHighSec: 0, cooldownSec: 0 };
                         clearBtn.style.display = 'none';
                         editBtn.textContent = '➕ Create New';
                     }
@@ -444,6 +477,25 @@
                         : ''
                 });
                 
+                // Set timing parameters
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'Watcher',
+                    param: 'hold_high_sec',
+                    row: slotIndex,
+                    col: 0,
+                    value: config.holdHighSec || 0
+                });
+                
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'Watcher',
+                    param: 'cooldown_sec',
+                    row: slotIndex,
+                    col: 0,
+                    value: config.cooldownSec || 0
+                });
+                
                 showNotification(`Watch slot ${slotIndex} configured`, 'success');
                 
                 // Reload parameters to show changes
@@ -471,6 +523,199 @@
             } catch (error) {
                 console.error('Failed to queue actions:', error);
                 showNotification('Failed to queue actions', 'error');
+            }
+        }
+        
+        // ========================================
+        // NETWORK ACTIONS FUNCTIONS
+        // ========================================
+        
+        async function loadNetworkActions() {
+            const container = document.getElementById('network-actions-list');
+            if (!esp32ws || !esp32ws.connected) {
+                container.innerHTML = '<div class="empty-hint">Connect to device first</div>';
+                return;
+            }
+            
+            container.innerHTML = '<div class="loading">Loading network actions...</div>';
+            
+            try {
+                // Scan slots for configured actions (check first 50 for now)
+                const configuredActions = [];
+                
+                for (let i = 0; i < 100; i++) {
+                    const resp = await esp32ws.send({
+                        type: 'get_param',
+                        comp: 'NetworkActions',
+                        param: 'network_messages',
+                        row: i,
+                        col: 0
+                    });
+                    
+                    if (resp.value && resp.value.trim()) {
+                        try {
+                            const config = JSON.parse(resp.value);
+                            configuredActions.push({ slot: i, config });
+                        } catch (e) {
+                            // Invalid JSON, skip
+                        }
+                    }
+                }
+                
+                if (configuredActions.length === 0) {
+                    container.innerHTML = '<div class="empty-hint">No network actions configured. Click "Configure Action" to create one.</div>';
+                    return;
+                }
+                
+                // Render the configured actions
+                container.innerHTML = configuredActions.map(a => `
+                    <div class="network-action-card" onclick="openNetworkActionEditor(${a.slot})" style="
+                        background: var(--bg-secondary);
+                        border: 1px solid var(--border-color);
+                        border-radius: 6px;
+                        padding: 10px 15px;
+                        margin-bottom: 8px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                    " onmouseover="this.style.borderColor='var(--accent-primary)'" onmouseout="this.style.borderColor='var(--border-color)'">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span style="color: var(--text-secondary); font-size: 0.9em;">Slot ${a.slot}</span>
+                                <div style="font-weight: 600; margin-top: 4px;">${escapeHtml(a.config.name || 'Unnamed')}</div>
+                                <div style="font-size: 0.85em; color: var(--text-secondary); margin-top: 2px;">
+                                    ${a.config.protocol} → ${a.config.host}:${a.config.port}${a.config.path || ''}
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <span style="font-size: 0.8em; padding: 2px 8px; background: var(--bg-tertiary); border-radius: 4px;">
+                                    ${a.config.method || a.config.protocol}
+                                </span>
+                                <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); triggerNetworkAction(${a.slot})" title="Test this action">
+                                    🚀
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                
+            } catch (e) {
+                console.error('Failed to load network actions:', e);
+                container.innerHTML = '<div class="error-hint">Error loading network actions</div>';
+            }
+        }
+        
+        async function openNetworkActionEditor(slotIndex = null) {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            
+            // If no slot specified, show slot selector
+            if (slotIndex === null) {
+                const modal = document.createElement('div');
+                modal.className = 'config-modal-overlay';
+                modal.innerHTML = `
+                    <div class="config-modal" style="max-width: 400px;">
+                        <div class="config-modal-header">
+                            <h2>📡 Select Network Action Slot</h2>
+                            <button class="close-btn" onclick="this.closest('.config-modal-overlay').remove()">✕</button>
+                        </div>
+                        <div class="config-modal-body">
+                            <label style="display: block; margin-bottom: 10px;">
+                                <strong>Slot Number (0-99):</strong>
+                                <input type="number" id="net-slot-input" value="0" min="0" max="99" style="width: 100%; padding: 8px; margin-top: 5px; font-size: 16px;">
+                            </label>
+                            <div id="net-slot-status" style="padding: 10px; background: var(--bg-tertiary); border-radius: 4px; margin-top: 10px;">
+                                <em>Enter a slot number...</em>
+                            </div>
+                        </div>
+                        <div class="config-modal-footer">
+                            <button class="btn btn-secondary" onclick="this.closest('.config-modal-overlay').remove()">Cancel</button>
+                            <button class="btn btn-primary" id="net-slot-edit-btn">Edit Slot</button>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('config-modal-container').appendChild(modal);
+                
+                const slotInput = modal.querySelector('#net-slot-input');
+                const statusDiv = modal.querySelector('#net-slot-status');
+                
+                const checkSlot = async (slot) => {
+                    try {
+                        const resp = await esp32ws.send({
+                            type: 'get_param',
+                            comp: 'NetworkActions',
+                            param: 'network_messages',
+                            row: slot,
+                            col: 0
+                        });
+                        
+                        if (resp.value && resp.value.trim()) {
+                            const config = JSON.parse(resp.value);
+                            statusDiv.innerHTML = `<div style="color: #2196F3;"><strong>✓ Slot ${slot} configured:</strong> ${config.name || 'Unnamed'}</div>`;
+                        } else {
+                            statusDiv.innerHTML = `<div style="color: #666;">Slot ${slot} is empty - ready to configure</div>`;
+                        }
+                    } catch (e) {
+                        statusDiv.innerHTML = `<div style="color: #666;">Slot ${slot} is empty - ready to configure</div>`;
+                    }
+                };
+                
+                slotInput.onchange = () => checkSlot(parseInt(slotInput.value) || 0);
+                checkSlot(0);
+                
+                modal.querySelector('#net-slot-edit-btn').onclick = () => {
+                    const slot = parseInt(slotInput.value) || 0;
+                    modal.remove();
+                    openNetworkActionEditor(slot);
+                };
+                
+                return;
+            }
+            
+            // Load existing config for this slot
+            let existingConfig = {};
+            try {
+                const resp = await esp32ws.send({
+                    type: 'get_param',
+                    comp: 'NetworkActions',
+                    param: 'network_messages',
+                    row: slotIndex,
+                    col: 0
+                });
+                if (resp.value && resp.value.trim()) {
+                    existingConfig = JSON.parse(resp.value);
+                }
+            } catch (e) {
+                // Use empty config
+            }
+            
+            // Open the editor
+            networkActionEditor = new NetworkActionEditor(esp32ws);
+            networkActionEditor.show(slotIndex, existingConfig, () => {
+                // Refresh the list after save
+                loadNetworkActions();
+            });
+        }
+        
+        async function triggerNetworkAction(slot) {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'NetworkActions',
+                    param: 'trigger',
+                    row: 0,
+                    col: 0,
+                    value: slot
+                });
+                showNotification(`Triggered network action slot ${slot}`, 'success');
+            } catch (e) {
+                showNotification('Failed to trigger action', 'error');
             }
         }
     </script>

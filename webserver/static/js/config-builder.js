@@ -851,9 +851,11 @@ class WatchSlotEditor {
         this.slotIndex = slotIndex;
         this.data = {
             expression: currentData.expression || '',
-            variables: currentData.variables || {},  // Add variables tracking
+            variables: currentData.variables || {},
             risingActions: currentData.risingActions || [],
-            fallingActions: currentData.fallingActions || []
+            fallingActions: currentData.fallingActions || [],
+            holdHighSec: currentData.holdHighSec || 0,
+            cooldownSec: currentData.cooldownSec || 0
         };
         this._createModal();
     }
@@ -910,6 +912,35 @@ class WatchSlotEditor {
                         </div>
                         <button class="btn btn-secondary" id="edit-falling-btn">✏️ Edit Falling Actions</button>
                     </div>
+                    
+                    <div class="watch-section">
+                        <h3>⏱️ Timing Settings</h3>
+                        <p class="helper-text">Control how long the signal stays high or low.</p>
+                        <div class="timing-inputs" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div>
+                                <label style="display: block; margin-bottom: 5px;">
+                                    <strong>Hold High (seconds):</strong>
+                                    <span style="font-size: 12px; color: #888; display: block;">
+                                        When TRUE, stay TRUE for at least this long
+                                    </span>
+                                </label>
+                                <input type="number" id="hold-high-input" value="${this.data.holdHighSec}" 
+                                       min="0" max="86400" step="0.1"
+                                       style="width: 100%; padding: 8px; font-size: 16px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 5px;">
+                                    <strong>Cooldown (seconds):</strong>
+                                    <span style="font-size: 12px; color: #888; display: block;">
+                                        After going FALSE, can't go TRUE for this long
+                                    </span>
+                                </label>
+                                <input type="number" id="cooldown-input" value="${this.data.cooldownSec}" 
+                                       min="0" max="86400" step="0.1"
+                                       style="width: 100%; padding: 8px; font-size: 16px;">
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="config-modal-footer">
                     <button class="btn btn-danger" id="clear-slot-btn">🗑️ Clear Slot</button>
@@ -931,6 +962,14 @@ class WatchSlotEditor {
         this.modal.querySelector('#edit-falling-btn').onclick = () => this._editFallingActions();
         this.modal.querySelector('#clear-slot-btn').onclick = () => this._clearSlot();
         this.modal.querySelector('#save-watch-btn').onclick = () => this._save();
+        
+        // Timing input handlers
+        this.modal.querySelector('#hold-high-input').onchange = (e) => {
+            this.data.holdHighSec = parseFloat(e.target.value) || 0;
+        };
+        this.modal.querySelector('#cooldown-input').onchange = (e) => {
+            this.data.cooldownSec = parseFloat(e.target.value) || 0;
+        };
     }
 
     _summarizeVariables() {
@@ -1021,9 +1060,11 @@ class WatchSlotEditor {
             this.onSave({
                 slotIndex: this.slotIndex,
                 expression: this.data.expression,
-                variables: this.data.variables,  // Include variables in save data
+                variables: this.data.variables,
                 risingActions: this.data.risingActions,
-                fallingActions: this.data.fallingActions
+                fallingActions: this.data.fallingActions,
+                holdHighSec: this.data.holdHighSec,
+                cooldownSec: this.data.cooldownSec
             });
         }
     }
@@ -1137,6 +1178,11 @@ class ExpressionMonitor {
                         </div>
                     </div>
                     
+                    <div class="expr-monitor-timing" id="timing-section" style="display: none;">
+                        <h4>⏱️ Timing State</h4>
+                        <div id="timing-details"></div>
+                    </div>
+                    
                     <div class="expr-monitor-auto-refresh">
                         <label>
                             <input type="checkbox" id="auto-refresh-check" checked>
@@ -1215,6 +1261,45 @@ class ExpressionMonitor {
                 errorsDiv.style.display = 'none';
             }
             
+            // Update timing state
+            const timingSection = this.modal.querySelector('#timing-section');
+            const timingDetails = this.modal.querySelector('#timing-details');
+            const holdHighSec = response.hold_high_sec || 0;
+            const cooldownSec = response.cooldown_sec || 0;
+            
+            if (holdHighSec > 0 || cooldownSec > 0) {
+                timingSection.style.display = 'block';
+                let timingHtml = '';
+                
+                if (holdHighSec > 0) {
+                    const inHold = response.in_hold || false;
+                    const holdRemaining = response.hold_remaining_sec || 0;
+                    timingHtml += `
+                        <div class="timing-row ${inHold ? 'timing-active' : ''}">
+                            <span class="timing-label">⬆️ Hold-High:</span>
+                            <span class="timing-value">${holdHighSec}s</span>
+                            ${inHold ? `<span class="timing-badge hold">HOLDING (${holdRemaining}s left)</span>` : '<span class="timing-badge inactive">Ready</span>'}
+                        </div>
+                    `;
+                }
+                
+                if (cooldownSec > 0) {
+                    const inCooldown = response.in_cooldown || false;
+                    const cooldownRemaining = response.cooldown_remaining_sec || 0;
+                    timingHtml += `
+                        <div class="timing-row ${inCooldown ? 'timing-active' : ''}">
+                            <span class="timing-label">❄️ Cooldown:</span>
+                            <span class="timing-value">${cooldownSec}s</span>
+                            ${inCooldown ? `<span class="timing-badge cooldown">COOLING (${cooldownRemaining}s left)</span>` : '<span class="timing-badge inactive">Ready</span>'}
+                        </div>
+                    `;
+                }
+                
+                timingDetails.innerHTML = timingHtml;
+            } else {
+                timingSection.style.display = 'none';
+            }
+            
             // Update variable values
             const varList = this.modal.querySelector('#var-list');
             const varValues = response.variable_values || {};
@@ -1286,6 +1371,419 @@ class ExpressionMonitor {
 
 // Global instance for easy access
 let expressionMonitor = null;
+let networkActionEditor = null;
+
+
+// ============================================================================
+// NETWORK ACTION EDITOR - Configure network message slots
+// ============================================================================
+class NetworkActionEditor {
+    constructor(wsConnection) {
+        this.ws = wsConnection;
+        this.modal = null;
+        this.slotIndex = 0;
+        this.data = {};
+        this.onSave = null;
+    }
+
+    async show(slotIndex = 0, currentData = {}, onSave = null) {
+        this.slotIndex = slotIndex;
+        this.onSave = onSave;
+        this.data = {
+            name: currentData.name || '',
+            protocol: currentData.protocol || 'HTTP',
+            host: currentData.host || '',
+            port: currentData.port || 80,
+            path: currentData.path || '/',
+            method: currentData.method || 'GET',
+            headers: currentData.headers || {},
+            body: currentData.body || '',
+            timeout_ms: currentData.timeout_ms || 5000,
+            notes: currentData.notes || ''
+        };
+        this._createModal();
+    }
+
+    hide() {
+        if (this.modal) {
+            this.modal.remove();
+            this.modal = null;
+        }
+    }
+
+    _parseIP(host) {
+        if (!host) return ['', '', '', ''];
+        const parts = host.split('.');
+        if (parts.length === 4) return parts;
+        return [host, '', '', ''];
+    }
+
+    _notify(message, type = 'info') {
+        // Use global showNotification if available, otherwise use alert
+        if (typeof window.showNotification === 'function') {
+            window.showNotification(message, type);
+        } else {
+            console.log(`[${type}] ${message}`);
+            if (type === 'error') alert(message);
+        }
+    }
+
+    _createModal() {
+        const ipParts = this._parseIP(this.data.host);
+        const isHttp = this.data.protocol === 'HTTP' || this.data.protocol === 'HTTPS';
+        
+        this.modal = document.createElement('div');
+        this.modal.className = 'config-modal-overlay';
+        this.modal.innerHTML = `
+            <div class="config-modal config-modal-wide">
+                <div class="config-modal-header">
+                    <h2>📡 Network Action Slot ${this.slotIndex}</h2>
+                    <button class="close-btn" onclick="networkActionEditor.hide()">✕</button>
+                </div>
+                <div class="config-modal-body net-action-editor">
+                    <div class="net-action-row net-action-name-row">
+                        <input type="text" id="net-name" class="net-action-name-input" 
+                               value="${this._escapeHtml(this.data.name)}" 
+                               placeholder="Action Name (e.g., Living Room Off)">
+                        <div class="net-action-buttons">
+                            <button class="btn btn-danger btn-sm" id="net-delete-btn">🗑️ Delete</button>
+                            <button class="btn btn-secondary btn-sm" id="net-duplicate-btn">📋 Duplicate</button>
+                        </div>
+                    </div>
+                    
+                    <div class="net-action-row">
+                        <label class="net-action-label">Protocol</label>
+                        <div class="net-action-protocol-btns" id="protocol-btns">
+                            <button class="protocol-btn ${this.data.protocol === 'UDP' ? 'active' : ''}" data-protocol="UDP">UDP</button>
+                            <button class="protocol-btn ${this.data.protocol === 'TCP' ? 'active' : ''}" data-protocol="TCP">TCP</button>
+                            <button class="protocol-btn ${this.data.protocol === 'WebSocket' ? 'active' : ''}" data-protocol="WebSocket">WebSocket</button>
+                            <button class="protocol-btn ${this.data.protocol === 'HTTP' ? 'active' : ''}" data-protocol="HTTP">HTTP</button>
+                            <button class="protocol-btn ${this.data.protocol === 'HTTPS' ? 'active' : ''}" data-protocol="HTTPS">HTTPS</button>
+                        </div>
+                    </div>
+                    
+                    <div class="net-action-row">
+                        <label class="net-action-label">IP Address</label>
+                        <div class="net-action-ip-inputs">
+                            <input type="number" id="ip-0" class="ip-octet" value="${ipParts[0]}" min="0" max="255">
+                            <span class="ip-dot">.</span>
+                            <input type="number" id="ip-1" class="ip-octet" value="${ipParts[1]}" min="0" max="255">
+                            <span class="ip-dot">.</span>
+                            <input type="number" id="ip-2" class="ip-octet" value="${ipParts[2]}" min="0" max="255">
+                            <span class="ip-dot">.</span>
+                            <input type="number" id="ip-3" class="ip-octet" value="${ipParts[3]}" min="0" max="255">
+                            <span class="ip-valid" id="ip-valid">✓</span>
+                        </div>
+                    </div>
+                    
+                    <div class="net-action-row">
+                        <label class="net-action-label">Port</label>
+                        <input type="number" id="net-port" class="net-action-port" value="${this.data.port}" min="1" max="65535">
+                    </div>
+                    
+                    <div class="net-action-row">
+                        <label class="net-action-label">Delay (sec)</label>
+                        <input type="number" id="net-delay" class="net-action-port" value="${(this.data.timeout_ms || 5000) / 1000}" min="0" max="300" step="0.1">
+                    </div>
+                    
+                    <div class="net-action-row http-only" style="display: ${isHttp ? 'flex' : 'none'};">
+                        <label class="net-action-label">Method</label>
+                        <div class="net-action-method-btns" id="method-btns">
+                            <button class="method-btn ${this.data.method === 'GET' ? 'active' : ''}" data-method="GET">GET</button>
+                            <button class="method-btn ${this.data.method === 'POST' ? 'active' : ''}" data-method="POST">POST</button>
+                            <button class="method-btn ${this.data.method === 'PUT' ? 'active' : ''}" data-method="PUT">PUT</button>
+                            <button class="method-btn ${this.data.method === 'DELETE' ? 'active' : ''}" data-method="DELETE">DELETE</button>
+                        </div>
+                    </div>
+                    
+                    <div class="net-action-row http-only" style="display: ${isHttp ? 'flex' : 'none'};">
+                        <label class="net-action-label">Resource</label>
+                        <div class="net-action-resource-wrapper">
+                            <input type="text" id="net-path" class="net-action-resource" 
+                                   value="${this._escapeHtml(this.data.path)}" placeholder="/api/endpoint">
+                            <button class="btn btn-icon" id="copy-path-btn" title="Copy">📋</button>
+                        </div>
+                    </div>
+                    
+                    <div class="net-action-row">
+                        <label class="net-action-label">Body</label>
+                        <div class="net-action-resource-wrapper">
+                            <input type="text" id="net-body" class="net-action-resource" 
+                                   value="${this._escapeHtml(this.data.body)}" placeholder='{"key": "value"}'>
+                            <button class="btn btn-icon" id="copy-body-btn" title="Copy">📋</button>
+                        </div>
+                    </div>
+                    
+                    <div class="net-action-row">
+                        <label class="net-action-label">Notes</label>
+                        <input type="text" id="net-notes" class="net-action-resource" 
+                               value="${this._escapeHtml(this.data.notes || '')}" placeholder="Optional notes about this action">
+                    </div>
+                </div>
+                <div class="config-modal-footer">
+                    <button class="btn btn-secondary" onclick="networkActionEditor.hide()">Cancel</button>
+                    <button class="btn btn-success" id="net-test-btn">🧪 Test</button>
+                    <button class="btn btn-primary" id="net-save-btn">💾 Save</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(this.modal);
+        this._setupEventListeners();
+        this._validateIP();
+    }
+
+    _escapeHtml(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    _setupEventListeners() {
+        // Protocol buttons
+        this.modal.querySelectorAll('.protocol-btn').forEach(btn => {
+            btn.onclick = () => {
+                this.modal.querySelectorAll('.protocol-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.data.protocol = btn.dataset.protocol;
+                
+                // Show/hide HTTP-specific fields
+                const isHttp = this.data.protocol === 'HTTP' || this.data.protocol === 'HTTPS';
+                this.modal.querySelectorAll('.http-only').forEach(el => {
+                    el.style.display = isHttp ? 'flex' : 'none';
+                });
+                
+                // Update default port
+                const portInput = this.modal.querySelector('#net-port');
+                if (this.data.protocol === 'HTTP') portInput.value = 80;
+                else if (this.data.protocol === 'HTTPS') portInput.value = 443;
+                else if (this.data.protocol === 'WebSocket') portInput.value = 80;
+            };
+        });
+
+        // Method buttons
+        this.modal.querySelectorAll('.method-btn').forEach(btn => {
+            btn.onclick = () => {
+                this.modal.querySelectorAll('.method-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.data.method = btn.dataset.method;
+            };
+        });
+
+        // IP inputs - auto-advance on full octet
+        for (let i = 0; i < 4; i++) {
+            const input = this.modal.querySelector(`#ip-${i}`);
+            input.oninput = () => {
+                if (input.value.length >= 3 && i < 3) {
+                    this.modal.querySelector(`#ip-${i + 1}`).focus();
+                }
+                this._validateIP();
+            };
+            input.onchange = () => this._validateIP();
+        }
+
+        // Copy buttons
+        this.modal.querySelector('#copy-path-btn').onclick = () => {
+            navigator.clipboard.writeText(this.modal.querySelector('#net-path').value);
+            this._notify('Path copied', 'success');
+        };
+        this.modal.querySelector('#copy-body-btn').onclick = () => {
+            navigator.clipboard.writeText(this.modal.querySelector('#net-body').value);
+            this._notify('Body copied', 'success');
+        };
+
+        // Action buttons
+        this.modal.querySelector('#net-delete-btn').onclick = () => this._delete();
+        this.modal.querySelector('#net-duplicate-btn').onclick = () => this._duplicate();
+        this.modal.querySelector('#net-test-btn').onclick = () => this._test();
+        this.modal.querySelector('#net-save-btn').onclick = () => this._save();
+    }
+
+    _validateIP() {
+        const parts = [];
+        for (let i = 0; i < 4; i++) {
+            const val = parseInt(this.modal.querySelector(`#ip-${i}`).value) || 0;
+            parts.push(val);
+        }
+        const valid = parts.every(p => p >= 0 && p <= 255) && parts.some(p => p > 0);
+        const indicator = this.modal.querySelector('#ip-valid');
+        indicator.textContent = valid ? '✓' : '';
+        indicator.className = 'ip-valid ' + (valid ? 'valid' : 'invalid');
+        return valid;
+    }
+
+    _getFormData() {
+        const ipParts = [];
+        for (let i = 0; i < 4; i++) {
+            ipParts.push(this.modal.querySelector(`#ip-${i}`).value || '0');
+        }
+        
+        return {
+            name: this.modal.querySelector('#net-name').value,
+            protocol: this.data.protocol,
+            host: ipParts.join('.'),
+            port: parseInt(this.modal.querySelector('#net-port').value) || 80,
+            path: this.modal.querySelector('#net-path').value || '/',
+            method: this.data.method,
+            headers: this.data.headers || { "Content-Type": "application/json" },
+            body: this.modal.querySelector('#net-body').value,
+            timeout_ms: parseFloat(this.modal.querySelector('#net-delay').value || 5) * 1000,
+            notes: this.modal.querySelector('#net-notes').value
+        };
+    }
+
+    async _save() {
+        const config = this._getFormData();
+        
+        if (!config.name) {
+            this._notify('Please enter a name', 'error');
+            return;
+        }
+        
+        if (!this._validateIP()) {
+            this._notify('Please enter a valid IP address', 'error');
+            return;
+        }
+
+        try {
+            // Save to the network_messages parameter
+            await this.ws.send({
+                type: 'set_param',
+                comp: 'NetworkActions',
+                param: 'network_messages',
+                row: this.slotIndex,
+                col: 0,
+                value: JSON.stringify(config)
+            });
+            
+            this._notify(`Saved network action: ${config.name}`, 'success');
+            this.hide();
+            
+            if (this.onSave) {
+                this.onSave(this.slotIndex, config);
+            }
+        } catch (e) {
+            console.error('Failed to save network action:', e);
+            this._notify('Failed to save', 'error');
+        }
+    }
+
+    async _test() {
+        const config = this._getFormData();
+        
+        if (!this._validateIP()) {
+            this._notify('Please enter a valid IP address', 'error');
+            return;
+        }
+
+        try {
+            // Temporarily save config and trigger it
+            await this.ws.send({
+                type: 'set_param',
+                comp: 'NetworkActions',
+                param: 'network_messages',
+                row: this.slotIndex,
+                col: 0,
+                value: JSON.stringify(config)
+            });
+            
+            // Trigger the action
+            await this.ws.send({
+                type: 'set_param',
+                comp: 'NetworkActions',
+                param: 'trigger',
+                row: 0,
+                col: 0,
+                value: this.slotIndex
+            });
+            
+            this._notify(`Testing: ${config.name || 'Network Action'}`, 'info');
+        } catch (e) {
+            console.error('Failed to test network action:', e);
+            this._notify('Test failed', 'error');
+        }
+    }
+
+    async _delete() {
+        if (!confirm('Delete this network action?')) return;
+        
+        try {
+            await this.ws.send({
+                type: 'set_param',
+                comp: 'NetworkActions',
+                param: 'network_messages',
+                row: this.slotIndex,
+                col: 0,
+                value: ''
+            });
+            
+            this._notify('Network action deleted', 'success');
+            this.hide();
+            
+            if (this.onSave) {
+                this.onSave(this.slotIndex, null);
+            }
+        } catch (e) {
+            this._notify('Failed to delete', 'error');
+        }
+    }
+
+    async _duplicate() {
+        // Find next empty slot
+        let nextSlot = -1;
+        for (let i = this.slotIndex + 1; i < 100; i++) {
+            try {
+                const resp = await this.ws.send({
+                    type: 'get_param',
+                    comp: 'NetworkActions',
+                    param: 'network_messages',
+                    row: i,
+                    col: 0
+                });
+                if (!resp.value) {
+                    nextSlot = i;
+                    break;
+                }
+            } catch (e) {
+                nextSlot = i;
+                break;
+            }
+        }
+        
+        if (nextSlot === -1) {
+            this._notify('No empty slots available', 'error');
+            return;
+        }
+        
+        const config = this._getFormData();
+        config.name = config.name + ' (copy)';
+        
+        try {
+            await this.ws.send({
+                type: 'set_param',
+                comp: 'NetworkActions',
+                param: 'network_messages',
+                row: nextSlot,
+                col: 0,
+                value: JSON.stringify(config)
+            });
+            
+            this._notify(`Duplicated to slot ${nextSlot}`, 'success');
+            
+            // Open the new slot
+            this.slotIndex = nextSlot;
+            this.data = config;
+            this.hide();
+            this.show(nextSlot, config, this.onSave);
+        } catch (e) {
+            this._notify('Failed to duplicate', 'error');
+        }
+    }
+}
 
 
 // Export for use
@@ -1295,5 +1793,6 @@ window.ConfigBuilder = {
     ActionBuilder,
     WatchSlotEditor,
     ActionManagerEditor,
-    ExpressionMonitor
+    ExpressionMonitor,
+    NetworkActionEditor
 };

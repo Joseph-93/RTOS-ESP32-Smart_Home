@@ -1370,3 +1370,276 @@ code {
     font-size: 0.9em;
     color: var(--text-secondary);
 }
+
+/* Expression Monitor Timing Styles */
+.expr-monitor-timing {
+    margin: 1rem 0;
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+}
+
+.expr-monitor-timing h4 {
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.timing-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.timing-row:last-child {
+    margin-bottom: 0;
+}
+
+.timing-row.timing-active {
+    background: rgba(88, 166, 255, 0.1);
+}
+
+.timing-label {
+    font-weight: 500;
+    min-width: 100px;
+}
+
+.timing-value {
+    color: var(--text-secondary);
+    font-family: monospace;
+}
+
+.timing-badge {
+    font-size: 0.8em;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-left: auto;
+}
+
+.timing-badge.hold {
+    background: #238636;
+    color: white;
+    animation: pulse-hold 1s ease-in-out infinite;
+}
+
+.timing-badge.cooldown {
+    background: #1f6feb;
+    color: white;
+    animation: pulse-cooldown 1s ease-in-out infinite;
+}
+
+.timing-badge.inactive {
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+}
+
+@keyframes pulse-hold {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+@keyframes pulse-cooldown {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* ========================================
+   NETWORK ACTION EDITOR STYLES
+   ======================================== */
+
+.net-action-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.net-action-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.net-action-name-row {
+    margin-bottom: 10px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.net-action-name-input {
+    flex: 1;
+    padding: 12px 15px;
+    font-size: 1.1em;
+    font-weight: 600;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+}
+
+.net-action-name-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.net-action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.net-action-label {
+    min-width: 100px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-align: right;
+}
+
+.net-action-protocol-btns,
+.net-action-method-btns {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    padding: 3px;
+}
+
+.protocol-btn,
+.method-btn {
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 4px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.protocol-btn:hover,
+.method-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.protocol-btn.active,
+.method-btn.active {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.net-action-ip-inputs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ip-octet {
+    width: 70px;
+    padding: 10px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 1.1em;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+}
+
+.ip-octet:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.ip-dot {
+    color: var(--text-secondary);
+    font-weight: bold;
+}
+
+.ip-valid {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px;
+    font-size: 1.2em;
+}
+
+.ip-valid.valid {
+    color: #2ea043;
+}
+
+.ip-valid.invalid {
+    color: var(--text-tertiary);
+}
+
+.net-action-port {
+    width: 100px;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 1.1em;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+}
+
+.net-action-port:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.net-action-resource-wrapper {
+    flex: 1;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.net-action-resource {
+    flex: 1;
+    padding: 10px 12px;
+    font-family: monospace;
+    font-size: 0.95em;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+}
+
+.net-action-resource:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.btn-icon {
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-icon:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent-primary);
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.85em;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #2ea043, #238636);
+    color: white;
+    border: none;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #3fb950, #2ea043);
+}
+

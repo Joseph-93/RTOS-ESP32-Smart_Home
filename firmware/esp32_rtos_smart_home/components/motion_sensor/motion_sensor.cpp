@@ -115,13 +115,10 @@ void MotionSensorComponent::motionSensorTask() {
         // Wait for notification from ISR (blocking)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         
-        ESP_LOGI(TAG, "*** MOTION DETECTED *** (GPIO %d triggered)", MOTION_SENSOR_PIN);
-        
         // Update the last motion detected time using member pointer
         if (lastMotionDetectedSeconds) {
             int current_time = esp_timer_get_time() / 1000000;
             lastMotionDetectedSeconds->setValue(0, 0, current_time); // time in seconds
-            ESP_LOGI(TAG, "Motion timestamp updated: %d seconds", current_time);
         }
     }
 }
