@@ -5,8 +5,11 @@
 #include "esp_log.h"
 
 static const char *TAG = "Touch";
+static bool touch_initialized = false;
 
 esp_lcd_touch_handle_t touch_init(void) {
+    esp_err_t ret;
+    
     // Initialize touch controller on same SPI bus
     esp_lcd_panel_io_handle_t touch_io_handle = NULL;
     esp_lcd_panel_io_spi_config_t touch_io_config = {};
@@ -18,7 +21,11 @@ esp_lcd_touch_handle_t touch_init(void) {
     touch_io_config.spi_mode = 0;
     touch_io_config.trans_queue_depth = 3;
 
-    ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)SPI2_HOST, &touch_io_config, &touch_io_handle));
+    ret = esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)SPI2_HOST, &touch_io_config, &touch_io_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Touch panel IO init failed: %s - Touch disabled", esp_err_to_name(ret));
+        return NULL;
+    }
     
     esp_lcd_touch_config_t touch_config = {};
     touch_config.x_max = TOUCH_X_MAX;
@@ -30,8 +37,18 @@ esp_lcd_touch_handle_t touch_init(void) {
     touch_config.flags.mirror_y = true;
 
     esp_lcd_touch_handle_t touch_handle = NULL;
-    ESP_ERROR_CHECK(esp_lcd_touch_new_spi_xpt2046(touch_io_handle, &touch_config, &touch_handle));
+    ret = esp_lcd_touch_new_spi_xpt2046(touch_io_handle, &touch_config, &touch_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "XPT2046 touch init failed: %s - Touch disabled", esp_err_to_name(ret));
+        return NULL;
+    }
+    
+    touch_initialized = true;
     ESP_LOGI(TAG, "Touch initialized");
     
     return touch_handle;
+}
+
+bool touch_is_available(void) {
+    return touch_initialized;
 }

@@ -23,7 +23,7 @@ extern "C" {
 
 /**
  * @brief Initialize the LCD display
- * @return Panel handle on success, NULL on failure
+ * @return Panel handle on success, NULL on failure (hardware not present)
  */
 esp_lcd_panel_handle_t lcd_init(void);
 
@@ -38,6 +38,12 @@ void lcd_set_brightness(uint8_t brightness);
  * @return Current brightness level (0-100)
  */
 uint8_t lcd_get_brightness(void);
+
+/**
+ * @brief Check if LCD hardware is available
+ * @return true if LCD initialized successfully, false otherwise
+ */
+bool lcd_is_available(void);
 
 #ifdef __cplusplus
 }

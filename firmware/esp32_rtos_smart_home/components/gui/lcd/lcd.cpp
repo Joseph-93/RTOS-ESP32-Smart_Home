@@ -9,6 +9,7 @@
 
 static const char *TAG = "LCD";
 static uint8_t current_brightness = 100; // Default 100%
+static bool lcd_initialized = false;     // Track if LCD hardware is available
 
 // LCD backlight PWM configuration
 #define LCD_BACKLIGHT_GPIO  GPIO_NUM_33
@@ -19,6 +20,8 @@ static uint8_t current_brightness = 100; // Default 100%
 #define LCD_PWM_CHANNEL     LEDC_CHANNEL_0
 
 esp_lcd_panel_handle_t lcd_init(void) {
+    esp_err_t ret;
+    
     // Initialize SPI bus (VSPI)
     spi_bus_config_t buscfg = {};
     buscfg.miso_io_num = PIN_NUM_MISO;
@@ -28,7 +31,11 @@ esp_lcd_panel_handle_t lcd_init(void) {
     buscfg.quadhd_io_num = -1;
     buscfg.max_transfer_sz = 4096;
     
-    ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
+    ret = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SPI bus init failed: %s - LCD disabled", esp_err_to_name(ret));
+        return NULL;
+    }
     ESP_LOGI(TAG, "SPI bus initialized");
 
     // Initialize ILI9341 LCD Display
@@ -42,7 +49,11 @@ esp_lcd_panel_handle_t lcd_init(void) {
     io_config.spi_mode = 0;
     io_config.trans_queue_depth = 10;
 
-    ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)SPI2_HOST, &io_config, &io_handle));
+    ret = esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)SPI2_HOST, &io_config, &io_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Panel IO init failed: %s - LCD disabled", esp_err_to_name(ret));
+        return NULL;
+    }
     
     esp_lcd_panel_dev_config_t panel_config = {};
     panel_config.reset_gpio_num = LCD_PIN_RST;
@@ -50,17 +61,30 @@ esp_lcd_panel_handle_t lcd_init(void) {
     panel_config.bits_per_pixel = 16;
 
     esp_lcd_panel_handle_t panel_handle = NULL;
-    ESP_ERROR_CHECK(esp_lcd_new_panel_ili9341(io_handle, &panel_config, &panel_handle));
-    ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
-    ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
+    ret = esp_lcd_new_panel_ili9341(io_handle, &panel_config, &panel_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "ILI9341 panel init failed: %s - LCD disabled", esp_err_to_name(ret));
+        return NULL;
+    }
+    
+    ret = esp_lcd_panel_reset(panel_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Panel reset failed: %s - LCD disabled", esp_err_to_name(ret));
+        return NULL;
+    }
+    
+    ret = esp_lcd_panel_init(panel_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Panel init failed: %s - LCD disabled", esp_err_to_name(ret));
+        return NULL;
+    }
     
     // Set to vanilla basics - no transforms
-    ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(panel_handle, true));
-    ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_handle, false, false));
-    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, false));
-    ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel_handle, 0, 0));
-    
-    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
+    esp_lcd_panel_swap_xy(panel_handle, true);
+    esp_lcd_panel_mirror(panel_handle, false, false);
+    esp_lcd_panel_invert_color(panel_handle, true);  // Most ILI9341 panels need inversion enabled
+    esp_lcd_panel_set_gap(panel_handle, 0, 0);
+    esp_lcd_panel_disp_on_off(panel_handle, true);
     
     // Initialize PWM for backlight control on GPIO 33
     ledc_timer_config_t ledc_timer = {
@@ -70,7 +94,10 @@ esp_lcd_panel_handle_t lcd_init(void) {
         .freq_hz          = LCD_PWM_FREQ_HZ,
         .clk_cfg          = LEDC_AUTO_CLK
     };
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+    ret = ledc_timer_config(&ledc_timer);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "LEDC timer config failed: %s - backlight control disabled", esp_err_to_name(ret));
+    }
     
     ledc_channel_config_t ledc_channel = {
         .gpio_num       = LCD_BACKLIGHT_GPIO,
@@ -81,7 +108,12 @@ esp_lcd_panel_handle_t lcd_init(void) {
         .duty           = 0,
         .hpoint         = 0
     };
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
+    ret = ledc_channel_config(&ledc_channel);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "LEDC channel config failed: %s - backlight control disabled", esp_err_to_name(ret));
+    }
+    
+    lcd_initialized = true;
     lcd_set_brightness(100); // Set to full brightness initially
     
     ESP_LOGI(TAG, "LCD initialized with PWM backlight control on GPIO %d at %d Hz", LCD_BACKLIGHT_GPIO, LCD_PWM_FREQ_HZ);
@@ -89,6 +121,10 @@ esp_lcd_panel_handle_t lcd_init(void) {
 }
 
 void lcd_set_brightness(uint8_t brightness) {
+    if (!lcd_initialized) {
+        return;  // Silently ignore if LCD not available
+    }
+    
     if (brightness > 100) {
         brightness = 100;
     }
@@ -99,9 +135,13 @@ void lcd_set_brightness(uint8_t brightness) {
     ledc_set_duty(LCD_PWM_SPEED_MODE, LCD_PWM_CHANNEL, duty);
     ledc_update_duty(LCD_PWM_SPEED_MODE, LCD_PWM_CHANNEL);
     current_brightness = brightness;
-    
 }
 
 uint8_t lcd_get_brightness(void) {
     return current_brightness;
 }
+
+bool lcd_is_available(void) {
+    return lcd_initialized;
+}
+

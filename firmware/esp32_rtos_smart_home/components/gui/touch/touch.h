@@ -15,9 +15,15 @@ extern "C" {
 
 /**
  * @brief Initialize the touch controller
- * @return Touch handle on success, NULL on failure
+ * @return Touch handle on success, NULL on failure (hardware not present)
  */
 esp_lcd_touch_handle_t touch_init(void);
+
+/**
+ * @brief Check if touch hardware is available
+ * @return true if touch initialized successfully, false otherwise
+ */
+bool touch_is_available(void);
 
 #ifdef __cplusplus
 }

@@ -168,8 +168,7 @@ void GUIComponent::onInitialize() {
             int brightness = val;
             lcd_set_brightness(brightness);
         });
-        // Set initial brightness directly (setValue won't trigger callback if value unchanged)
-        lcd_set_brightness(100);
+        // Note: lcd_init() sets brightness to 100 after LEDC is configured
     }
 
     // Create GUI status task and its timer for lower-priority operations
@@ -224,6 +223,18 @@ void GUIComponent::onInitialize() {
     panel_handle_ref = lcd_init();
     touch_handle_ref = touch_init();
     
+    // Check if hardware is available
+    if (!panel_handle_ref) {
+        ESP_LOGW(TAG, "LCD hardware not available - GUI will run in headless mode");
+        ESP_LOGW(TAG, "Parameters are still accessible via WebSocket API");
+        hardware_available = false;
+        initialized = true;
+        g_gui_component = this;
+        return;  // Skip LVGL initialization
+    }
+    
+    hardware_available = true;
+    
     // Configure XPT2046 touch interrupt on GPIO 22 (PENIRQ - active low)
     gpio_config_t io_conf = {};
     io_conf.pin_bit_mask = (1ULL << TOUCH_IRQ_GPIO);
@@ -233,11 +244,15 @@ void GUIComponent::onInitialize() {
     io_conf.intr_type = GPIO_INTR_NEGEDGE;  // Interrupt on falling edge (touch detected)
     gpio_config(&io_conf);
     
-    // Install GPIO ISR service and add handler
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(TOUCH_IRQ_GPIO, GUIComponent::touch_irq_handler, NULL);
-    
-    ESP_LOGI(TAG, "XPT2046 touch IRQ configured on GPIO %d", TOUCH_IRQ_GPIO);
+    // Install GPIO ISR service and add handler (ignore if already installed)
+    esp_err_t isr_ret = gpio_install_isr_service(0);
+    if (isr_ret != ESP_OK && isr_ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Failed to install ISR service: %s", esp_err_to_name(isr_ret));
+    }
+    if (touch_handle_ref) {
+        gpio_isr_handler_add(TOUCH_IRQ_GPIO, GUIComponent::touch_irq_handler, NULL);
+        ESP_LOGI(TAG, "XPT2046 touch IRQ configured on GPIO %d", TOUCH_IRQ_GPIO);
+    }
     
     // Initialize LVGL
     lv_init();
@@ -284,6 +299,14 @@ void GUIComponent::onInitialize() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] GUIComponent::initialize");
 #endif
+}
+
+void GUIComponent::postInitialize() {
+    // Only set brightness if hardware is available
+    if (hardware_available && currentLcdBrightness) {
+        lcd_set_brightness(currentLcdBrightness->getValue(0, 0));
+        ESP_LOGI(TAG, "Post-initialization: LCD brightness confirmed");
+    }
 }
 
 void GUIComponent::notificationTask() {
@@ -581,6 +604,13 @@ void GUIComponent::createSimpleButtonGrid() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] createSimpleButtonGrid");
 #endif
+    
+    // Skip if hardware not available
+    if (!hardware_available) {
+        ESP_LOGW(TAG, "Skipping button grid creation - no display hardware");
+        return;
+    }
+    
     ESP_LOGI(TAG, "Creating simple 3x2 button grid...");
     ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
     
@@ -784,6 +814,12 @@ void GUIComponent::lvgl_touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data
 
 // Touch reading implementation (non-static member function)
 void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
+    // If touch hardware not available, always report released
+    if (!touch_handle_ref) {
+        data->state = LV_INDEV_STATE_RELEASED;
+        return;
+    }
+    
     // State machine states
     enum TouchState {
         IDLE,           // No touch, waiting for interrupt
@@ -880,6 +916,11 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
 
 // LVGL flush callback
 void GUIComponent::lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map) {
+    if (!panel_handle_ref) {
+        lv_disp_flush_ready(drv);
+        return;
+    }
+    
     int x1 = area->x1;
     int y1 = area->y1;
     int x2 = area->x2 + 1;
@@ -895,6 +936,13 @@ void GUIComponent::lvgl_timer_task(void *arg) {
     ESP_LOGI(TAG, "[ENTER] lvgl_timer_task");
 #endif
     ESP_LOGI(TAG, "LVGL timer task started");
+    
+    // Check if hardware is available
+    if (!g_gui_component || !g_gui_component->hardware_available) {
+        ESP_LOGW(TAG, "LVGL timer task exiting - no display hardware");
+        vTaskDelete(NULL);
+        return;
+    }
     
     // Main LVGL timer loop
     while (1) {

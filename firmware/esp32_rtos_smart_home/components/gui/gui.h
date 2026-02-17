@@ -18,6 +18,7 @@ public:
     
     void setUpDependencies(ComponentGraph* graph) override;
     void onInitialize() override;
+    void postInitialize() override;
 
     // Task function for lower-priority gui operations
     static void guiStatusTaskWrapper(void* pvParameters);
@@ -45,6 +46,9 @@ public:
     
     // Pending button label update (set by parameter callback, consumed by LVGL task)
     volatile bool button_label_update_pending = false;
+    
+    // Hardware availability flags
+    bool hardware_available = false;  // True if LCD initialized successfully
 
 private:
     // Typed parameter member pointers (assigned at init, never null after)
