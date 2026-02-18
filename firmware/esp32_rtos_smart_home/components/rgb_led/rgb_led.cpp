@@ -58,17 +58,17 @@ static const char* TAG = "RgbLed";
 
 RgbLedComponent::RgbLedComponent() 
     : Component("RgbLed")
-    , led_strip(nullptr)
-    , strip_mutex(nullptr)
-    , current_led_count(0)
-    , led_task_handle(nullptr)
-    , in_bulk_update(false)
     , ledCount(nullptr)
     , brightness(nullptr)
     , ledColors(nullptr)
     , effect(nullptr)
     , effectSpeed(nullptr)
     , powerOn(nullptr)
+    , led_strip(nullptr)
+    , strip_mutex(nullptr)
+    , current_led_count(0)
+    , led_task_handle(nullptr)
+    , in_bulk_update(false)
 {
     // Atomic members are initialized via brace-init in header
     ESP_LOGI(TAG, "RgbLedComponent created");
@@ -574,39 +574,34 @@ void RgbLedComponent::applySolidEffect() {
 }
 
 void RgbLedComponent::applyTestRgbEffect(uint32_t tick) {
-    // Simple RED-OFF-GREEN-OFF-BLUE-OFF cycle for circuit testing
-    // Each state lasts ~1.5 seconds (75 ticks at 20ms per tick)
-    // Full cycle: 6 states * 1.5s = 9 seconds
-    const uint32_t ticks_per_state = 75;  // 1.5 seconds per state
-    uint32_t state = (tick / ticks_per_state) % 6;
+    // White brightness ramp test: 1% -> 10% -> 50% -> 100%
+    // Each state lasts ~2 seconds (100 ticks at 20ms per tick)
+    const uint32_t ticks_per_state = 100;  // 2 seconds per state
+    uint32_t state = (tick / ticks_per_state) % 4;
     
-    uint8_t r = 0, g = 0, b = 0;
-    const char* state_name = "OFF";
+    // Brightness levels to test (as percentages)
+    const uint8_t brightness_levels[] = {1, 10, 50, 100};
+    uint8_t brightness_pct = brightness_levels[state];
     
-    switch (state) {
-        case 0: r = 255; state_name = "RED";   break;
-        case 1: /* all off */                  break;
-        case 2: g = 255; state_name = "GREEN"; break;
-        case 3: /* all off */                  break;
-        case 4: b = 255; state_name = "BLUE";  break;
-        case 5: /* all off */                  break;
-    }
+    // Calculate white value based on brightness percentage
+    uint8_t white_val = (255 * brightness_pct) / 100;
     
     // Log state changes
     static uint32_t last_state = 999;
     if (state != last_state) {
-        ESP_LOGI(TAG, "TEST: %s (R=%d G=%d B=%d)", state_name, r, g, b);
+        ESP_LOGI(TAG, "TEST WHITE: %d%% brightness (R=%d G=%d B=%d)", 
+                 brightness_pct, white_val, white_val, white_val);
         last_state = state;
     }
     
     if (!takeMutex()) return;
     
-    // Set all LEDs to the test color
+    // Set all LEDs to white at current brightness
     for (uint16_t i = 0; i < current_led_count; i++) {
         size_t offset = i * 3;
-        color_buffer[offset + 0] = r;
-        color_buffer[offset + 1] = g;
-        color_buffer[offset + 2] = b;
+        color_buffer[offset + 0] = white_val;
+        color_buffer[offset + 1] = white_val;
+        color_buffer[offset + 2] = white_val;
     }
     
     giveMutex();
