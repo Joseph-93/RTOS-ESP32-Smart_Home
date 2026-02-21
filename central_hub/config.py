@@ -1,11 +1,19 @@
 """
 Configuration file for the Central Hub.
-Edit this file to set your ESP32 device IPs.
+Edit this file to configure ESP32 device discovery.
 """
 
-# List of ESP32 device IP addresses to connect to
+# mDNS Discovery settings
+# If True, automatically discover ESP32 devices via mDNS (_ws._tcp.local.)
+# If False, use only the static ESP32_DEVICES list below
+USE_MDNS_DISCOVERY = True
+MDNS_DISCOVERY_TIMEOUT = 5.0  # seconds to wait for mDNS responses
+MDNS_SERVICE_TYPE = "_ws._tcp.local."
+
+# List of ESP32 device IP addresses (used when USE_MDNS_DISCOVERY is False,
+# or as additional devices to connect to alongside discovered ones)
 ESP32_DEVICES = [
-    "10.0.0.46",
+    # "10.0.0.46",  # Add static IPs here if needed
 ]
 
 # WebSocket Server settings (for incoming connections from web dashboard)

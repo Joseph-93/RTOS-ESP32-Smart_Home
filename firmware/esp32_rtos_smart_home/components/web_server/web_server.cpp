@@ -39,7 +39,7 @@ void WebServerComponent::onInitialize() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 80;
     config.max_uri_handlers = 10;
-    config.stack_size = 3072;  // Reduced from 4096 to save RAM
+    config.stack_size = 8192;  // Needs headroom for WebSocket handlers (base64 decode, JSON, etc.)
     config.max_req_hdr_len = 1024;  // Reduced from 2048 - WebSocket doesn't need large headers
     config.lru_purge_enable = true;
     config.max_open_sockets = 2;  // Reduced from 3 - minimal concurrent connections

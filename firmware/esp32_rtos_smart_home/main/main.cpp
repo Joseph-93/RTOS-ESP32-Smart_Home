@@ -7,11 +7,14 @@
  * - Motion Sensor: PIR motion detection
  * - Door Sensor: Magnetic door/window state
  * - Heartbeat: Periodic pulse to indicate device is alive
+ * - RGB LED: WS2812 LED strip control with scripted animations
  * - Web Server: WebSocket API for external control
  * 
  * Uses ComponentGraph for centralized component management and inter-component communication.
  * All components are "dumb" - they expose read-only sensor data and writable settings.
  * Complex logic is delegated to external systems (e.g., Raspberry Pi hub).
+ * 
+ * Component selection is controlled via components_config.cmake
  */
     
 #include "esp_log.h"
@@ -20,12 +23,27 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "component_graph.h"
+
+// Conditionally include component headers
+#ifdef ENABLE_GUI
 #include "gui.h"
+#endif
+#ifdef ENABLE_HEARTBEAT
 #include "heartbeat.h"
+#endif
+#ifdef ENABLE_LIGHT_SENSOR
 #include "light_sensor.h"
+#endif
+#ifdef ENABLE_MOTION_SENSOR
 #include "motion_sensor.h"
+#endif
+#ifdef ENABLE_DOOR_SENSOR
 #include "door_sensor.h"
+#endif
+#ifdef ENABLE_RGB_LED
 #include "rgb_led.h"
+#endif
+
 #include "web_server.h"
 #include "wifi_init.h"
 #include <vector>
@@ -41,17 +59,29 @@ static void log_memory_checkpoint(const char* checkpoint_name) {
     ESP_LOGI(TAG, "========================");
 }
 
-// TODO: Change these to your WiFi credentials
+// TODO: Make the system dynamic - allow wifi credentials and component selection to be configured at runtime (e.g., possibly by making the ESP32 a WiFi AP on first boot and asking for configuration through a simple web interface, then saving to NVS for future boots). For now, hardcode WiFi credentials and component selection at compile time for simplicity and memory savings.
 #define WIFI_SSID      "its getting hotspot in here"
 #define WIFI_PASSWORD  "SoTakeOffAllYourClothing"
 
-// Global component instances
+// Global component instances (conditionally compiled)
+#ifdef ENABLE_GUI
 static GUIComponent gui_component;
+#endif
+#ifdef ENABLE_HEARTBEAT
 static HeartbeatComponent heartbeat_component;
+#endif
+#ifdef ENABLE_LIGHT_SENSOR
 static LightSensorComponent light_sensor_component;
+#endif
+#ifdef ENABLE_MOTION_SENSOR
 static MotionSensorComponent motion_sensor_component;
+#endif
+#ifdef ENABLE_DOOR_SENSOR
 static DoorSensorComponent door_sensor_component;
+#endif
+#ifdef ENABLE_RGB_LED
 static RgbLedComponent rgb_led_component;
+#endif
 static WebServerComponent web_server_component;
 
 extern "C" void app_main(void)
@@ -80,19 +110,41 @@ extern "C" void app_main(void)
     
     log_memory_checkpoint("AFTER GRAPH CREATE");
     
-    // Register all components with graph
+    // Register all components with graph (conditionally compiled)
     ESP_LOGI(TAG, "Registering components with graph...");
+    
+#ifdef ENABLE_GUI
     component_graph->registerComponent(&gui_component);
-    log_memory_checkpoint("AFTER GUI REGISTER");
-    
+    ESP_LOGI(TAG, "  - GUI component registered");
+#endif
+
+#ifdef ENABLE_HEARTBEAT
     component_graph->registerComponent(&heartbeat_component);
-    log_memory_checkpoint("AFTER HEARTBEAT REGISTER");
-    
+    ESP_LOGI(TAG, "  - Heartbeat component registered");
+#endif
+
+#ifdef ENABLE_LIGHT_SENSOR
     component_graph->registerComponent(&light_sensor_component);
+    ESP_LOGI(TAG, "  - Light sensor component registered");
+#endif
+
+#ifdef ENABLE_MOTION_SENSOR
     component_graph->registerComponent(&motion_sensor_component);
+    ESP_LOGI(TAG, "  - Motion sensor component registered");
+#endif
+
+#ifdef ENABLE_DOOR_SENSOR
     component_graph->registerComponent(&door_sensor_component);
+    ESP_LOGI(TAG, "  - Door sensor component registered");
+#endif
+
+#ifdef ENABLE_RGB_LED
     component_graph->registerComponent(&rgb_led_component);
+    ESP_LOGI(TAG, "  - RGB LED component registered");
+#endif
+
     component_graph->registerComponent(&web_server_component);
+    ESP_LOGI(TAG, "  - Web server component registered");
     
     log_memory_checkpoint("AFTER ALL REGISTERS");
     
@@ -102,12 +154,13 @@ extern "C" void app_main(void)
     
     log_memory_checkpoint("AFTER INITIALIZE ALL");
     
+#ifdef ENABLE_GUI
     // Create simple button grid GUI
     ESP_LOGI(TAG, "Creating simple button grid...");
     gui_component.createSimpleButtonGrid();
     ESP_LOGI(TAG, "GUI created successfully");
-    
     log_memory_checkpoint("AFTER GUI CREATION");
+#endif;
     
     ESP_LOGI(TAG, "System initialized - ready!");
     

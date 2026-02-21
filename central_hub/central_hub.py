@@ -27,7 +27,7 @@ from websockets.client import WebSocketClientProtocol
 from config import (
     ESP32_DEVICES, WS_PING_INTERVAL, WS_PING_TIMEOUT, 
     RECONNECT_DELAY, DISCOVERY_DELAY, SUBSCRIBE_DELAY, LOG_LEVEL,
-    WS_SERVER_PORT
+    WS_SERVER_PORT, USE_MDNS_DISCOVERY, MDNS_DISCOVERY_TIMEOUT, MDNS_SERVICE_TYPE
 )
 from components import (
     Component as BaseComponent,
@@ -670,21 +670,89 @@ class CentralHub:
         print("\n" + "=" * 80)
 
 
+# ============================================================================
+# mDNS Discovery
+# ============================================================================
+
+def discover_esp32_devices(timeout: float = 5.0, service_type: str = "_ws._tcp.local.") -> Dict[str, str]:
+    """
+    Discover ESP32 devices via mDNS.
+    
+    Returns:
+        Dict mapping device names to IP addresses.
+    """
+    try:
+        from zeroconf import Zeroconf, ServiceBrowser, ServiceListener
+    except ImportError:
+        logger.warning("zeroconf not installed - mDNS discovery unavailable")
+        logger.warning("Install with: pip install zeroconf")
+        return {}
+    
+    discovered = {}
+    
+    class ESP32Listener(ServiceListener):
+        def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+            info = zc.get_service_info(type_, name)
+            if info and info.addresses:
+                ip = socket.inet_ntoa(info.addresses[0])
+                device_name = name.replace(f".{type_}", "")
+                discovered[device_name] = ip
+                logger.info(f"Discovered device: {device_name} at {ip}")
+        
+        def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+            pass
+        
+        def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+            pass
+    
+    logger.info(f"Scanning for ESP32 devices via mDNS ({timeout}s timeout)...")
+    zc = Zeroconf()
+    listener = ESP32Listener()
+    browser = ServiceBrowser(zc, service_type, listener)
+    
+    import time
+    time.sleep(timeout)
+    
+    zc.close()
+    
+    if discovered:
+        logger.info(f"mDNS discovery found {len(discovered)} device(s)")
+    else:
+        logger.warning("No devices found via mDNS")
+    
+    return discovered
+
+
 async def main():
     """Main entry point."""
     import sys
     
-    # Get device list from command line first, then env, then config
+    # Get device list from command line first, then env, then config/discovery
     if len(sys.argv) > 1:
         devices = sys.argv[1:]
+        logger.info("Using devices from command line arguments")
     elif os.environ.get('ESP32_IPS'):
         devices = [ip.strip() for ip in os.environ['ESP32_IPS'].split(',')]
+        logger.info("Using devices from ESP32_IPS environment variable")
     else:
+        # Start with static devices from config
         devices = ESP32_DEVICES.copy() if ESP32_DEVICES else []
+        
+        # Add mDNS discovered devices if enabled
+        if USE_MDNS_DISCOVERY:
+            discovered = discover_esp32_devices(
+                timeout=MDNS_DISCOVERY_TIMEOUT,
+                service_type=MDNS_SERVICE_TYPE
+            )
+            # Add discovered IPs that aren't already in the list
+            for name, ip in discovered.items():
+                if ip not in devices:
+                    devices.append(ip)
+                    logger.info(f"Added discovered device: {name} ({ip})")
     
     # Allow running with no ESP32s (hub-only mode for testing)
     if not devices:
-        print("No ESP32 devices configured - running in hub-only mode")
+        print("No ESP32 devices configured or discovered - running in hub-only mode")
         print("The hub's local components will be available via WebSocket")
         print()
         devices = []

@@ -6,5 +6,6 @@ dependencies:
   lvgl/lvgl: "~8.0.0"
   espressif/esp_lcd_touch: "^1.0.0"
   espressif/led_strip: "^2.0.0"
+  espressif/mdns: "^1.0.0"
   idf:
     version: '>=4.1.0'

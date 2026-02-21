@@ -4,3 +4,4 @@ channels-redis==4.1.0
 daphne==4.0.0
 redis==5.0.1
 requests==2.32.5
+zeroconf==0.131.0

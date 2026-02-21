@@ -28,6 +28,8 @@
 #include "led_strip.h"
 #include "esp_log.h"
 #include "esp_check.h"
+#include "esp_timer.h"
+#include "esp_heap_caps.h"
 #include "freertos/semphr.h"
 #include <cstring>
 #include <algorithm>
@@ -53,22 +55,67 @@ static const char* TAG = "RgbLed";
 #define RGB_LED_MUTEX_TIMEOUT_MS    100
 
 // ============================================================================
+// Base64 Decoding (for animation chunk uploads)
+// ============================================================================
+
+static const uint8_t base64_decode_table[256] = {
+    64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+    64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+    64,64,64,64,64,64,64,64,64,64,64,62,64,64,64,63, // +, /
+    52,53,54,55,56,57,58,59,60,61,64,64,64,64,64,64, // 0-9
+    64, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14, // A-O
+    15,16,17,18,19,20,21,22,23,24,25,64,64,64,64,64, // P-Z
+    64,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40, // a-o
+    41,42,43,44,45,46,47,48,49,50,51,64,64,64,64,64, // p-z
+    64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+    64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+    64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+    64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+    64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+    64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+    64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+    64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64
+};
+
+// Decode base64 string to binary data
+// Returns number of bytes decoded, or -1 on error
+static int base64_decode(const char* input, size_t input_len, uint8_t* output, size_t output_max) {
+    size_t out_len = 0;
+    uint32_t buffer = 0;
+    int bits_collected = 0;
+    
+    for (size_t i = 0; i < input_len; i++) {
+        char c = input[i];
+        if (c == '=') break; // Padding, we're done
+        
+        uint8_t d = base64_decode_table[(uint8_t)c];
+        if (d == 64) continue; // Skip invalid chars (whitespace, etc.)
+        
+        buffer = (buffer << 6) | d;
+        bits_collected += 6;
+        
+        if (bits_collected >= 8) {
+            bits_collected -= 8;
+            if (out_len >= output_max) return -1; // Buffer overflow
+            output[out_len++] = (buffer >> bits_collected) & 0xFF;
+        }
+    }
+    
+    return (int)out_len;
+}
+
+// ============================================================================
 // RgbLedComponent Implementation
 // ============================================================================
 
 RgbLedComponent::RgbLedComponent() 
     : Component("RgbLed")
-    , ledCount(nullptr)
     , brightness(nullptr)
-    , ledColors(nullptr)
-    , effect(nullptr)
-    , effectSpeed(nullptr)
-    , powerOn(nullptr)
+    , playing(nullptr)
+    , loop(nullptr)
     , led_strip(nullptr)
     , strip_mutex(nullptr)
-    , current_led_count(0)
     , led_task_handle(nullptr)
-    , in_bulk_update(false)
 {
     // Atomic members are initialized via brace-init in header
     ESP_LOGI(TAG, "RgbLedComponent created");
@@ -118,38 +165,28 @@ RgbLedComponent::~RgbLedComponent() {
 }
 
 esp_err_t RgbLedComponent::initLedStrip(gpio_num_t gpio, uint16_t led_count) {
-    ESP_LOGI(TAG, "Initializing LED strip: GPIO %d, %d LEDs", gpio, led_count);
-    
-    // Validate parameters
-    if (led_count == 0 || led_count > RGB_LED_MAX_COUNT) {
-        ESP_LOGE(TAG, "Invalid LED count: %d (max: %d)", led_count, RGB_LED_MAX_COUNT);
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    // Create mutex for thread safety (protects led_strip and color_buffer)
-    if (!strip_mutex) {
-        strip_mutex = xSemaphoreCreateMutex();
-        if (!strip_mutex) {
-            ESP_LOGE(TAG, "Failed to create mutex");
-            return ESP_ERR_NO_MEM;
-        }
-    }
+    ESP_LOGI(TAG, "Initializing LED strip on core %d: GPIO %d, %d LEDs",
+             xPortGetCoreID(), gpio, led_count);
     
     // Configure LED strip with RMT backend
-    // IMPORTANT: Always allocate for max LEDs to avoid recreating driver on resize
     led_strip_config_t strip_config = {};
     strip_config.strip_gpio_num = gpio;
-    strip_config.max_leds = RGB_LED_MAX_COUNT;  // Always max - current_led_count tracks active
+    strip_config.max_leds = RGB_LED_COUNT;
     strip_config.led_model = RGB_LED_MODEL;
     strip_config.led_pixel_format = RGB_LED_PIXEL_FORMAT;
     strip_config.flags.invert_out = false;
     
     // Configure RMT backend with 10 MHz resolution
+    // 30 LEDs × 24 bits = 720 RMT symbols per refresh.
+    // ESP32 has 512 total RMT memory entries.  No other RMT users, so take
+    // all 8 blocks (512 symbols).  This means only 1 ISR refill per refresh
+    // (720 − 512 = 208 remaining), minimising the window for WiFi interrupts
+    // to cause an RMT underflow that shifts the data stream.
     led_strip_rmt_config_t rmt_config = {};
     rmt_config.clk_src = RMT_CLK_SRC_DEFAULT;
     rmt_config.resolution_hz = RGB_LED_RMT_RESOLUTION_HZ;
-    rmt_config.mem_block_symbols = 64;  // Memory block size for RMT
-    rmt_config.flags.with_dma = false;  // DMA not needed for small strips
+    rmt_config.mem_block_symbols = 512;
+    rmt_config.flags.with_dma = false;  // DMA not available on original ESP32
     
     // Create LED strip with RMT backend
     esp_err_t ret = led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip);
@@ -158,18 +195,14 @@ esp_err_t RgbLedComponent::initLedStrip(gpio_num_t gpio, uint16_t led_count) {
         return ret;
     }
     
-    current_led_count = led_count;
-    
-    // Allocate color buffer (RGB format for internal storage)
-    color_buffer.resize(led_count * 3, 0);
-    
     // Clear the strip initially
     ret = led_strip_clear(led_strip);
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Initial clear failed: %s", esp_err_to_name(ret));
     }
     
-    ESP_LOGI(TAG, "LED strip initialized successfully (RMT @ %d Hz)", RGB_LED_RMT_RESOLUTION_HZ);
+    ESP_LOGI(TAG, "LED strip initialized: %d LEDs, GPIO %d, RMT %d Hz, 512 symbol buffer",
+             RGB_LED_COUNT, gpio, RGB_LED_RMT_RESOLUTION_HZ);
     return ESP_OK;
 }
 
@@ -184,187 +217,114 @@ void RgbLedComponent::giveMutex() {
     }
 }
 
-void RgbLedComponent::resizeLedBuffer(uint16_t new_count) {
-    if (new_count > RGB_LED_MAX_COUNT) {
-        new_count = RGB_LED_MAX_COUNT;
-    }
-    
-    if (!takeMutex()) {
-        ESP_LOGW(TAG, "Failed to acquire mutex for resize");
-        return;
-    }
-    
-    // Resize color buffer (3 bytes per LED: R, G, B)
-    color_buffer.resize(new_count * 3, 0);
-    current_led_count = new_count;
-    
-    ESP_LOGI(TAG, "LED buffer resized to %u LEDs (%zu bytes)", new_count, color_buffer.size());
-    
-    giveMutex();
-}
-
 void RgbLedComponent::onInitialize() {
     ESP_LOGI(TAG, "Initializing RgbLedComponent...");
     
-    // Initialize LED strip with RMT backend
-    esp_err_t ret = initLedStrip(RGB_LED_DEFAULT_PIN, RGB_LED_DEFAULT_COUNT);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize LED strip: %s", esp_err_to_name(ret));
+    // Create mutex first — needed before the task starts
+    strip_mutex = xSemaphoreCreateMutex();
+    if (!strip_mutex) {
+        ESP_LOGE(TAG, "Failed to create mutex");
         return;
     }
     
-    // Create parameters
-    ledCount = addIntParam("led_count", 1, 1, 1, RGB_LED_MAX_COUNT, RGB_LED_DEFAULT_COUNT);
-    brightness = addIntParam("brightness", 1, 1, 0, 100, 100);
-    effect = addIntParam("effect", 1, 1, 0, 5, 5);  // Default to TEST_RGB (5) for circuit debugging
-    effectSpeed = addIntParam("effect_speed", 1, 1, 1, 100, 50);
-    powerOn = addBoolParam("power_on", 1, 1, true);
+    // Allocate color buffer (always 30 LEDs)
+    color_buffer.resize(RGB_LED_COUNT * 3, 0);
     
-    // LED colors matrix: led_count rows x 3 columns (R, G, B)
-    // Note: We'll resize this when led_count changes
-    ledColors = addIntParam("led_colors", RGB_LED_DEFAULT_COUNT, 3, 0, 255, 0);
+    // Create parameters
+    brightness = addIntParam("brightness", 1, 1, 0, 100, 100);
+    playing = addBoolParam("playing", 1, 1, false);  // false=off, true=play animation
+    loop = addBoolParam("loop", 1, 1, true);  // true=loop forever, false=play once
+    
+    // Animation status parameters (read-only)
+    animFrameCount = addIntParam("anim_frame_count", 1, 1, 0, 65535, 0, true);  // Read-only
+    animMemoryUsed = addIntParam("anim_memory_used", 1, 1, 0, INT32_MAX, 0, true);  // Read-only
+    animMemoryMax = addIntParam("anim_memory_max", 1, 1, 0, INT32_MAX, RGB_LED_MAX_ANIMATION_MEMORY, true);  // Read-only
+    
+    // Animation upload parameters (writable)
+    animTotalFrames = addIntParam("anim_total_frames", 1, 1, 0, 65535, 0);
+    animUploadChunkIndex = addIntParam("anim_chunk_index", 1, 1, 0, 65535, 0);
+    animUploadData = addStringParam("anim_chunk_data", 1, 1, "");
+    animCommit = addBoolParam("anim_commit", 1, 1, false);
     
     // Set up onChange callbacks
-    if (ledCount) {
-        ledCount->setOnChange([this](size_t row, size_t col, int val) {
-            ESP_LOGI(TAG, "LED count changed to %d", val);
-            resizeLedBuffer((uint16_t)val);
-            refresh_pending.store(true);
-        });
-    }
-    
-    if (brightness) {
-        brightness->setOnChange([this](size_t row, size_t col, int val) {
-            ESP_LOGD(TAG, "Brightness changed to %d%%", val);
-            refresh_pending.store(true);
-        });
-    }
-    
-    if (powerOn) {
-        powerOn->setOnChange([this](size_t row, size_t col, bool val) {
-            ESP_LOGI(TAG, "Power %s", val ? "ON" : "OFF");
-            refresh_pending.store(true);
-        });
-    }
-    
-    if (ledColors) {
-        ledColors->setOnChange([this](size_t row, size_t col, int val) {
-            // Skip if we're in a bulk update (setAllLeds, clearAll)
-            if (in_bulk_update) return;
-            
-            // Only trigger refresh on color changes when in static mode
-            if (effect && effect->getValue(0, 0) == (int)RgbLedEffect::STATIC) {
-                refresh_pending.store(true);
+    if (playing) {
+        playing->setOnChange([this](size_t row, size_t col, bool val) {
+            ESP_LOGI(TAG, "Playing: %s", val ? "true" : "false");
+            if (val) {
+                // Reset to frame 0 when starting playback
+                animation_current_frame = 0;
+                animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
             }
         });
     }
     
-    // Create LED task
-    BaseType_t result = xTaskCreate(
+    // Animation upload callbacks
+    if (animTotalFrames) {
+        animTotalFrames->setOnChange([this](size_t row, size_t col, int val) {
+            if (val > 0) {
+                esp_err_t ret = animationBegin((uint16_t)val);
+                if (ret != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to begin animation: %s", esp_err_to_name(ret));
+                }
+            }
+        });
+    }
+    
+    if (animCommit) {
+        animCommit->setOnChange([this](size_t row, size_t col, bool val) {
+            if (val) {
+                animationCommit();
+                animCommit->setValue(0, 0, false);  // Reset trigger
+            }
+        });
+    }
+    
+    if (animUploadData && animUploadChunkIndex) {
+        animUploadData->setOnChange([this](size_t row, size_t col, const std::string& val) {
+            if (val.empty()) return;
+            
+            int chunk_index = animUploadChunkIndex->getValue(0, 0);
+            
+            // Decode base64
+            size_t max_decoded = (val.size() * 3) / 4 + 4;
+            std::vector<uint8_t> decoded(max_decoded);
+            
+            int decoded_len = base64_decode(val.c_str(), val.size(), decoded.data(), max_decoded);
+            if (decoded_len < 0) {
+                ESP_LOGE(TAG, "Base64 decode failed for chunk %d", chunk_index);
+                return;
+            }
+            
+            esp_err_t ret = animationChunk((uint16_t)chunk_index, decoded.data(), (size_t)decoded_len);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Animation chunk %d failed: %s", chunk_index, esp_err_to_name(ret));
+            } else {
+                ESP_LOGI(TAG, "Received animation chunk %d, %d bytes", chunk_index, decoded_len);
+            }
+            
+            animUploadData->setValue(0, 0, "");  // Clear to detect next write
+        });
+    }
+    
+    // Pin LED task to core 1 so that led_strip_new_rmt_device() (called
+    // inside the task) registers the RMT refill ISR on core 1.  WiFi runs
+    // on core 0, so the two can never preempt each other — eliminating the
+    // RMT buffer underflow that causes LED flicker.
+    BaseType_t result = xTaskCreatePinnedToCore(
         ledTaskWrapper,
         "rgb_led_task",
         4096,
         this,
         tskIDLE_PRIORITY + 1,
-        &led_task_handle
+        &led_task_handle,
+        1   // Core 1 — away from WiFi (core 0)
     );
     
     if (result != pdPASS) {
         ESP_LOGE(TAG, "Failed to create RGB LED task");
     } else {
         ESP_LOGI(TAG, "RGB LED task created, %d LEDs on GPIO %d", 
-                 RGB_LED_DEFAULT_COUNT, RGB_LED_DEFAULT_PIN);
-    }
-    
-    // Initial clear
-    clearAll();
-    refresh();
-}
-
-esp_err_t RgbLedComponent::setPixel(uint16_t led_index, uint8_t r, uint8_t g, uint8_t b) {
-    if (led_index >= current_led_count) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    if (!takeMutex()) {
-        return ESP_ERR_TIMEOUT;
-    }
-    
-    // Store in internal buffer (RGB order)
-    size_t offset = led_index * 3;
-    color_buffer[offset + 0] = r;
-    color_buffer[offset + 1] = g;
-    color_buffer[offset + 2] = b;
-    
-    giveMutex();
-    return ESP_OK;
-}
-
-void RgbLedComponent::setLedColor(uint16_t led_index, uint8_t r, uint8_t g, uint8_t b) {
-    if (led_index >= current_led_count) {
-        return;
-    }
-    
-    // Update parameter if available
-    if (ledColors) {
-        ledColors->setValue(led_index, 0, r);
-        ledColors->setValue(led_index, 1, g);
-        ledColors->setValue(led_index, 2, b);
-    }
-    
-    // Update internal buffer (thread-safe)
-    setPixel(led_index, r, g, b);
-}
-
-void RgbLedComponent::setAllLeds(uint8_t r, uint8_t g, uint8_t b) {
-    if (!takeMutex()) {
-        return;
-    }
-    
-    for (uint16_t i = 0; i < current_led_count; i++) {
-        size_t offset = i * 3;
-        color_buffer[offset + 0] = r;
-        color_buffer[offset + 1] = g;
-        color_buffer[offset + 2] = b;
-    }
-    
-    giveMutex();
-    
-    // Update parameters with bulk update guard to prevent callback churn
-    if (ledColors) {
-        in_bulk_update = true;
-        for (uint16_t i = 0; i < current_led_count; i++) {
-            ledColors->setValue(i, 0, r);
-            ledColors->setValue(i, 1, g);
-            ledColors->setValue(i, 2, b);
-        }
-        in_bulk_update = false;
-    }
-}
-
-void RgbLedComponent::clearAll() {
-    if (!takeMutex()) {
-        return;
-    }
-    
-    std::fill(color_buffer.begin(), color_buffer.end(), 0);
-    
-    // Use led_strip_clear() for efficient clearing
-    if (led_strip) {
-        led_strip_clear(led_strip);
-    }
-    
-    giveMutex();
-    
-    // Update parameters with bulk update guard
-    if (ledColors) {
-        in_bulk_update = true;
-        for (uint16_t i = 0; i < current_led_count; i++) {
-            ledColors->setValue(i, 0, 0);
-            ledColors->setValue(i, 1, 0);
-            ledColors->setValue(i, 2, 0);
-        }
-        in_bulk_update = false;
+                 RGB_LED_COUNT, RGB_LED_DEFAULT_PIN);
     }
 }
 
@@ -374,23 +334,23 @@ uint8_t RgbLedComponent::applyBrightness(uint8_t color) {
     return (uint8_t)((color * bright) / 100);
 }
 
-esp_err_t RgbLedComponent::show() {
-    if (!led_strip) {
-        return ESP_ERR_INVALID_STATE;
-    }
+// ============================================================================
+// LED Control
+// ============================================================================
+
+void RgbLedComponent::ledsOff() {
+    if (!takeMutexBlocking()) return;
     
-    if (!takeMutex()) {
-        return ESP_ERR_TIMEOUT;
+    std::fill(color_buffer.begin(), color_buffer.end(), 0);
+    if (led_strip) {
+        led_strip_clear(led_strip);
+        led_strip_refresh(led_strip);
     }
-    
-    esp_err_t ret = transmitBuffer();
     
     giveMutex();
-    return ret;
 }
 
 esp_err_t RgbLedComponent::showBlocking() {
-    // For use by the LED task - waits indefinitely for mutex
     if (!led_strip) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -407,201 +367,251 @@ esp_err_t RgbLedComponent::showBlocking() {
 
 esp_err_t RgbLedComponent::transmitBuffer() {
     // Internal: assumes mutex is held
-    // Transfer color buffer to LED strip with brightness applied
-    // led_strip_set_pixel() accepts RGB order; the driver handles GRB conversion
-    // based on LED_PIXEL_FORMAT_GRB configuration
-    for (uint16_t i = 0; i < current_led_count; i++) {
+    for (uint16_t i = 0; i < RGB_LED_COUNT; i++) {
         size_t offset = i * 3;
         uint8_t r = applyBrightness(color_buffer[offset + 0]);
         uint8_t g = applyBrightness(color_buffer[offset + 1]);
         uint8_t b = applyBrightness(color_buffer[offset + 2]);
-        
+
         esp_err_t ret = led_strip_set_pixel(led_strip, i, r, g, b);
         if (ret != ESP_OK) {
             return ret;
         }
     }
-    
-    // led_strip_refresh() transmits data via RMT and handles latch timing
+
     return led_strip_refresh(led_strip);
 }
 
-void RgbLedComponent::refresh() {
-    esp_err_t ret = show();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Refresh failed: %s", esp_err_to_name(ret));
+// ============================================================================
+// Animation Implementation
+// ============================================================================
+
+esp_err_t RgbLedComponent::animationBegin(uint16_t total_frames) {
+    size_t frame_size = getFrameSize();
+    size_t total_bytes = total_frames * frame_size;
+    
+    ESP_LOGI(TAG, "Animation begin: %u frames, %u bytes/frame, %zu total bytes",
+             total_frames, frame_size, total_bytes);
+    
+    // Check memory limits
+    if (total_bytes > RGB_LED_MAX_ANIMATION_MEMORY) {
+        ESP_LOGE(TAG, "Animation too large: %zu bytes requested, max %d bytes",
+                 total_bytes, RGB_LED_MAX_ANIMATION_MEMORY);
+        return ESP_ERR_NO_MEM;
     }
+    
+    // Check available heap
+    size_t free_heap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    if (total_bytes > free_heap * 0.8) {  // Leave 20% headroom
+        ESP_LOGE(TAG, "Insufficient heap: need %zu bytes, only %zu available",
+                 total_bytes, free_heap);
+        return ESP_ERR_NO_MEM;
+    }
+    
+    if (!takeMutex()) {
+        return ESP_ERR_TIMEOUT;
+    }
+    
+    // Clear existing animation
+    animation_data.clear();
+    
+    // Pre-allocate memory - use reserve + resize pattern to detect allocation failure
+    animation_data.reserve(total_bytes);
+    if (animation_data.capacity() < total_bytes) {
+        giveMutex();
+        ESP_LOGE(TAG, "Failed to allocate %zu bytes for animation", total_bytes);
+        return ESP_ERR_NO_MEM;
+    }
+    animation_data.resize(total_bytes, 0);
+    
+    animation_frame_count = total_frames;
+    animation_current_frame = 0;
+    animation_upload_offset = 0;
+    animation_uploading = true;
+    animation_led_count = RGB_LED_COUNT;
+    
+    giveMutex();
+    
+    ESP_LOGI(TAG, "Animation buffer allocated: %zu bytes for %u frames",
+             animation_data.size(), total_frames);
+    
+    // Update read-only parameters
+    if (animFrameCount) animFrameCount->setValue(0, 0, total_frames);
+    if (animMemoryUsed) animMemoryUsed->setValue(0, 0, (int)total_bytes);
+    
+    return ESP_OK;
 }
 
-void RgbLedComponent::hsvToRgb(uint16_t h, uint8_t s, uint8_t v, uint8_t* r, uint8_t* g, uint8_t* b) {
-    // h: 0-359, s: 0-255, v: 0-255
-    if (s == 0) {
-        *r = *g = *b = v;
+esp_err_t RgbLedComponent::animationChunk(uint16_t chunk_index, const uint8_t* data, size_t len) {
+    if (!animation_uploading) {
+        ESP_LOGE(TAG, "Animation chunk received but no upload in progress");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    size_t expected_offset = chunk_index * RGB_LED_CHUNK_SIZE;
+    
+    if (expected_offset != animation_upload_offset) {
+        ESP_LOGW(TAG, "Chunk out of order: expected offset %zu, got chunk %u (offset %zu)",
+                 animation_upload_offset, chunk_index, expected_offset);
+        // Allow it anyway - might be a retry
+    }
+    
+    if (!takeMutex()) {
+        return ESP_ERR_TIMEOUT;
+    }
+    
+    // Bounds check
+    if (animation_upload_offset + len > animation_data.size()) {
+        giveMutex();
+        ESP_LOGE(TAG, "Chunk would overflow buffer: offset %zu + len %zu > size %zu",
+                 animation_upload_offset, len, animation_data.size());
+        return ESP_ERR_INVALID_SIZE;
+    }
+    
+    // Copy data
+    memcpy(animation_data.data() + animation_upload_offset, data, len);
+    animation_upload_offset += len;
+    
+    giveMutex();
+    
+    ESP_LOGD(TAG, "Animation chunk %u: %zu bytes, total uploaded: %zu/%zu",
+             chunk_index, len, animation_upload_offset, animation_data.size());
+    
+    return ESP_OK;
+}
+
+esp_err_t RgbLedComponent::animationCommit() {
+    if (!animation_uploading) {
+        ESP_LOGE(TAG, "Animation commit but no upload in progress");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    if (animation_upload_offset != animation_data.size()) {
+        ESP_LOGW(TAG, "Animation incomplete: received %zu of %zu bytes",
+                 animation_upload_offset, animation_data.size());
+        // Allow it - partial animations might still work
+    }
+    
+    if (!takeMutex()) {
+        return ESP_ERR_TIMEOUT;
+    }
+    
+    animation_uploading = false;
+    animation_current_frame = 0;
+    animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+
+    // If already playing, kick the task to restart from frame 0 with the new data.
+    // Without this, the playing onChange never re-fires (value didn't change),
+    // and the old animation keeps running.
+    bool was_playing = playing && playing->getValue(0, 0);
+
+    giveMutex();
+
+    // Reset the total_frames trigger back to 0 so the next upload always fires
+    // the onChange callback even when uploading the same frame count as before.
+    // (onChange only fires on value *change*, so if count is the same, animationBegin
+    // would never be called and the commit would fail with "no upload in progress".)
+    if (animTotalFrames) animTotalFrames->setValue(0, 0, 0);
+
+    ESP_LOGI(TAG, "Animation committed: %u frames%s",
+             animation_frame_count, was_playing ? " (restarting playback)" : "");
+
+    if (was_playing && led_task_handle) {
+        xTaskNotifyGive(led_task_handle);
+    }
+
+    return ESP_OK;
+}
+
+void RgbLedComponent::animationClear() {
+    if (!takeMutex()) {
         return;
     }
     
-    uint8_t region = h / 60;
-    uint8_t remainder = (h - (region * 60)) * 255 / 60;
-    
-    uint8_t p = (v * (255 - s)) >> 8;
-    uint8_t q = (v * (255 - ((s * remainder) >> 8))) >> 8;
-    uint8_t t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
-    
-    switch (region) {
-        case 0:  *r = v; *g = t; *b = p; break;
-        case 1:  *r = q; *g = v; *b = p; break;
-        case 2:  *r = p; *g = v; *b = t; break;
-        case 3:  *r = p; *g = q; *b = v; break;
-        case 4:  *r = t; *g = p; *b = v; break;
-        default: *r = v; *g = p; *b = q; break;
-    }
-}
-
-void RgbLedComponent::applyStaticEffect() {
-    // Copy colors from parameter to buffer
-    if (!ledColors) return;
-    
-    if (!takeMutex()) return;
-    
-    for (uint16_t i = 0; i < current_led_count; i++) {
-        size_t offset = i * 3;
-        color_buffer[offset + 0] = (uint8_t)ledColors->getValue(i, 0);
-        color_buffer[offset + 1] = (uint8_t)ledColors->getValue(i, 1);
-        color_buffer[offset + 2] = (uint8_t)ledColors->getValue(i, 2);
-    }
+    animation_uploading = false;
+    animation_frame_count = 0;
+    animation_current_frame = 0;
+    animation_led_count = 0;
+    animation_data.clear();
+    animation_data.shrink_to_fit();  // Actually free memory
     
     giveMutex();
+    
+    ESP_LOGI(TAG, "Animation cleared");
+    
+    // Update parameters
+    if (animFrameCount) animFrameCount->setValue(0, 0, 0);
+    if (animMemoryUsed) animMemoryUsed->setValue(0, 0, 0);
+    
+    // Stop playback
+    if (playing) playing->setValue(0, 0, false);
 }
 
-void RgbLedComponent::applyRainbowEffect(uint32_t tick) {
-    int speed = effectSpeed ? effectSpeed->getValue(0, 0) : 50;
-    uint16_t hue_offset = (tick * speed / 10) % 360;
+void RgbLedComponent::playFrame() {
+    if (animation_frame_count == 0 || animation_data.empty()) {
+        return;  // No animation loaded
+    }
     
-    if (!takeMutex()) return;
+    size_t frame_size = getAnimationFrameSize();
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
     
-    for (uint16_t i = 0; i < current_led_count; i++) {
-        uint16_t hue = (hue_offset + (i * 360 / current_led_count)) % 360;
-        uint8_t r, g, b;
-        hsvToRgb(hue, 255, 255, &r, &g, &b);
+    // Get current frame data pointer
+    size_t frame_offset = animation_current_frame * frame_size;
+    if (frame_offset + frame_size > animation_data.size()) {
+        ESP_LOGE(TAG, "Frame %u out of bounds", animation_current_frame);
+        return;
+    }
+    
+    const uint8_t* frame_data = animation_data.data() + frame_offset;
+    
+    // Duration is last 2 bytes of frame (little-endian)
+    uint16_t duration_ms = frame_data[frame_size - 2] | (frame_data[frame_size - 1] << 8);
+    
+    // Check if frame expired
+    uint32_t elapsed = now_ms - animation_frame_start_ms;
+    if (elapsed >= duration_ms) {
+        // Advance to next frame
+        animation_current_frame++;
         
-        size_t offset = i * 3;
-        color_buffer[offset + 0] = r;
-        color_buffer[offset + 1] = g;
-        color_buffer[offset + 2] = b;
-    }
-    
-    giveMutex();
-}
-
-void RgbLedComponent::applyBreathingEffect(uint32_t tick) {
-    int speed = effectSpeed ? effectSpeed->getValue(0, 0) : 50;
-    
-    // Sine wave for smooth breathing (0-255)
-    float phase = (tick * speed / 1000.0f);
-    uint8_t breath_brightness = (uint8_t)((sinf(phase) + 1.0f) * 127.5f);
-    
-    // Get base color from first LED
-    uint8_t base_r = ledColors ? (uint8_t)ledColors->getValue(0, 0) : 255;
-    uint8_t base_g = ledColors ? (uint8_t)ledColors->getValue(0, 1) : 255;
-    uint8_t base_b = ledColors ? (uint8_t)ledColors->getValue(0, 2) : 255;
-    
-    // If all zeros, use white
-    if (base_r == 0 && base_g == 0 && base_b == 0) {
-        base_r = base_g = base_b = 255;
-    }
-    
-    if (!takeMutex()) return;
-    
-    for (uint16_t i = 0; i < current_led_count; i++) {
-        size_t offset = i * 3;
-        color_buffer[offset + 0] = (base_r * breath_brightness) / 255;
-        color_buffer[offset + 1] = (base_g * breath_brightness) / 255;
-        color_buffer[offset + 2] = (base_b * breath_brightness) / 255;
-    }
-    
-    giveMutex();
-}
-
-void RgbLedComponent::applyChaseEffect(uint32_t tick) {
-    int speed = effectSpeed ? effectSpeed->getValue(0, 0) : 50;
-    uint16_t chase_pos = (tick * speed / 50) % current_led_count;
-    
-    // Get chase color from first LED
-    uint8_t chase_r = ledColors ? (uint8_t)ledColors->getValue(0, 0) : 255;
-    uint8_t chase_g = ledColors ? (uint8_t)ledColors->getValue(0, 1) : 255;
-    uint8_t chase_b = ledColors ? (uint8_t)ledColors->getValue(0, 2) : 255;
-    
-    // If all zeros, use white
-    if (chase_r == 0 && chase_g == 0 && chase_b == 0) {
-        chase_r = chase_g = chase_b = 255;
-    }
-    
-    if (!takeMutex()) return;
-    
-    // Clear buffer first
-    std::fill(color_buffer.begin(), color_buffer.end(), 0);
-    
-    // Light up chase position with tail
-    for (int tail = 0; tail < 5 && tail < current_led_count; tail++) {
-        int pos = (chase_pos - tail + current_led_count) % current_led_count;
-        uint8_t fade = 255 - (tail * 50);  // Fade tail
+        if (animation_current_frame >= animation_frame_count) {
+            // Check loop parameter
+            bool should_loop = loop ? loop->getValue(0, 0) : true;
+            if (should_loop) {
+                animation_current_frame = 0;
+            } else {
+                // Animation complete, stop playback
+                if (playing) {
+                    playing->setValue(0, 0, false);
+                }
+                return;
+            }
+        }
         
-        size_t offset = pos * 3;
-        color_buffer[offset + 0] = (chase_r * fade) / 255;
-        color_buffer[offset + 1] = (chase_g * fade) / 255;
-        color_buffer[offset + 2] = (chase_b * fade) / 255;
+        animation_frame_start_ms = now_ms;
+        
+        // Recalculate frame pointer
+        frame_offset = animation_current_frame * frame_size;
+        frame_data = animation_data.data() + frame_offset;
     }
     
-    giveMutex();
-}
-
-void RgbLedComponent::applySolidEffect() {
-    // All LEDs same color as first LED
-    uint8_t r = ledColors ? (uint8_t)ledColors->getValue(0, 0) : 0;
-    uint8_t g = ledColors ? (uint8_t)ledColors->getValue(0, 1) : 0;
-    uint8_t b = ledColors ? (uint8_t)ledColors->getValue(0, 2) : 0;
-    
+    // Copy frame colors to buffer (excluding duration bytes)
     if (!takeMutex()) return;
     
-    for (uint16_t i = 0; i < current_led_count; i++) {
-        size_t offset = i * 3;
-        color_buffer[offset + 0] = r;
-        color_buffer[offset + 1] = g;
-        color_buffer[offset + 2] = b;
-    }
+    // Use the LED count the animation was built for, not the live count.
+    // If the animation has fewer LEDs than the strip, zero the remainder
+    // so stale data from a previous animation doesn't leak through.
+    size_t anim_color_bytes = animation_led_count * 3;
+    size_t buf_color_bytes  = RGB_LED_COUNT * 3;
     
-    giveMutex();
-}
-
-void RgbLedComponent::applyTestRgbEffect(uint32_t tick) {
-    // White brightness ramp test: 1% -> 10% -> 50% -> 100%
-    // Each state lasts ~2 seconds (100 ticks at 20ms per tick)
-    const uint32_t ticks_per_state = 100;  // 2 seconds per state
-    uint32_t state = (tick / ticks_per_state) % 4;
-    
-    // Brightness levels to test (as percentages)
-    const uint8_t brightness_levels[] = {1, 10, 50, 100};
-    uint8_t brightness_pct = brightness_levels[state];
-    
-    // Calculate white value based on brightness percentage
-    uint8_t white_val = (255 * brightness_pct) / 100;
-    
-    // Log state changes
-    static uint32_t last_state = 999;
-    if (state != last_state) {
-        ESP_LOGI(TAG, "TEST WHITE: %d%% brightness (R=%d G=%d B=%d)", 
-                 brightness_pct, white_val, white_val, white_val);
-        last_state = state;
-    }
-    
-    if (!takeMutex()) return;
-    
-    // Set all LEDs to white at current brightness
-    for (uint16_t i = 0; i < current_led_count; i++) {
-        size_t offset = i * 3;
-        color_buffer[offset + 0] = white_val;
-        color_buffer[offset + 1] = white_val;
-        color_buffer[offset + 2] = white_val;
+    if (anim_color_bytes <= buf_color_bytes) {
+        memcpy(color_buffer.data(), frame_data, anim_color_bytes);
+        // Zero LEDs beyond the animation's range
+        if (anim_color_bytes < buf_color_bytes) {
+            memset(color_buffer.data() + anim_color_bytes, 0, buf_color_bytes - anim_color_bytes);
+        }
+    } else {
+        // Animation has more LEDs than the strip — truncate
+        memcpy(color_buffer.data(), frame_data, buf_color_bytes);
     }
     
     giveMutex();
@@ -619,75 +629,49 @@ bool RgbLedComponent::takeMutexBlocking() {
 }
 
 void RgbLedComponent::ledTask() {
-    ESP_LOGI(TAG, "RGB LED task started");
+    ESP_LOGI(TAG, "RGB LED task running on core %d", xPortGetCoreID());
+    
+    // Initialize LED strip HERE so the RMT peripheral's ISR is registered
+    // on this core (core 1), safely away from WiFi ISRs on core 0.
+    esp_err_t ret = initLedStrip(RGB_LED_DEFAULT_PIN, RGB_LED_COUNT);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize LED strip: %s", esp_err_to_name(ret));
+        task_running.store(false);
+        vTaskDelete(nullptr);
+        return;
+    }
+    
+    // Start with LEDs off
+    ledsOff();
     
     task_running.store(true);
-    uint32_t tick = 0;
-    const uint32_t update_interval_ms = 20;  // 50 FPS for smooth animations
+    const uint32_t update_interval_ms = 1;  // ~1000 FPS max — core 1 is dedicated to this
+    bool was_playing = false;
     
     while (!stop_requested.load()) {
-        // Check power state
-        bool power = powerOn ? powerOn->getValue(0, 0) : true;
+        // Check playback state
+        bool is_playing = playing ? playing->getValue(0, 0) : false;
         
-        if (!power) {
-            // Power off - clear all LEDs (use blocking mutex since we own the task)
-            if (takeMutexBlocking()) {
-                std::fill(color_buffer.begin(), color_buffer.end(), 0);
-                if (led_strip) {
-                    led_strip_clear(led_strip);
-                    led_strip_refresh(led_strip);
-                }
-                giveMutex();
+        if (!is_playing) {
+            // Not playing - turn LEDs off (only once when transitioning to off)
+            if (was_playing) {
+                ledsOff();
+                was_playing = false;
             }
             vTaskDelay(pdMS_TO_TICKS(100));  // Slow poll when off
             continue;
         }
         
-        // Get current effect
-        RgbLedEffect current_effect = effect ? (RgbLedEffect)effect->getValue(0, 0) : RgbLedEffect::STATIC;
+        // Playing - render current frame
+        was_playing = true;
+        playFrame();
+        showBlocking();
         
-        // Track whether effect was applied successfully
-        bool effect_applied = true;
-        
-        // Apply effect (each function handles its own mutex locking)
-        switch (current_effect) {
-            case RgbLedEffect::STATIC:
-                if (refresh_pending.load()) {
-                    applyStaticEffect();
-                    refresh_pending.store(false);
-                }
-                break;
-            case RgbLedEffect::RAINBOW:
-                applyRainbowEffect(tick);
-                break;
-            case RgbLedEffect::BREATHING:
-                applyBreathingEffect(tick);
-                break;
-            case RgbLedEffect::CHASE:
-                applyChaseEffect(tick);
-                break;
-            case RgbLedEffect::SOLID:
-                if (refresh_pending.load()) {
-                    applySolidEffect();
-                    refresh_pending.store(false);
-                }
-                break;
-            case RgbLedEffect::TEST_RGB:
-                applyTestRgbEffect(tick);
-                break;
-        }
-        
-        // Transmit to LEDs using led_strip_refresh() (only if effect applied)
-        if (effect_applied) {
-            showBlocking();  // Use blocking variant in task context
-        }
-        
-        tick++;
         vTaskDelay(pdMS_TO_TICKS(update_interval_ms));
     }
     
     // Clean exit
     ESP_LOGI(TAG, "RGB LED task exiting");
     task_running.store(false);
-    vTaskDelete(nullptr);  // Delete self
+    vTaskDelete(nullptr);
 }

@@ -11,6 +11,7 @@
     <script src="{% static 'js/debug.js' %}"></script>
     <script src="{% static 'js/config-builder.js' %}"></script>
     <script src="{% static 'js/component.js' %}"></script>
+    <script src="{% static 'js/rgb-led.js' %}"></script>
 </head>
 <body>
     <div class="container">
@@ -56,6 +57,16 @@
                 </button>
             </div>
             
+            <!-- Special controls for RgbLed component -->
+            <div id="rgb-led-controls" class="special-controls" style="display:none;">
+                <h3>💡 RGB LED Animation Builder</h3>
+                <p class="help-text">
+                    Build animations and upload them to the LED strip.
+                    LEDs: <strong id="rgb-led-count-display">…</strong>
+                </p>
+                <div id="rgb-led-builder-container"></div>
+            </div>
+
             <!-- Special controls for NetworkActions component -->
             <div id="network-actions-controls" class="special-controls" style="display:none;">
                 <h3>📡 Network Actions</h3>
@@ -130,6 +141,10 @@
             document.getElementById('network-actions-controls').style.display = 'block';
             // Load network actions after WebSocket connects
             setTimeout(() => loadNetworkActions(), 1000);
+        } else if (componentName === 'RgbLed') {
+            document.getElementById('rgb-led-controls').style.display = 'block';
+            // Init animation builder once WebSocket is ready
+            setTimeout(() => initRgbLedBuilder(esp32ws, componentName), 1000);
         }
         
         // Global functions for modal editors

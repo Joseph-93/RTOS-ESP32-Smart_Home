@@ -3,6 +3,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
+#include "mdns.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include <string.h>
@@ -17,6 +18,33 @@ static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
 static wifi_status_callback_t s_status_callback = NULL;
 static void* s_callback_user_data = NULL;
+static const char* s_mdns_hostname = "esp32";
+
+static void init_mdns(void) {
+    esp_err_t err = mdns_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "╔══════════════════════════════════════╗");
+        ESP_LOGE(TAG, "║  mDNS INIT FAILED: %-18s ║", esp_err_to_name(err));
+        ESP_LOGE(TAG, "╚══════════════════════════════════════╝");
+        return;
+    }
+
+    mdns_hostname_set(s_mdns_hostname);
+    mdns_instance_name_set(s_mdns_hostname);
+
+    // Advertise WebSocket service on port 80
+    esp_err_t svc_err = mdns_service_add(NULL, "_ws", "_tcp", 80, NULL, 0);
+
+    if (svc_err != ESP_OK) {
+        ESP_LOGE(TAG, "mDNS service_add failed: %s", esp_err_to_name(svc_err));
+    } else {
+        ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
+        ESP_LOGI(TAG, "║         mDNS BROADCASTING  ✓         ║");
+        ESP_LOGI(TAG, "║  hostname : %s.local           ║", s_mdns_hostname);
+        ESP_LOGI(TAG, "║  service  : _ws._tcp port 80         ║");
+        ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
+    }
+}
 
 void wifi_set_status_callback(wifi_status_callback_t callback, void* user_data) {
     s_status_callback = callback;
@@ -55,6 +83,9 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        
+        // Start mDNS for device discovery
+        init_mdns();
         
         // Notify callback of connection
         if (s_status_callback) {

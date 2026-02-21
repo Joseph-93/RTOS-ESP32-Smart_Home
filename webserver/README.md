@@ -1,4 +1,4 @@
-# ESP32 Smart Home Web Server
+# ESP32 Smart Home Web Dashboard
 
 A Django-based web interface for managing ESP32 RTOS smart home devices.
 
@@ -6,22 +6,33 @@ A Django-based web interface for managing ESP32 RTOS smart home devices.
 
 - 🎨 **Beautiful Dark Theme UI** - Modern, responsive interface
 - 🔌 **Multi-Device Support** - Manage multiple ESP32 devices from one dashboard
-- 📊 **Real-time Parameter Control** - View and modify all component parameters
-- ⚡ **Lightweight Protocol** - Efficient JSON-over-TCP communication
+- 📊 **Real-time Parameter Control** - View and modify all component parameters via WebSocket
+- ⚡ **Live Updates** - Subscribe to parameters for push notifications
 - 🎯 **Action Invocation** - Execute component actions remotely
 
 ## Architecture
 
 ```
-┌─────────────────┐         TCP/JSON          ┌──────────────┐
-│  Django Server  │ ◄────────────────────────► │   ESP32      │
-│  (This folder)  │      Port 8888             │   Device     │
-│                 │                            │              │
-│  - Web UI       │                            │  - TCP Server│
-│  - JavaScript   │                            │  - Components│
-│  - API Endpoints│                            │  - Parameters│
-└─────────────────┘                            └──────────────┘
+┌─────────────────┐                            ┌──────────────┐
+│  Django Server  │                            │   ESP32      │
+│  (Port 8000)    │                            │   Device     │
+│                 │                            │  (Port 80)   │
+│  - HTML/CSS/JS  │                            │              │
+│  - Device list  │                            │  - WebSocket │
+└────────┬────────┘                            │    /ws       │
+         │                                     │  - Components│
+         │ serves static files                 │  - Parameters│
+         ▼                                     └──────▲───────┘
+┌─────────────────┐                                   │
+│     Browser     │ ─────── WebSocket ────────────────┘
+│                 │      (direct to ESP32)
+│  - device.js    │
+│  - websocket.js │
+└─────────────────┘
 ```
+
+**Key Point:** The browser connects **directly** to the ESP32 via WebSocket.
+Django just serves the HTML/JS files and stores the device list.
 
 ## Quick Start
 
@@ -34,20 +45,7 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-### 2. Configure ESP32 Devices
-
-Edit `dashboard/apps.py`:
-
-```python
-def ready(self):
-    from .esp32_client import esp32_manager
-    
-    # Add your ESP32 devices (IP will be shown on LCD)
-    esp32_manager.add_device('esp32-main', '192.168.1.100', 8888)
-    # Add more devices as needed
-```
-
-### 3. Run Server
+### 2. Run Server
 
 ```powershell
 python manage.py migrate
@@ -56,89 +54,96 @@ python manage.py runserver 0.0.0.0:8000
 
 Visit: `http://localhost:8000`
 
-## ESP32 Protocol
+### 3. Add ESP32 Devices
 
-The ESP32 communicates via JSON over TCP (port 8888). Each command is a JSON object followed by a newline.
+Use the web UI to add devices by entering their IP address.
+The browser will connect directly to the ESP32 WebSocket.
 
-### Commands
+## ESP32 WebSocket Protocol
+
+The browser communicates directly with ESP32 via WebSocket at `ws://<esp32-ip>/ws`.
+
+### Commands (sent from browser)
 
 **Get Components:**
 ```json
-{"cmd": "get_components"}
-→ {"components": ["DoorSensor", "MotionSensor", "LightSensor", ...]}
+{"type": "get_components", "id": 1}
+→ {"id": 1, "components": [{"name": "LightSensor", "id": 0}, ...]}
 ```
 
-**Get Parameter Info:**
+**Get Component Parameters:**
 ```json
-{"cmd": "get_param_info", "comp": "LightSensor"}
-→ {
-    "int_params": [{"name": "light_level", "rows": 1, "cols": 1}],
-    "float_params": [...],
-    "bool_params": [...],
-    "string_params": [...]
-}
+{"type": "get_component_params", "comp": "LightSensor", "id": 2}
+→ {"id": 2, "int_params": [...], "float_params": [...], ...}
 ```
 
 **Get Parameter Value:**
 ```json
-{"cmd": "get_param", "comp": "LightSensor", "type": "int", "idx": 0, "row": 0, "col": 0}
-→ {"value": 512}
+{"type": "get_param", "param_id": 5, "row": 0, "col": 0, "id": 3}
+→ {"id": 3, "value": 512}
 ```
 
 **Set Parameter Value:**
 ```json
-{"cmd": "set_param", "comp": "LightSensor", "type": "int", "idx": 0, "row": 0, "col": 0, "value": 5}
-→ {"success": true}
+{"type": "set_param", "param_id": 5, "row": 0, "col": 0, "value": 100, "id": 4}
+→ {"id": 4, "success": true}
+```
+
+**Subscribe to Updates:**
+```json
+{"type": "subscribe", "param_id": 5, "row": 0, "col": 0, "id": 5}
+→ {"id": 5, "success": true}
+// Later, push updates arrive:
+→ {"type": "update", "param_id": 5, "row": 0, "col": 0, "value": 523}
 ```
 
 ## Project Structure
 
 ```
 webserver/
-├── esp32_hub/          # Django project settings
+├── esp32_hub/              # Django project settings
 │   ├── settings.py
 │   ├── urls.py
 │   └── asgi.py
-├── dashboard/          # Main app
-│   ├── views.py        # HTTP request handlers
-│   ├── urls.py         # URL routing
-│   ├── esp32_client.py # ESP32 TCP communication
-│   ├── templates/      # HTML templates
-│   └── static/         # CSS/JS assets
+├── dashboard/              # Main app
+│   ├── views.py            # Page views (serves templates)
+│   ├── urls.py             # URL routing
+│   ├── consumers.py        # Django Channels WebSocket (for future use)
+│   └── templates/          # HTML templates
+│       └── dashboard/
+│           ├── index.html       # Device list
+│           ├── device.html      # Component browser
+│           └── component.html   # Parameter editor
 ├── static/
-│   ├── css/style.css   # Dark theme styling
-│   └── js/device.js    # Dynamic UI JavaScript
+│   ├── css/style.css       # Dark theme styling
+│   └── js/
+│       ├── websocket.js    # ESP32 WebSocket client
+│       ├── device.js       # Device/component UI
+│       └── component.js    # Parameter controls
 ├── manage.py
 └── requirements.txt
 ```
 
-## Why This Architecture?
+## Why Direct WebSocket?
 
-**Before:** ESP32 tried to generate full HTML pages
-- ❌ Limited memory (~7KB free heap)
-- ❌ Complex HTML generation
-- ❌ Buffer overflows
-- ❌ Out of memory errors
+**Django doesn't proxy to ESP32** - the browser talks directly:
 
-**Now:** ESP32 only handles data
-- ✅ Simple request/response protocol
-- ✅ Minimal memory usage (few KB per request)
-- ✅ Django handles all UI complexity
-- ✅ Beautiful, responsive interface
-- ✅ Can manage multiple ESP32 devices
+- ✅ **Lower latency** - No middleman
+- ✅ **Real-time subscriptions** - Push updates from ESP32
+- ✅ **Simpler server** - Django just serves static files
+- ✅ **Works offline** - Once loaded, only needs ESP32
 
-## Development
+## Related Projects
 
-The web server runs independently of the ESP32. You can:
-- Develop UI without flashing ESP32
-- Test with mock data
-- Connect to multiple devices
-- Add features without memory constraints
+- **firmware/** - ESP32 firmware with WebSocket server
+- **central_hub/** - Python automation hub (separate from web UI)
+  - Monitors all ESP32s
+  - Automation logic (Watcher, ActionManager)
+  - Also uses WebSocket to ESP32
 
-## Next Steps
+## Usage Tips
 
-1. Flash the updated ESP32 firmware with TCP server (instead of HTTP)
-2. Note the IP address shown on the LCD
-3. Add the device to `dashboard/apps.py`
-4. Start the Django server
-5. Access the beautiful web interface! 🎉
+1. **mDNS Discovery**: ESP32 devices advertise as `esp32-*.local`
+2. **Multiple Devices**: Add as many ESP32s as you want
+3. **Real-time**: Use subscribe to get live updates
+4. **Triggers**: Some components have trigger parameters (buttons/actions)

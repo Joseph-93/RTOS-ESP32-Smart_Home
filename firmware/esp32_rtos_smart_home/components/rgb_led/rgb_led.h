@@ -10,48 +10,32 @@
 #include <atomic>
 
 /**
- * RGB LED Component (WS2812/WS2812B Controller)
+ * RGB LED Component - Animation Playback Engine
  * 
- * Uses ESP-IDF led_strip component with RMT backend for deterministic timing.
- * This approach is hardware-driven (not bit-banging) and works reliably under
- * FreeRTOS with WiFi/BLE interrupts.
+ * This is a DUMB playback device. All creativity lives on the central hub.
+ * The ESP32 receives animation frames via chunked upload and plays them back.
  * 
- * WHY RMT BACKEND:
- * - Hardware peripheral generates precise WS2812 timing signals
- * - No CPU involvement during data transmission
- * - Immune to FreeRTOS task scheduling and interrupt latency
+ * States:
+ * - OFF (playing=false): All LEDs off
+ * - PLAY (playing=true): Playing uploaded animation frames
  * 
- * WHY GRB PIXEL FORMAT:
- * - WS2812/WS2812B LEDs expect Green-Red-Blue data order
- * - The led_strip component handles this automatically
+ * Animation upload protocol (chunked for bandwidth):
+ * 1. Set anim_total_frames to start upload (allocates memory)
+ * 2. Set anim_chunk_index, then anim_chunk_data (base64) for each chunk
+ * 3. Set loop=true/false for looping behavior
+ * 4. Set playing=true to start playback
  * 
- * WHY MUTEX:
- * - Multiple tasks may call setLedColor/refresh concurrently
- * - Protects led_strip handle and color_buffer from race conditions
- * 
- * Parameters exposed:
- * - led_count: Number of LEDs in the strip (configurable)
- * - brightness: Global brightness multiplier (0-100%)
- * - led_colors: RGB values for each LED (Nx3 matrix: rows=LEDs, cols=R,G,B)
- * - effect: Current effect mode (0=static, 1=rainbow, 2=breathing, 3=chase)
- * - effect_speed: Speed of animated effects (1-100)
- * - power_on: Master on/off switch
+ * Frame format: [R0,G0,B0, R1,G1,B1, ..., Rn,Gn,Bn, duration_ms_lo, duration_ms_hi]
+ * Frame size = (led_count * 3) + 2 bytes
  */
 
-// Default configuration
+// Hardware configuration
 #define RGB_LED_DEFAULT_PIN     GPIO_NUM_13  // Data pin for LED strip
-#define RGB_LED_DEFAULT_COUNT   30           // Default number of LEDs
-#define RGB_LED_MAX_COUNT       300          // Maximum supported LEDs
+#define RGB_LED_COUNT           30           // Number of LEDs on the strip
 
-// Effect modes
-enum class RgbLedEffect : uint8_t {
-    STATIC = 0,      // Static colors from led_colors parameter
-    RAINBOW = 1,     // Rainbow cycle
-    BREATHING = 2,   // Breathing/pulsing effect
-    CHASE = 3,       // Chase/running light effect
-    SOLID = 4,       // All LEDs same color (uses first LED's color)
-    TEST_RGB = 5     // RED-OFF-GREEN-OFF-BLUE-OFF cycle for circuit testing
-};
+// Animation memory limits
+#define RGB_LED_MAX_ANIMATION_MEMORY    (150 * 1024)  // 150KB max for animation frames
+#define RGB_LED_CHUNK_SIZE              1024          // Max bytes per upload chunk
 
 class RgbLedComponent : public Component {
 public:
@@ -60,31 +44,38 @@ public:
     
     void onInitialize() override;
     
-    // Thread-safe LED control API
-    // Set a single LED color (0-255 per channel)
-    void setLedColor(uint16_t led_index, uint8_t r, uint8_t g, uint8_t b);
+    // ========================================================================
+    // Animation API
+    // ========================================================================
     
-    // Set all LEDs to the same color
-    void setAllLeds(uint8_t r, uint8_t g, uint8_t b);
+    // Begin a new animation upload (clears existing, allocates memory)
+    // Returns: ESP_OK, ESP_ERR_NO_MEM if too many frames requested
+    esp_err_t animationBegin(uint16_t total_frames);
     
-    // Clear all LEDs (turn off)
-    void clearAll();
+    // Upload a chunk of animation data (base64 decoded bytes)
+    // chunk_index: which chunk (0, 1, 2, ...)
+    // data: raw frame data bytes
+    // len: number of bytes in this chunk
+    // Returns: ESP_OK, ESP_ERR_INVALID_STATE if animationBegin not called
+    esp_err_t animationChunk(uint16_t chunk_index, const uint8_t* data, size_t len);
     
-    // Force an immediate refresh of the LED strip
-    void refresh();
+    // Finalize animation upload (does not start playback - set playing=true for that)
+    esp_err_t animationCommit();
     
-    // Low-level API (thread-safe, returns esp_err_t)
-    esp_err_t setPixel(uint16_t led_index, uint8_t r, uint8_t g, uint8_t b);
-    esp_err_t show();
+    // Clear animation data and free memory
+    void animationClear();
+    
+    // Get animation status
+    uint16_t getAnimationFrameCount() const { return animation_frame_count; }
+    uint16_t getAnimationCurrentFrame() const { return animation_current_frame; }
+    size_t getAnimationMemoryUsed() const { return animation_data.size(); }
+    size_t getAnimationMemoryMax() const { return RGB_LED_MAX_ANIMATION_MEMORY; }
 
 private:
     // Parameters (exposed to component system)
-    IntParameter* ledCount;           // Number of LEDs
     IntParameter* brightness;         // Global brightness (0-100)
-    IntParameter* ledColors;          // RGB values matrix (led_count x 3)
-    IntParameter* effect;             // Current effect mode
-    IntParameter* effectSpeed;        // Effect animation speed
-    BoolParameter* powerOn;           // Master power switch
+    BoolParameter* playing;           // true=play animation, false=off
+    BoolParameter* loop;              // true=loop forever, false=play once
     
     // ESP-IDF led_strip handle (RMT backend)
     led_strip_handle_t led_strip;
@@ -94,16 +85,31 @@ private:
     
     // Internal color buffer (RGB format, 3 bytes per LED)
     std::vector<uint8_t> color_buffer;
-    uint16_t current_led_count;
     
     // Task handles and synchronization
     TaskHandle_t led_task_handle;
-    std::atomic_bool refresh_pending{false};   // Atomic: written by callbacks, read by task
     std::atomic_bool stop_requested{false};    // Atomic: signals task to exit cleanly
     std::atomic_bool task_running{false};      // Atomic: task sets false before exiting
     
-    // Bulk update guard to prevent callback re-entrancy churn
-    bool in_bulk_update;
+    // ========================================================================
+    // Animation Storage
+    // ========================================================================
+    std::vector<uint8_t> animation_data;
+    uint16_t animation_frame_count{0};       // Total frames in animation
+    uint16_t animation_current_frame{0};     // Current playback position
+    uint32_t animation_frame_start_ms{0};    // When current frame started
+    bool animation_uploading{false};         // True during chunked upload
+    size_t animation_upload_offset{0};       // Bytes received so far
+    uint16_t animation_led_count{0};         // LED count the animation was built for
+    
+    // Animation status parameters (read-only)
+    IntParameter* animFrameCount;            // Read-only: frame count
+    IntParameter* animMemoryUsed;            // Read-only: bytes used
+    IntParameter* animMemoryMax;             // Read-only: max bytes available
+    StringParameter* animUploadData;         // Write: base64 chunk data
+    IntParameter* animUploadChunkIndex;      // Write: chunk index
+    IntParameter* animTotalFrames;           // Write: start upload with frame count
+    BoolParameter* animCommit;               // Write: true to finalize upload
     
     // Initialize LED strip with RMT backend
     esp_err_t initLedStrip(gpio_num_t gpio, uint16_t led_count);
@@ -122,21 +128,19 @@ private:
     // Apply brightness to a color value
     uint8_t applyBrightness(uint8_t color);
     
-    // Effect functions
-    void applyStaticEffect();
-    void applyRainbowEffect(uint32_t tick);
-    void applyBreathingEffect(uint32_t tick);
-    void applyChaseEffect(uint32_t tick);
-    void applySolidEffect();
-    void applyTestRgbEffect(uint32_t tick);
+    // Play current animation frame, advance when duration expires
+    void playFrame();
     
-    // HSV to RGB conversion for effects
-    void hsvToRgb(uint16_t h, uint8_t s, uint8_t v, uint8_t* r, uint8_t* g, uint8_t* b);
+    // Turn all LEDs off
+    void ledsOff();
+    
+    // Frame size: 3 bytes per LED (RGB) + 2 bytes duration
+    size_t getFrameSize() const { return (RGB_LED_COUNT * 3) + 2; }
+    
+    // Frame size for playback (uses snapshot from upload time)
+    size_t getAnimationFrameSize() const { return (animation_led_count * 3) + 2; }
     
     // Task functions
     static void ledTaskWrapper(void* pvParameters);
     void ledTask();
-    
-    // Resize LED buffer when count changes
-    void resizeLedBuffer(uint16_t new_count);
 };

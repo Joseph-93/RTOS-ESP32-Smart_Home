@@ -22,12 +22,48 @@
                     {% csrf_token %}
                     <div class="form-row">
                         <input type="text" name="name" placeholder="Device Name (e.g., esp32-main)" required>
-                        <input type="text" name="host" placeholder="IP Address (from LCD display)" required>
+                        <input type="text" name="host" placeholder="IP Address" required>
                         <input type="number" name="port" value="80" placeholder="Port" required>
                         <button type="submit" class="btn btn-primary">Add Device</button>
                     </div>
                 </form>
+                <div style="margin-top: 0.75rem;">
+                    <button id="scan-btn" class="btn btn-secondary" onclick="scanDevices()">🔍 Scan for ESP32s</button>
+                    <span id="scan-status" style="margin-left: 1rem; color: #888;"></span>
+                </div>
+                <pre id="scan-log" style="display:none; margin-top:0.75rem; background:#111; color:#0f0; padding:0.75rem; border-radius:4px; font-size:0.75rem; max-height:300px; overflow-y:auto; white-space:pre-wrap;"></pre>
             </div>
+            <script>
+            function scanDevices() {
+                const btn = document.getElementById('scan-btn');
+                const status = document.getElementById('scan-status');
+                const logBox = document.getElementById('scan-log');
+                btn.disabled = true;
+                status.textContent = 'Scanning... (up to 4s)';
+                logBox.style.display = 'none';
+                logBox.textContent = '';
+                fetch('{% url "scan_devices" %}')
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.log && data.log.length) {
+                            logBox.textContent = data.log.join('\n');
+                            logBox.style.display = 'block';
+                        }
+                        if (data.error) {
+                            status.textContent = '❌ ' + data.error;
+                        } else if (data.found.length === 0) {
+                            status.textContent = '⚠️ No devices found';
+                        } else if (data.added.length > 0) {
+                            status.textContent = '✅ Added: ' + data.added.join(', ');
+                            setTimeout(() => location.reload(), 800);
+                        } else {
+                            status.textContent = '✅ Found ' + data.found.length + ' device(s) (already listed)';
+                        }
+                        btn.disabled = false;
+                    })
+                    .catch(e => { status.textContent = '❌ Scan failed: ' + e; btn.disabled = false; });
+            }
+            </script>
             
             <h2 style="margin-top: 2rem;">Connected Devices</h2>
             <div class="device-grid">
