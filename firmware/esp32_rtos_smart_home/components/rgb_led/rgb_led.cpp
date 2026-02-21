@@ -412,8 +412,12 @@ esp_err_t RgbLedComponent::animationBegin(uint16_t total_frames) {
         return ESP_ERR_TIMEOUT;
     }
     
-    // Clear existing animation
-    animation_data.clear();
+    // FREE existing animation memory BEFORE allocating new.
+    // std::vector::clear() keeps capacity — a subsequent reserve() for a
+    // larger size will briefly hold BOTH the old and new buffers, which can
+    // OOM when animations approach the memory limit.  swap-with-empty
+    // guarantees the old memory is released first.
+    { std::vector<uint8_t>().swap(animation_data); }
     
     // Pre-allocate memory - use reserve + resize pattern to detect allocation failure
     animation_data.reserve(total_bytes);

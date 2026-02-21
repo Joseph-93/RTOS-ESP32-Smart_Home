@@ -34,7 +34,10 @@
 #define RGB_LED_COUNT           30           // Number of LEDs on the strip
 
 // Animation memory limits
-#define RGB_LED_MAX_ANIMATION_MEMORY    (150 * 1024)  // 150KB max for animation frames
+// This is a dedicated lamp — animation playback is the primary workload.
+// The swap-before-allocate pattern in animationBegin() prevents double-allocation
+// OOM, so we can safely use most of the available heap for animation data.
+#define RGB_LED_MAX_ANIMATION_MEMORY    (150 * 1024)  // 150KB — ~1,630 frames at 30 LEDs
 #define RGB_LED_CHUNK_SIZE              1024          // Max bytes per upload chunk
 
 class RgbLedComponent : public Component {

@@ -12,13 +12,22 @@ static const char *TAG = "WiFi";
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
-#define MAX_RETRY          5
+#define MAX_RETRY          10            // Initial fast-retry attempts before first connect
+#define RECONNECT_INTERVAL_MS  5000      // Delay between reconnect attempts after initial failure
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
+static bool s_initial_connect_done = false;  // true after first successful connection
+static TimerHandle_t s_reconnect_timer = NULL;
 static wifi_status_callback_t s_status_callback = NULL;
 static void* s_callback_user_data = NULL;
 static const char* s_mdns_hostname = "esp32";
+
+// Timer callback: periodically retry WiFi connection
+static void reconnect_timer_callback(TimerHandle_t xTimer) {
+    ESP_LOGI(TAG, "Reconnect timer fired — attempting WiFi reconnect...");
+    esp_wifi_connect();
+}
 
 static void init_mdns(void) {
     esp_err_t err = mdns_init();
@@ -65,23 +74,52 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (s_retry_num < MAX_RETRY) {
-            esp_wifi_connect();
-            s_retry_num++;
-            ESP_LOGI(TAG, "Retry connecting to AP (attempt %d/%d)", s_retry_num, MAX_RETRY);
-        } else {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        }
-        ESP_LOGI(TAG, "Connection to AP failed");
-        
         // Notify callback of disconnection
         if (s_status_callback) {
             s_status_callback(false, s_callback_user_data);
-        };
+        }
+
+        // Stop reconnect timer if it was running (in case disconnect fires twice)
+        if (s_reconnect_timer) {
+            xTimerStop(s_reconnect_timer, 0);
+        }
+
+        if (!s_initial_connect_done) {
+            // During initial boot: fast retry up to MAX_RETRY, then signal failure
+            if (s_retry_num < MAX_RETRY) {
+                esp_wifi_connect();
+                s_retry_num++;
+                ESP_LOGI(TAG, "Retry connecting to AP (attempt %d/%d)", s_retry_num, MAX_RETRY);
+            } else {
+                ESP_LOGE(TAG, "Initial connection failed after %d attempts — starting periodic reconnect", MAX_RETRY);
+                xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+                // Fall through to start the periodic reconnect timer
+                if (s_reconnect_timer) {
+                    xTimerStart(s_reconnect_timer, 0);
+                }
+            }
+        } else {
+            // After initial connection: always attempt reconnect on a timer
+            ESP_LOGW(TAG, "WiFi disconnected — will retry every %d ms", RECONNECT_INTERVAL_MS);
+            s_retry_num = 0;
+            if (s_reconnect_timer) {
+                xTimerStart(s_reconnect_timer, 0);
+            } else {
+                // Fallback: immediate retry if timer somehow doesn't exist
+                esp_wifi_connect();
+            }
+        }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
+        s_initial_connect_done = true;
+
+        // Stop reconnect timer — we're connected
+        if (s_reconnect_timer) {
+            xTimerStop(s_reconnect_timer, 0);
+        }
+
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         
         // Start mDNS for device discovery
@@ -137,6 +175,19 @@ bool wifi_init_sta(const char* ssid, const char* password)
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+
+    // Create a repeating reconnect timer (not started yet)
+    s_reconnect_timer = xTimerCreate(
+        "wifi_reconnect",
+        pdMS_TO_TICKS(RECONNECT_INTERVAL_MS),
+        pdTRUE,    // Auto-reload: keeps firing until stopped
+        NULL,
+        reconnect_timer_callback
+    );
+    if (!s_reconnect_timer) {
+        ESP_LOGW(TAG, "Failed to create reconnect timer — will use immediate retries");
+    }
+
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "WiFi initialization finished. Connecting to '%s'...", ssid);

@@ -24,12 +24,14 @@ ComponentGraph::ComponentGraph() {
     
     // Create notification queues
     notification_queue_gui = xQueueCreate(10, sizeof(NotificationQueueItem));
-    notification_queue_uart = xQueueCreate(20, sizeof(NotificationQueueItem));  // Larger queue for UART (no consumer yet)
+    // NOTE: UART notification queue removed — no consumer exists and it
+    // wastes ~2.8KB of RAM.  Re-add when a UART logging task is implemented.
+    notification_queue_uart = nullptr;
     
-    if (!notification_queue_gui || !notification_queue_uart) {
-        ESP_LOGE(TAG, "Failed to create notification queues");
+    if (!notification_queue_gui) {
+        ESP_LOGE(TAG, "Failed to create GUI notification queue");
     } else {
-        ESP_LOGI(TAG, "Notification queues created (GUI: 10 items, UART: 20 items)");
+        ESP_LOGI(TAG, "Notification queue created (GUI: 10 items)");
     }
 }
 
@@ -282,8 +284,8 @@ bool ComponentGraph::hasComponent(const std::string& name) const {
 // ============================================================================
 
 void ComponentGraph::sendNotification(const char* message, bool is_error, int priority, uint32_t display_ms) {
-    if (!notification_queue_gui || !notification_queue_uart) {
-        ESP_LOGW(TAG, "Notification queues not initialized");
+    if (!notification_queue_gui) {
+        ESP_LOGW(TAG, "Notification queue not initialized");
         return;
     }
     
@@ -301,9 +303,9 @@ void ComponentGraph::sendNotification(const char* message, bool is_error, int pr
     // Send to GUI queue (blocking if full)
     xQueueSend(notification_queue_gui, &notif, 0);
     
-    // Send to UART queue (non-blocking, drop if full to prevent overflow since no consumer yet)
-    if (xQueueSend(notification_queue_uart, &notif, 0) != pdTRUE) {
-        // Queue full - silently drop (UART consumer doesn't exist yet)
+    // Send to UART queue if it exists (currently disabled to save RAM)
+    if (notification_queue_uart) {
+        xQueueSend(notification_queue_uart, &notif, 0);
     }
 }
 

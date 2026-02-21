@@ -79,6 +79,7 @@ private:
     // Broadcast task
     static void broadcastTaskWrapper(void* pvParameters);
     void broadcastTask();
+    void purgeStaleConnections();  // Remove subscriptions for dead sockets
     
     // Helper methods
     Component* get_component(const char* name);

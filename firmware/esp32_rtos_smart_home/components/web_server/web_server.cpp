@@ -294,10 +294,20 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
     
     ESP_LOGI("WebServer", "WebSocket TEXT frame received, len: %d", ws_pkt.len);
     
+    // Guard against oversized frames exhausting heap
+    // Animation chunks are ~1400 bytes base64; normal JSON commands are <512 bytes.
+    // 4KB is generous for any legitimate message.
+    static constexpr size_t MAX_WS_FRAME_LEN = 4096;
+    
+    if (ws_pkt.len > MAX_WS_FRAME_LEN) {
+        ESP_LOGE("WebServer", "WebSocket frame too large: %d bytes (max %zu)", ws_pkt.len, MAX_WS_FRAME_LEN);
+        return ESP_ERR_NO_MEM;
+    }
+    
     if (ws_pkt.len) {
         uint8_t* buf = (uint8_t*)calloc(1, ws_pkt.len + 1);
         if (!buf) {
-            ESP_LOGE("WebServer", "Failed to allocate WS buffer");
+            ESP_LOGE("WebServer", "Failed to allocate WS buffer (heap: %lu)", esp_get_free_heap_size());
             return ESP_ERR_NO_MEM;
         }
         
@@ -461,17 +471,19 @@ cJSON* WebServerComponent::handle_ws_message(cJSON* request, const char* msg_typ
 
 // Subscription management methods
 void WebServerComponent::subscribe_param(int socket_fd, const SubscriptionKey& key) {
-    if (xSemaphoreTake(subscriptions_mutex, portMAX_DELAY) == pdTRUE) {
+    if (xSemaphoreTake(subscriptions_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
         subscriptions[socket_fd].insert(key);
         int count = subscriptions[socket_fd].size();
         xSemaphoreGive(subscriptions_mutex);
         ESP_LOGI(TAG, "Socket %d subscribed to param %u[%d][%d]. Total subscriptions: %d",
                  socket_fd, key.param_id, key.row, key.col, count);
+    } else {
+        ESP_LOGW(TAG, "subscribe_param: mutex timeout for socket %d", socket_fd);
     }
 }
 
 void WebServerComponent::unsubscribe_param(int socket_fd, const SubscriptionKey& key) {
-    if (xSemaphoreTake(subscriptions_mutex, portMAX_DELAY) == pdTRUE) {
+    if (xSemaphoreTake(subscriptions_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
         auto it = subscriptions.find(socket_fd);
         if (it != subscriptions.end()) {
             it->second.erase(key);
@@ -480,11 +492,13 @@ void WebServerComponent::unsubscribe_param(int socket_fd, const SubscriptionKey&
             }
         }
         xSemaphoreGive(subscriptions_mutex);
+    } else {
+        ESP_LOGW(TAG, "unsubscribe_param: mutex timeout for socket %d", socket_fd);
     }
 }
 
 void WebServerComponent::clear_subscriptions(int socket_fd) {
-    if (xSemaphoreTake(subscriptions_mutex, portMAX_DELAY) == pdTRUE) {
+    if (xSemaphoreTake(subscriptions_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
         auto it = subscriptions.find(socket_fd);
         if (it != subscriptions.end()) {
             int count = it->second.size();
@@ -492,6 +506,8 @@ void WebServerComponent::clear_subscriptions(int socket_fd) {
             ESP_LOGI(TAG, "Cleared %d subscriptions for socket %d", count, socket_fd);
         }
         xSemaphoreGive(subscriptions_mutex);
+    } else {
+        ESP_LOGW(TAG, "clear_subscriptions: mutex timeout for socket %d", socket_fd);
     }
 }
 
@@ -564,62 +580,108 @@ void WebServerComponent::broadcastTaskWrapper(void* pvParameters) {
 void WebServerComponent::broadcastTask() {
     ESP_LOGI(TAG, "Broadcast task started");
     BroadcastQueueItem item;
+    TickType_t last_purge = xTaskGetTickCount();
+    const TickType_t purge_interval = pdMS_TO_TICKS(30000);  // Purge stale connections every 30s
     
     while (true) {
-        // Wait for parameter update
-        if (xQueueReceive(broadcast_queue, &item, portMAX_DELAY) == pdTRUE) {
-            if (!http_server) continue;
-            
-            SubscriptionKey key{item.param_id, item.row, item.col};
-            
-            // Parse value back from JSON string
-            cJSON* value = cJSON_Parse(item.value_json);
-            if (!value) {
-                ESP_LOGE(TAG, "Failed to parse queued value JSON");
-                continue;
-            }
-            
-            // Build push message - now uses param_id instead of component/type/idx
-            cJSON* push_msg = cJSON_CreateObject();
-            cJSON_AddStringToObject(push_msg, "type", "param_update");
-            cJSON_AddNumberToObject(push_msg, "param_id", item.param_id);
-            cJSON_AddNumberToObject(push_msg, "row", item.row);
-            cJSON_AddNumberToObject(push_msg, "col", item.col);
-            cJSON_AddItemToObject(push_msg, "value", value);  // Transfer ownership
-            
-            char* msg_str = cJSON_PrintUnformatted(push_msg);
-            if (msg_str) {
-                // Find all sockets subscribed to this parameter and send (with mutex protection)
-                std::vector<int> dead_sockets;  // Collect failed sockets for cleanup
-                
-                if (xSemaphoreTake(subscriptions_mutex, portMAX_DELAY) == pdTRUE) {
-                    for (const auto& [socket_fd, subscribed_params] : subscriptions) {
-                        if (subscribed_params.find(key) != subscribed_params.end()) {
-                            httpd_ws_frame_t ws_pkt;
-                            memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-                            ws_pkt.payload = (uint8_t*)msg_str;
-                            ws_pkt.len = strlen(msg_str);
-                            ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-                            
-                            esp_err_t ret = httpd_ws_send_frame_async(http_server, socket_fd, &ws_pkt);
-                            if (ret != ESP_OK) {
-                                ESP_LOGW(TAG, "Failed to send param update to socket %d: %d", socket_fd, ret);
-                                dead_sockets.push_back(socket_fd);
-                            }
-                        }
-                    }
-                    xSemaphoreGive(subscriptions_mutex);
-                }
-                
-                // Clean up dead sockets outside the iteration
-                for (int dead_fd : dead_sockets) {
-                    clear_subscriptions(dead_fd);
-                }
-                
-                free(msg_str);
-            }
-            
-            cJSON_Delete(push_msg);
+        // Use a timeout so we can periodically purge stale connections
+        BaseType_t received = xQueueReceive(broadcast_queue, &item, pdMS_TO_TICKS(5000));
+        
+        // Periodic stale connection cleanup
+        TickType_t now = xTaskGetTickCount();
+        if ((now - last_purge) >= purge_interval) {
+            purgeStaleConnections();
+            last_purge = now;
         }
+        
+        if (received != pdTRUE) continue;  // Timeout — loop back to check again
+        if (!http_server) continue;
+        
+        SubscriptionKey key{item.param_id, item.row, item.col};
+        
+        // Parse value back from JSON string
+        cJSON* value = cJSON_Parse(item.value_json);
+        if (!value) {
+            ESP_LOGE(TAG, "Failed to parse queued value JSON");
+            continue;
+        }
+        
+        // Build push message - now uses param_id instead of component/type/idx
+        cJSON* push_msg = cJSON_CreateObject();
+        cJSON_AddStringToObject(push_msg, "type", "param_update");
+        cJSON_AddNumberToObject(push_msg, "param_id", item.param_id);
+        cJSON_AddNumberToObject(push_msg, "row", item.row);
+        cJSON_AddNumberToObject(push_msg, "col", item.col);
+        cJSON_AddItemToObject(push_msg, "value", value);  // Transfer ownership
+        
+        char* msg_str = cJSON_PrintUnformatted(push_msg);
+        if (msg_str) {
+            // ── Collect target sockets while holding mutex (fast) ──
+            std::vector<int> target_sockets;
+            
+            if (xSemaphoreTake(subscriptions_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                for (const auto& [socket_fd, subscribed_params] : subscriptions) {
+                    if (subscribed_params.find(key) != subscribed_params.end()) {
+                        target_sockets.push_back(socket_fd);
+                    }
+                }
+                xSemaphoreGive(subscriptions_mutex);
+            } else {
+                ESP_LOGW(TAG, "Broadcast: mutex timeout — skipping update for param %u", item.param_id);
+            }
+            
+            // ── Send OUTSIDE the mutex — network I/O can block ──
+            std::vector<int> dead_sockets;
+            for (int socket_fd : target_sockets) {
+                httpd_ws_frame_t ws_pkt;
+                memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+                ws_pkt.payload = (uint8_t*)msg_str;
+                ws_pkt.len = strlen(msg_str);
+                ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+                
+                esp_err_t ret = httpd_ws_send_frame_async(http_server, socket_fd, &ws_pkt);
+                if (ret != ESP_OK) {
+                    ESP_LOGW(TAG, "Failed to send param update to socket %d: %d", socket_fd, ret);
+                    dead_sockets.push_back(socket_fd);
+                }
+            }
+            
+            // Clean up dead sockets
+            for (int dead_fd : dead_sockets) {
+                clear_subscriptions(dead_fd);
+            }
+            
+            free(msg_str);
+        }
+        
+        cJSON_Delete(push_msg);
+    }
+}
+
+// Purge stale WebSocket connections — removes subscriptions for sockets
+// that are no longer valid (client crashed, WiFi dropped, half-open TCP)
+void WebServerComponent::purgeStaleConnections() {
+    if (!http_server || !subscriptions_mutex) return;
+    
+    std::vector<int> stale_sockets;
+    
+    if (xSemaphoreTake(subscriptions_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        for (const auto& [socket_fd, _] : subscriptions) {
+            // httpd_ws_get_fd_info returns HTTPD_WS_CLIENT_WEBSOCKET for valid WS connections
+            httpd_ws_client_info_t info = httpd_ws_get_fd_info(http_server, socket_fd);
+            if (info != HTTPD_WS_CLIENT_WEBSOCKET) {
+                stale_sockets.push_back(socket_fd);
+            }
+        }
+        xSemaphoreGive(subscriptions_mutex);
+    }
+    
+    for (int fd : stale_sockets) {
+        ESP_LOGW(TAG, "Purging stale WebSocket connection: socket %d", fd);
+        clear_subscriptions(fd);
+    }
+    
+    if (!stale_sockets.empty()) {
+        ESP_LOGI(TAG, "Purged %zu stale connections", stale_sockets.size());
     }
 }
