@@ -249,11 +249,12 @@ class RgbLedAnimationBuilder {
         
         // Device preset state (read from ESP32)
         this.devicePresets = [];      // [{index, name, frameCount, dataSize, loop}]
-        this.activePreset = -1;
+        this.activePreset = -1;       // What's ACTUALLY playing on LEDs (-1 = nothing)
+        this.tier1Preset = -1;        // What's in tier 1 (override) - may not be playing if tier 0 has something
+        this.tier2Preset = -1;        // What's in tier 2 (background) - may not be playing if higher tier has something
         this.presetCount = 0;
         this.memoryUsed = 0;
         this.memoryMax = 150 * 1024;
-        this.isPlaying = false;       // Actual playback state from ESP32
         
         // Server-side preset metadata (recipe info for editing)
         this.presetMetadata = {};     // {presetName: {effect_type, effect_params, ...}}
@@ -261,13 +262,53 @@ class RgbLedAnimationBuilder {
         // Editing state
         this.editingPresetName = null;
         this.editingPresetIndex = null;  // null = new preset, number = editing existing
-        this.editingLoop = true;         // Loop setting for the preset being edited
+        this.editingLoop = -1;           // Loop count: -1=infinite, 1=once, N=play N times
         this.editingEffectType = null;   // Effect type being edited
         this.editingEffectParams = {};   // Effect parameters for editing
         this.editorOpen = false;         // Is the editor panel visible?
         
         this._render();
         this._subscribeToParams();
+        this._startPolling();  // Poll active_preset to catch when playback ends
+    }
+    
+    // Poll active_preset and priority tiers every 500ms to catch changes
+    _startPolling() {
+        this._pollInterval = setInterval(async () => {
+            if (!this.ws?.connected) return;
+            try {
+                let needsRender = false;
+                
+                // Check active_preset (what's ACTUALLY playing on LEDs)
+                const resp = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'active_preset', row: 0, col: 0 });
+                const newActive = resp?.value ?? -1;
+                if (newActive !== this.activePreset) {
+                    console.log('[RGB] Poll: active_preset changed', this.activePreset, '->', newActive);
+                    this.activePreset = newActive;
+                    needsRender = true;
+                }
+                
+                // Check tier 1 (override)
+                const t1Resp = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'preset_priority', row: 1, col: 0 });
+                const newT1 = t1Resp?.value ?? -1;
+                if (newT1 !== this.tier1Preset) {
+                    console.log('[RGB] Poll: tier1 changed', this.tier1Preset, '->', newT1);
+                    this.tier1Preset = newT1;
+                    needsRender = true;
+                }
+                
+                // Check tier 2 (background)
+                const t2Resp = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'preset_priority', row: 2, col: 0 });
+                const newT2 = t2Resp?.value ?? -1;
+                if (newT2 !== this.tier2Preset) {
+                    console.log('[RGB] Poll: tier2 changed', this.tier2Preset, '->', newT2);
+                    this.tier2Preset = newT2;
+                    needsRender = true;
+                }
+                
+                if (needsRender) this._renderPresetList();
+            } catch (e) { /* ignore */ }
+        }, 500);
     }
     
     _extractDeviceName() {
@@ -350,7 +391,7 @@ class RgbLedAnimationBuilder {
     // Subscribe to preset-related read-only params to keep UI in sync
     async _subscribeToParams() {
         if (!this.ws?.connected) return;
-        const params = ['preset_count', 'active_preset', 'anim_frame_count', 'anim_memory_used', 'anim_memory_max', 'playing'];
+        const params = ['preset_count', 'active_preset', 'anim_frame_count', 'anim_memory_used', 'anim_memory_max'];
         for (const p of params) {
             try {
                 await this.ws.send({ type: 'subscribe', comp: this.compName, param: p });
@@ -366,6 +407,7 @@ class RgbLedAnimationBuilder {
     _handlePushEvent(msg) {
         // Check if this is a param_update for our component
         if (msg.type === 'param_update' && msg.comp === this.compName) {
+            console.log('[RGB] Push update:', msg.param, '=', msg.value);
             this.onParamUpdate(msg.param, msg.value);
         }
     }
@@ -392,11 +434,17 @@ class RgbLedAnimationBuilder {
             
             this.presetCount = await getValue('preset_count') ?? 0;
             this.activePreset = await getValue('active_preset') ?? -1;
+            
+            // Get tier 1 (override) and tier 2 (background) from priority system
+            const tier1Response = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'preset_priority', row: 1, col: 0 });
+            this.tier1Preset = tier1Response?.value ?? -1;
+            const tier2Response = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'preset_priority', row: 2, col: 0 });
+            this.tier2Preset = tier2Response?.value ?? -1;
+            
             this.memoryUsed = await getValue('anim_memory_used') ?? 0;
             this.memoryMax = await getValue('anim_memory_max') ?? 150 * 1024;
-            this.isPlaying = await getValue('playing') ?? false;
             
-            console.log('[RGB] Device state:', { presetCount: this.presetCount, activePreset: this.activePreset, isPlaying: this.isPlaying, memoryUsed: this.memoryUsed, memoryMax: this.memoryMax });
+            console.log('[RGB] Device state:', { presetCount: this.presetCount, activePreset: this.activePreset, tier1: this.tier1Preset, tier2: this.tier2Preset, memoryUsed: this.memoryUsed, memoryMax: this.memoryMax });
             
             // Query each preset's metadata (name, frame count, loop)
             this.devicePresets = [];
@@ -408,7 +456,7 @@ class RgbLedAnimationBuilder {
                 const name = await getValue('query_preset_name') ?? `Preset ${i}`;
                 const frameCount = await getValue('query_preset_frame_count') ?? 0;
                 const dataSize = await getValue('query_preset_data_size') ?? 0;
-                const loop = await getValue('query_preset_loop') ?? true;  // Default true if param missing
+                const loop = await getValue('query_preset_loop') ?? -1;  // Default -1 (infinite) if param missing
                 this.devicePresets.push({ index: i, name, frameCount, dataSize, loop });
             }
             
@@ -427,9 +475,6 @@ class RgbLedAnimationBuilder {
             this._refreshDeviceState(); // Re-fetch full metadata
         } else if (param === 'active_preset') {
             this.activePreset = value;
-            this._renderPresetList();
-        } else if (param === 'playing') {
-            this.isPlaying = value;
             this._renderPresetList();
         } else if (param === 'anim_memory_used') {
             this.memoryUsed = value;
@@ -466,9 +511,8 @@ class RgbLedAnimationBuilder {
                 <div class="rgb-section">
                     <div class="rgb-editor-meta">
                         <label>Name: <input type="text" id="rgb-preset-name" placeholder="My Preset" class="rgb-name-input"></label>
-                        <label class="rgb-loop-label">
-                            <input type="checkbox" id="rgb-loop-chk" checked onchange="rgbBuilder.editingLoop = this.checked">
-                            Loop
+                        <label class="rgb-loop-label" title="-1 = infinite, 1 = play once, N = play N times">
+                            Loop: <input type="number" id="rgb-loop-count" value="-1" min="-1" max="1000" style="width:60px" onchange="rgbBuilder.editingLoop = parseInt(this.value)">
                         </label>
                     </div>
                 </div>
@@ -536,23 +580,35 @@ class RgbLedAnimationBuilder {
         }
         
         container.innerHTML = this.devicePresets.map((p, i) => {
-            const isActive = i === this.activePreset;
-            const isPlaying = isActive && this.isPlaying;
+            const isPlaying = i === this.activePreset;   // Actually showing on LEDs right now
+            const isInTier1 = i === this.tier1Preset;    // In tier 1 (override) - may or may not be playing
+            const isInTier2 = i === this.tier2Preset;    // In tier 2 (background) - may or may not be playing
             const isEditing = i === this.editingPresetIndex;
             const name = p.name || `Preset ${i}`;
             const frameInfo = p.frameCount ? `${p.frameCount}f` : '';
-            const loopIcon = p.loop ? '🔁' : '1️⃣';
+            const loopIcon = p.loop === -1 ? '🔁' : `${p.loop}×`;
+            
+            // Build tier indicator text
+            let tierIndicator = '';
+            if (isInTier1) tierIndicator = ' ⚡';      // In tier 1
+            if (isInTier2) tierIndicator = ' 🌙';      // In tier 2
+            
             return `
-            <div class="rgb-preset-row ${isActive ? 'active' : ''} ${isPlaying ? 'playing' : ''} ${isEditing ? 'editing' : ''}">
+            <div class="rgb-preset-row ${isPlaying ? 'active playing' : ''} ${isEditing ? 'editing' : ''}">
                 <div class="rgb-preset-main" onclick="rgbBuilder._editDevicePreset(${i})">
-                    <span class="rgb-preset-name">${name}</span>
-                    <span class="rgb-preset-meta">${frameInfo} ${loopIcon}</span>
+                    <span class="rgb-preset-name">${name}${isPlaying ? ' ▶' : ''}</span>
+                    <span class="rgb-preset-meta">${frameInfo} ${loopIcon}${tierIndicator}</span>
                 </div>
                 <div class="rgb-preset-controls">
-                    <button class="btn btn-sm ${isPlaying ? 'btn-primary' : 'btn-secondary'}" 
-                            onclick="event.stopPropagation(); rgbBuilder._playPreset(${i})"
-                            title="${isPlaying ? 'Stop' : 'Play'}">
-                        ${isPlaying ? '⏹️' : '▶️'}
+                    <button class="btn btn-sm ${isInTier2 ? 'btn-info' : 'btn-outline'}" 
+                            onclick="event.stopPropagation(); rgbBuilder._setTier(${i}, 2)"
+                            title="${isInTier2 ? 'Remove from tier 2' : 'Assign to tier 2 (background)'}">
+                        🌙
+                    </button>
+                    <button class="btn btn-sm ${isInTier1 ? 'btn-warning' : 'btn-outline'}" 
+                            onclick="event.stopPropagation(); rgbBuilder._setTier(${i}, 1)"
+                            title="${isInTier1 ? 'Remove from tier 1' : 'Assign to tier 1 (override)'}">
+                        ⚡
                     </button>
                     <button class="btn btn-sm btn-danger" 
                             onclick="event.stopPropagation(); rgbBuilder._deleteDevicePreset(${i})"
@@ -562,27 +618,26 @@ class RgbLedAnimationBuilder {
         }).join('');
     }
     
-    async _playPreset(idx) {
+    async _setTier(idx, tier) {
         if (!this.ws?.connected) { _rgbNotify('Not connected', 'error'); return; }
+        
+        const name = this.devicePresets[idx]?.name || `Preset ${idx}`;
+        const currentVal = tier === 1 ? this.tier1Preset : this.tier2Preset;
+        const tierIcon = tier === 1 ? '⚡' : '🌙';
+        
         try {
-            const isCurrentlyPlaying = idx === this.activePreset && this.isPlaying;
-            
-            if (isCurrentlyPlaying) {
-                // Stop playback
-                await this.ws.send({ type: 'set_param', comp: this.compName, param: 'playing', row: 0, col: 0, value: false });
-                this.isPlaying = false;
-                _rgbNotify('⏹️ Stopped', 'success');
+            if (idx === currentVal) {
+                // Already in this tier - remove it
+                await this.ws.send({ type: 'set_param', comp: this.compName, param: 'preset_priority', row: tier, col: 0, value: -1 });
+                if (tier === 1) this.tier1Preset = -1;
+                else this.tier2Preset = -1;
+                _rgbNotify(`${tierIcon} "${name}" removed from tier ${tier}`, 'success');
             } else {
-                // Select preset and start playback
-                if (idx !== this.activePreset) {
-                    await this.ws.send({ type: 'set_param', comp: this.compName, param: 'active_preset', row: 0, col: 0, value: idx });
-                    this.activePreset = idx;
-                    await sleep(50);
-                }
-                await this.ws.send({ type: 'set_param', comp: this.compName, param: 'playing', row: 0, col: 0, value: true });
-                this.isPlaying = true;
-                const name = this.devicePresets[idx]?.name || `Preset ${idx}`;
-                _rgbNotify(`▶️ Playing "${name}"`, 'success');
+                // Assign to this tier
+                await this.ws.send({ type: 'set_param', comp: this.compName, param: 'preset_priority', row: tier, col: 0, value: idx });
+                if (tier === 1) this.tier1Preset = idx;
+                else this.tier2Preset = idx;
+                _rgbNotify(`${tierIcon} "${name}" assigned to tier ${tier}`, 'success');
             }
             this._renderPresetList();
         } catch (e) {
@@ -624,7 +679,7 @@ class RgbLedAnimationBuilder {
         this.frames = [];
         this.editingPresetIndex = null;
         this.editingPresetName = null;
-        this.editingLoop = true;
+        this.editingLoop = -1;
         this.editingEffectType = null;
         this.editingEffectParams = {};
         this.editorOpen = true;
@@ -639,13 +694,16 @@ class RgbLedAnimationBuilder {
         const panel = document.getElementById('rgb-editor-panel');
         const titleEl = document.getElementById('rgb-editor-title');
         const nameInput = document.getElementById('rgb-preset-name');
-        const loopChk = document.getElementById('rgb-loop-chk');
+        const loopInput = document.getElementById('rgb-loop-count');
         const saveBtn = document.getElementById('rgb-save-btn');
         
         if (panel) panel.style.display = 'block';
         if (titleEl) titleEl.textContent = `🎨 ${title}`;
         if (nameInput) nameInput.value = name;
-        if (loopChk) loopChk.checked = loop;
+        // Convert legacy boolean to integer: true -> -1, false -> 0
+        const loopVal = (typeof loop === 'boolean') ? (loop ? -1 : 0) : (loop ?? -1);
+        if (loopInput) loopInput.value = loopVal;
+        this.editingLoop = loopVal;
         
         // Update save button text based on edit mode
         if (saveBtn) {
@@ -667,7 +725,7 @@ class RgbLedAnimationBuilder {
         this.frames = [];
         this.editingPresetIndex = null;
         this.editingPresetName = null;
-        this.editingLoop = true;
+        this.editingLoop = -1;
         this.editingEffectType = null;
         this.editingEffectParams = {};
         this.editorOpen = false;
@@ -694,7 +752,8 @@ class RgbLedAnimationBuilder {
         const name = preset.name || `Preset ${idx}`;
         const dataSize = preset.dataSize || 0;
         const frameCount = preset.frameCount || 0;
-        const loop = preset.loop !== false;  // Default to true
+        // Handle legacy boolean or new integer loop: true->-1, false->0, number->number
+        const loop = typeof preset.loop === 'boolean' ? (preset.loop ? -1 : 0) : (preset.loop ?? -1);
         
         // Generate unique download ID to detect stale downloads
         const downloadId = ++this._downloadId || (this._downloadId = 1);
@@ -1050,7 +1109,7 @@ class RgbLedAnimationBuilder {
         const fill     = document.getElementById('rgb-progress-fill');
         const label    = document.getElementById('rgb-progress-label');
         const nameInput = document.getElementById('rgb-preset-name');
-        const loopChk   = document.getElementById('rgb-loop-chk');
+        const loopInput = document.getElementById('rgb-loop-count');
         const isUpdate = this.editingPresetIndex !== null;
 
         if (btn) btn.disabled = true;
@@ -1069,14 +1128,18 @@ class RgbLedAnimationBuilder {
                 await sleep(100);
             }
             
-            // Get preset name and loop setting
+            // Get preset name and loop setting (integer: -1=infinite, 1=once, N=play N times)
             let presetName = nameInput?.value?.trim() || this.editingPresetName || '';
-            const loopValue = loopChk?.checked ?? this.editingLoop ?? true;
+            const loopValue = loopInput ? parseInt(loopInput.value) : (this.editingLoop ?? -1);
+            console.log(`[RGB] Save: nameInput=${nameInput}, value="${nameInput?.value}", trimmed="${nameInput?.value?.trim()}", presetName="${presetName}"`);
             
-            // Set preset name
+            // Set preset name - ALWAYS set it, even when updating
             if (presetName) {
+                console.log(`[RGB] Setting anim_preset_name to: "${presetName}"`);
                 await this.ws.send({ type: 'set_param', comp: this.compName, param: 'anim_preset_name', row: 0, col: 0, value: presetName });
                 await sleep(30);
+            } else {
+                console.warn('[RGB] No preset name to set!');
             }
             
             // Set loop setting (ignore errors if firmware doesn't support it yet)

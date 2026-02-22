@@ -7,6 +7,7 @@
 #include "led_strip.h"
 #include "driver/gpio.h"
 #include <vector>
+#include <map>
 #include <atomic>
 
 /**
@@ -54,7 +55,7 @@ struct AnimationPreset {
     std::vector<uint8_t> data;        // Raw frame bytes (all frames contiguous)
     uint16_t frame_count{0};          // Number of frames in this preset
     uint16_t led_count{0};            // LED count it was built for
-    bool loop{true};                  // Whether this preset should loop
+    int16_t loop{-1};                 // Loop count: -1=infinite, 1=play once, N=play N times
 
     size_t getFrameSize() const { return (led_count * 3) + 2; }
 };
@@ -92,12 +93,16 @@ public:
     int16_t getActivePresetIndex() const { return active_preset_index; }
     uint16_t getAnimationCurrentFrame() const { return animation_current_frame; }
     size_t getAnimationMemoryMax() const { return RGB_LED_MAX_ANIMATION_MEMORY; }
+    
+    // Priority system helpers
+    int16_t resolvePresetPriority();                 // Get highest priority preset to play
+    void clearFinishedPriorityTier(int16_t preset);  // Clear tier that finished playing
 
 private:
     // Parameters (exposed to component system)
     IntParameter* brightness;         // Global brightness (0-100)
     BoolParameter* playing;           // true=play animation, false=off
-    BoolParameter* loop;              // true=loop forever, false=play once
+    IntParameter* loop;               // Loop count: -1=infinite, 1=play once, N=play N times
     
     // ESP-IDF led_strip handle (RMT backend)
     led_strip_handle_t led_strip;
@@ -115,13 +120,17 @@ private:
     
     // ========================================================================
     // Preset Storage (shared memory pool)
+    // Presets are stored in a map with STABLE IDs - deleting preset 2 does NOT
+    // shift presets 3, 4, 5... to indices 2, 3, 4... The ID is permanent.
     // ========================================================================
-    std::vector<AnimationPreset> presets;             // All stored presets
-    int16_t active_preset_index{-1};                  // Which preset is playing (-1 = none)
+    std::map<int16_t, AnimationPreset> presets;       // Stable ID -> Preset mapping
+    int16_t next_preset_id{0};                        // Next ID to assign (never reused)
+    int16_t active_preset_index{-1};                  // Which preset ID is playing (-1 = none)
     
     // Playback state (for active preset)
     uint16_t animation_current_frame{0};              // Current frame in active preset
     uint32_t animation_frame_start_ms{0};             // When current frame started
+    int16_t animation_loops_remaining{-1};            // Loops left (-1=infinite)
     
     // Upload staging area (builds a new preset before committing to pool)
     std::vector<uint8_t> upload_staging_data;
@@ -137,7 +146,8 @@ private:
     IntParameter* presetCountParam;                   // Number of stored presets
     
     // Preset management parameters (writable)
-    IntParameter* activePresetParam;                  // Select which preset to play
+    IntParameter* activePresetParam;                  // Select which preset to play (read from priority system)
+    IntParameter* presetPriorityParam;                // 3-tier priority: [0]=top, [1]=mid, [2]=low (-1 = none)
     IntParameter* deletePresetParam;                  // Set to index to delete that preset
     
     // Animation upload parameters (writable triggers)
@@ -145,7 +155,7 @@ private:
     IntParameter* animUploadChunkIndex;               // Write: chunk index
     IntParameter* animTotalFrames;                    // Write: start upload with frame count
     StringParameter* animPresetName;                  // Write: name for the preset being uploaded
-    BoolParameter* animUploadLoop;                    // Write: loop setting for the preset being uploaded
+    IntParameter* animUploadLoop;                     // Write: loop count (-1=infinite, 1=once, N=N times)
     BoolParameter* animCommit;                        // Write: true to finalize upload
     
     // Preset query/download parameters
@@ -153,7 +163,7 @@ private:
     StringParameter* queryPresetName;                 // Read-only: name of queried preset
     IntParameter* queryPresetFrameCount;              // Read-only: frame count of queried preset
     IntParameter* queryPresetDataSize;                // Read-only: data size in bytes
-    BoolParameter* queryPresetLoop;                   // Read-only: loop setting of queried preset
+    IntParameter* queryPresetLoop;                    // Read-only: loop count of queried preset
     IntParameter* chunkSizeParam;                     // Read-only: chunk size for upload/download
     IntParameter* queryDownloadChunkIndex;            // Write: set to request a download chunk
     StringParameter* queryDownloadChunkData;          // Read-only: base64 chunk of preset data

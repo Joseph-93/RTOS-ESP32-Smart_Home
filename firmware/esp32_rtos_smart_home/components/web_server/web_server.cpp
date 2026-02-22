@@ -162,46 +162,86 @@ void WebServerComponent::setupParameterBroadcasting() {
             
             // Set up onChange callback based on parameter type
             // Note: We DO set up broadcasts for read-only params - external systems subscribe to them
-            // But we skip params that already have callbacks (to avoid overwriting)
+            // Chain callbacks: if param already has a callback, wrap it to also broadcast
+            // This ensures component logic AND WebSocket broadcasting both happen
             switch (param->getType()) {
                 case ParameterType::INT: {
                     auto* int_param = static_cast<IntParameter*>(param);
-                    if (int_param->hasCallback()) continue;
-                    int_param->setOnChange([this, param_id](size_t row, size_t col, int val) {
-                        cJSON* value = cJSON_CreateNumber(val);
-                        broadcastParameterUpdate(param_id, row, col, value);
-                        cJSON_Delete(value);
-                    });
+                    if (int_param->hasCallback()) {
+                        // Wrap existing callback to also broadcast
+                        auto existing_cb = int_param->getOnChange();
+                        int_param->setOnChange([this, param_id, existing_cb](size_t row, size_t col, int val) {
+                            // Call original callback first
+                            if (existing_cb) existing_cb(row, col, val);
+                            // Then broadcast
+                            cJSON* value = cJSON_CreateNumber(val);
+                            broadcastParameterUpdate(param_id, row, col, value);
+                            cJSON_Delete(value);
+                        });
+                    } else {
+                        int_param->setOnChange([this, param_id](size_t row, size_t col, int val) {
+                            cJSON* value = cJSON_CreateNumber(val);
+                            broadcastParameterUpdate(param_id, row, col, value);
+                            cJSON_Delete(value);
+                        });
+                    }
                     break;
                 }
                 case ParameterType::FLOAT: {
                     auto* float_param = static_cast<FloatParameter*>(param);
-                    if (float_param->hasCallback()) continue;
-                    float_param->setOnChange([this, param_id](size_t row, size_t col, float val) {
-                        cJSON* value = cJSON_CreateNumber(val);
-                        broadcastParameterUpdate(param_id, row, col, value);
-                        cJSON_Delete(value);
-                    });
+                    if (float_param->hasCallback()) {
+                        auto existing_cb = float_param->getOnChange();
+                        float_param->setOnChange([this, param_id, existing_cb](size_t row, size_t col, float val) {
+                            if (existing_cb) existing_cb(row, col, val);
+                            cJSON* value = cJSON_CreateNumber(val);
+                            broadcastParameterUpdate(param_id, row, col, value);
+                            cJSON_Delete(value);
+                        });
+                    } else {
+                        float_param->setOnChange([this, param_id](size_t row, size_t col, float val) {
+                            cJSON* value = cJSON_CreateNumber(val);
+                            broadcastParameterUpdate(param_id, row, col, value);
+                            cJSON_Delete(value);
+                        });
+                    }
                     break;
                 }
                 case ParameterType::BOOL: {
                     auto* bool_param = static_cast<BoolParameter*>(param);
-                    if (bool_param->hasCallback()) continue;
-                    bool_param->setOnChange([this, param_id](size_t row, size_t col, bool val) {
-                        cJSON* value = cJSON_CreateBool(val);
-                        broadcastParameterUpdate(param_id, row, col, value);
-                        cJSON_Delete(value);
-                    });
+                    if (bool_param->hasCallback()) {
+                        auto existing_cb = bool_param->getOnChange();
+                        bool_param->setOnChange([this, param_id, existing_cb](size_t row, size_t col, bool val) {
+                            if (existing_cb) existing_cb(row, col, val);
+                            cJSON* value = cJSON_CreateBool(val);
+                            broadcastParameterUpdate(param_id, row, col, value);
+                            cJSON_Delete(value);
+                        });
+                    } else {
+                        bool_param->setOnChange([this, param_id](size_t row, size_t col, bool val) {
+                            cJSON* value = cJSON_CreateBool(val);
+                            broadcastParameterUpdate(param_id, row, col, value);
+                            cJSON_Delete(value);
+                        });
+                    }
                     break;
                 }
                 case ParameterType::STRING: {
                     auto* str_param = static_cast<StringParameter*>(param);
-                    if (str_param->hasCallback()) continue;
-                    str_param->setOnChange([this, param_id](size_t row, size_t col, const std::string& val) {
-                        cJSON* value = cJSON_CreateString(val.c_str());
-                        broadcastParameterUpdate(param_id, row, col, value);
-                        cJSON_Delete(value);
-                    });
+                    if (str_param->hasCallback()) {
+                        auto existing_cb = str_param->getOnChange();
+                        str_param->setOnChange([this, param_id, existing_cb](size_t row, size_t col, const std::string& val) {
+                            if (existing_cb) existing_cb(row, col, val);
+                            cJSON* value = cJSON_CreateString(val.c_str());
+                            broadcastParameterUpdate(param_id, row, col, value);
+                            cJSON_Delete(value);
+                        });
+                    } else {
+                        str_param->setOnChange([this, param_id](size_t row, size_t col, const std::string& val) {
+                            cJSON* value = cJSON_CreateString(val.c_str());
+                            broadcastParameterUpdate(param_id, row, col, value);
+                            cJSON_Delete(value);
+                        });
+                    }
                     break;
                 }
                 default:

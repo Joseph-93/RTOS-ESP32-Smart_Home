@@ -256,7 +256,7 @@ void RgbLedComponent::onInitialize() {
     // Create parameters
     brightness = addIntParam("brightness", 1, 1, 0, 100, 100);
     playing = addBoolParam("playing", 1, 1, false);  // false=off, true=play animation
-    loop = addBoolParam("loop", 1, 1, true);  // true=loop forever, false=play once
+    loop = addIntParam("loop", 1, 1, -1, 1000, -1);  // -1=infinite, 0=play once, N=loop N times
     
     // Animation status parameters (read-only)
     animFrameCount = addIntParam("anim_frame_count", 1, 1, 0, 65535, 0, true);  // Read-only
@@ -266,6 +266,8 @@ void RgbLedComponent::onInitialize() {
     
     // Preset management parameters (writable)
     activePresetParam = addIntParam("active_preset", 1, 1, -1, 255, -1);
+    // 3-tier priority system: row 0 = top (immediate), row 1 = mid (manual), row 2 = low (auto)
+    presetPriorityParam = addIntParam("preset_priority", 3, 1, -1, 255, -1);
     deletePresetParam = addIntParam("delete_preset", 1, 1, -1, 255, -1);
     
     // Animation upload parameters (writable)
@@ -273,7 +275,7 @@ void RgbLedComponent::onInitialize() {
     animUploadChunkIndex = addIntParam("anim_chunk_index", 1, 1, 0, 65535, 0);
     animUploadData = addStringParam("anim_chunk_data", 1, 1, "");
     animPresetName = addStringParam("anim_preset_name", 1, 1, "");
-    animUploadLoop = addBoolParam("anim_upload_loop", 1, 1, true);  // Loop setting for upload
+    animUploadLoop = addIntParam("anim_upload_loop", 1, 1, -1, 1000, -1);  // Loop count for upload
     animCommit = addBoolParam("anim_commit", 1, 1, false);
     
     // Preset query/download parameters
@@ -281,7 +283,7 @@ void RgbLedComponent::onInitialize() {
     queryPresetName = addStringParam("query_preset_name", 1, 1, "", true);  // Read-only
     queryPresetFrameCount = addIntParam("query_preset_frame_count", 1, 1, 0, 65535, 0, true);  // Read-only
     queryPresetDataSize = addIntParam("query_preset_data_size", 1, 1, 0, INT32_MAX, 0, true);  // Read-only
-    queryPresetLoop = addBoolParam("query_preset_loop", 1, 1, true, true);  // Read-only
+    queryPresetLoop = addIntParam("query_preset_loop", 1, 1, -1, 1000, -1, true);  // Read-only
     chunkSizeParam = addIntParam("chunk_size", 1, 1, 0, INT32_MAX, RGB_LED_CHUNK_SIZE, true);  // Read-only
     queryDownloadChunkIndex = addIntParam("query_download_chunk_index", 1, 1, -1, 65535, -1);
     queryDownloadChunkData = addStringParam("query_download_chunk_data", 1, 1, "", true);  // Read-only
@@ -294,6 +296,11 @@ void RgbLedComponent::onInitialize() {
                 // Reset to frame 0 when starting playback
                 animation_current_frame = 0;
                 animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+                // Reset loops remaining from the preset's loop count
+                auto it = presets.find(active_preset_index);
+                if (it != presets.end()) {
+                    animation_loops_remaining = it->second.loop;
+                }
             }
         });
     }
@@ -321,18 +328,57 @@ void RgbLedComponent::onInitialize() {
     
     if (activePresetParam) {
         activePresetParam->setOnChange([this](size_t row, size_t col, int val) {
-            if (val >= 0 && val < (int)presets.size()) {
+            auto it = presets.find((int16_t)val);
+            if (it != presets.end()) {
                 active_preset_index = (int16_t)val;
                 animation_current_frame = 0;
                 animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+                animation_loops_remaining = it->second.loop;  // Reset loop counter
+                // Auto-start playback when selecting a preset
+                if (playing) playing->setValue(0, 0, true);
                 updateStatusParams();
-                ESP_LOGI(TAG, "Active preset changed to %d", val);
+                ESP_LOGI(TAG, "Active preset changed to %d, auto-starting playback", val);
             } else if (val == -1) {
                 active_preset_index = -1;
+                // Stop playback when clearing preset
+                if (playing) playing->setValue(0, 0, false);
                 updateStatusParams();
-                ESP_LOGI(TAG, "Active preset cleared");
+                ESP_LOGI(TAG, "Active preset cleared, stopping playback");
             } else {
-                ESP_LOGW(TAG, "Invalid preset index: %d (have %d presets)", val, (int)presets.size());
+                ESP_LOGW(TAG, "Invalid preset ID: %d (not found)", val);
+            }
+        });
+    }
+    
+    // Priority system: when any tier changes, resolve and update active_preset
+    if (presetPriorityParam) {
+        presetPriorityParam->setOnChange([this](size_t row, size_t col, int val) {
+            ESP_LOGI(TAG, "Priority tier %zu set to %d", row, val);
+            
+            // Resolve highest priority preset
+            int16_t resolved = resolvePresetPriority();
+            
+            // If resolved preset is different from current, switch to it
+            if (resolved != active_preset_index) {
+                auto it = presets.find(resolved);
+                if (it != presets.end()) {
+                    // Start playing the new highest priority preset
+                    active_preset_index = resolved;
+                    animation_current_frame = 0;
+                    animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+                    animation_loops_remaining = it->second.loop;
+                    if (activePresetParam) activePresetParam->setValue(0, 0, resolved);
+                    if (playing) playing->setValue(0, 0, true);
+                    updateStatusParams();
+                    ESP_LOGI(TAG, "Priority resolved to preset %d, starting playback", resolved);
+                } else if (resolved < 0) {
+                    // No valid preset in priority queue
+                    active_preset_index = -1;
+                    if (activePresetParam) activePresetParam->setValue(0, 0, -1);
+                    if (playing) playing->setValue(0, 0, false);
+                    updateStatusParams();
+                    ESP_LOGI(TAG, "Priority queue empty, stopping playback");
+                }
             }
         });
     }
@@ -376,8 +422,9 @@ void RgbLedComponent::onInitialize() {
     // Query preset onChange - populate read-only query results
     if (queryPresetIndex) {
         queryPresetIndex->setOnChange([this](size_t row, size_t col, int val) {
-            if (val >= 0 && val < (int)presets.size()) {
-                const AnimationPreset& p = presets[val];
+            auto it = presets.find((int16_t)val);
+            if (it != presets.end()) {
+                const AnimationPreset& p = it->second;
                 if (queryPresetName) queryPresetName->setValue(0, 0, p.name);
                 if (queryPresetFrameCount) queryPresetFrameCount->setValue(0, 0, p.frame_count);
                 if (queryPresetDataSize) queryPresetDataSize->setValue(0, 0, (int)p.data.size());
@@ -389,7 +436,7 @@ void RgbLedComponent::onInitialize() {
                 if (queryPresetName) queryPresetName->setValue(0, 0, "");
                 if (queryPresetFrameCount) queryPresetFrameCount->setValue(0, 0, 0);
                 if (queryPresetDataSize) queryPresetDataSize->setValue(0, 0, 0);
-                if (queryPresetLoop) queryPresetLoop->setValue(0, 0, true);
+                if (queryPresetLoop) queryPresetLoop->setValue(0, 0, -1);  // Default to infinite
             }
         });
     }
@@ -400,13 +447,14 @@ void RgbLedComponent::onInitialize() {
             if (chunk_idx < 0) return;
             
             int preset_idx = queryPresetIndex ? queryPresetIndex->getValue(0, 0) : -1;
-            if (preset_idx < 0 || preset_idx >= (int)presets.size()) {
-                ESP_LOGW(TAG, "Download chunk %d: no preset selected", chunk_idx);
+            auto it = presets.find((int16_t)preset_idx);
+            if (it == presets.end()) {
+                ESP_LOGW(TAG, "Download chunk %d: preset %d not found", chunk_idx, preset_idx);
                 if (queryDownloadChunkData) queryDownloadChunkData->setValue(0, 0, "");
                 return;
             }
             
-            const AnimationPreset& p = presets[preset_idx];
+            const AnimationPreset& p = it->second;
             size_t offset = chunk_idx * RGB_LED_CHUNK_SIZE;
             
             if (offset >= p.data.size()) {
@@ -505,6 +553,35 @@ esp_err_t RgbLedComponent::transmitBuffer() {
 // ============================================================================
 // Animation Implementation
 // ============================================================================
+
+// Resolve priority system: find highest priority tier with a valid preset
+// Returns the preset ID to play, or -1 if all tiers are empty
+int16_t RgbLedComponent::resolvePresetPriority() {
+    if (!presetPriorityParam) return -1;
+    
+    // Check tiers in order: 0 (top), 1 (mid), 2 (low)
+    for (int tier = 0; tier < 3; tier++) {
+        int val = presetPriorityParam->getValue(tier, 0);
+        if (val >= 0 && presets.find((int16_t)val) != presets.end()) {
+            return (int16_t)val;
+        }
+    }
+    return -1;
+}
+
+// Clear the tier that was playing the given preset
+void RgbLedComponent::clearFinishedPriorityTier(int16_t finished_preset) {
+    if (!presetPriorityParam) return;
+    
+    // Find which tier had this preset and clear it
+    for (int tier = 0; tier < 3; tier++) {
+        if (presetPriorityParam->getValue(tier, 0) == finished_preset) {
+            presetPriorityParam->setValue(tier, 0, -1);
+            ESP_LOGI(TAG, "Cleared priority tier %d (was preset %d)", tier, finished_preset);
+            break;  // Only clear the first match (highest priority)
+        }
+    }
+}
 
 esp_err_t RgbLedComponent::animationBegin(uint16_t total_frames) {
     size_t frame_size = getFrameSize();
@@ -628,15 +705,16 @@ esp_err_t RgbLedComponent::animationCommit() {
     // Get the name from the param (default to "Preset N" if empty)
     std::string name = animPresetName ? animPresetName->getValue(0, 0) : "";
     if (name.empty()) {
-        name = "Preset " + std::to_string(presets.size());
+        name = "Preset " + std::to_string(next_preset_id);
     }
     preset.name = name;
     
-    // Get loop setting from upload param
-    preset.loop = animUploadLoop ? animUploadLoop->getValue(0, 0) : true;
+    // Get loop setting from upload param (-1=infinite, 0=once, N=N times)
+    preset.loop = animUploadLoop ? (int16_t)animUploadLoop->getValue(0, 0) : -1;
     
-    presets.push_back(std::move(preset));
-    int new_index = (int)presets.size() - 1;
+    // Assign stable ID and insert into map
+    int16_t new_id = next_preset_id++;
+    presets[new_id] = std::move(preset);
     
     // Clear staging state
     uploading = false;
@@ -647,12 +725,8 @@ esp_err_t RgbLedComponent::animationCommit() {
     // Clear the name param for next upload
     if (animPresetName) animPresetName->setValue(0, 0, "");
     
-    // Auto-activate the first preset if none is active yet
-    if (active_preset_index < 0) {
-        active_preset_index = (int16_t)new_index;
-        animation_current_frame = 0;
-        animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
-    }
+    // Don't auto-activate - let the priority system handle activation
+    // (User sets preset_priority[tier] = ID to schedule playback)
     
     // If already playing, kick the task to restart from frame 0 with the new data.
     bool was_playing = playing && playing->getValue(0, 0);
@@ -667,9 +741,9 @@ esp_err_t RgbLedComponent::animationCommit() {
     updateStatusParams();
     if (activePresetParam) activePresetParam->setValue(0, 0, active_preset_index);
 
-    ESP_LOGI(TAG, "Preset #%d committed: %u frames (%d presets total, %zu bytes used)",
-             new_index, presets[new_index].frame_count,
-             (int)presets.size(), calcTotalMemoryUsed());
+    ESP_LOGI(TAG, "Preset #%d committed: %u frames (%zu presets total, %zu bytes used)",
+             new_id, presets[new_id].frame_count,
+             presets.size(), calcTotalMemoryUsed());
 
     if (was_playing && led_task_handle) {
         xTaskNotifyGive(led_task_handle);
@@ -690,9 +764,9 @@ void RgbLedComponent::animationClear() {
     upload_offset = 0;
     { std::vector<uint8_t>().swap(upload_staging_data); }
     
-    // Clear all presets
+    // Clear all presets and reset ID counter
     presets.clear();
-    presets.shrink_to_fit();
+    next_preset_id = 0;
     active_preset_index = -1;
     animation_current_frame = 0;
     
@@ -709,11 +783,12 @@ void RgbLedComponent::animationClear() {
 }
 
 void RgbLedComponent::playFrame() {
-    if (active_preset_index < 0 || active_preset_index >= (int16_t)presets.size()) {
+    auto it = presets.find(active_preset_index);
+    if (it == presets.end()) {
         return;  // No active preset
     }
     
-    const AnimationPreset& preset = presets[active_preset_index];
+    const AnimationPreset& preset = it->second;
     if (preset.frame_count == 0 || preset.data.empty()) {
         return;  // Empty preset
     }
@@ -741,13 +816,38 @@ void RgbLedComponent::playFrame() {
         animation_current_frame++;
         
         if (animation_current_frame >= preset.frame_count) {
-            // Use the preset's loop setting (not global)
-            if (preset.loop) {
+            // Loop logic: -1=infinite, N=play N times total (not N additional loops)
+            if (animation_loops_remaining == -1) {
+                // Infinite loop
+                animation_current_frame = 0;
+            } else if (animation_loops_remaining > 1) {
+                // More plays remaining (decrement first, then check)
+                animation_loops_remaining--;
                 animation_current_frame = 0;
             } else {
-                // Animation complete, stop playback
-                if (playing) {
-                    playing->setValue(0, 0, false);
+                // animation_loops_remaining <= 1: this was the last play
+                // Use priority system: clear the tier that finished, then resolve next
+                int16_t finished_preset = active_preset_index;
+                clearFinishedPriorityTier(finished_preset);
+                
+                // Resolve next preset from priority system
+                int16_t next_preset = resolvePresetPriority();
+                
+                auto next_it = presets.find(next_preset);
+                if (next_it != presets.end()) {
+                    // Switch to next priority preset
+                    active_preset_index = next_preset;
+                    animation_current_frame = 0;
+                    animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+                    animation_loops_remaining = next_it->second.loop;
+                    if (activePresetParam) activePresetParam->setValue(0, 0, next_preset);
+                    ESP_LOGI(TAG, "Preset %d complete, switching to priority preset %d", finished_preset, next_preset);
+                } else {
+                    // No more presets in priority queue, stop playback
+                    active_preset_index = -1;
+                    if (activePresetParam) activePresetParam->setValue(0, 0, -1);
+                    if (playing) playing->setValue(0, 0, false);
+                    ESP_LOGI(TAG, "Preset %d complete, no more in priority queue - stopping", finished_preset);
                 }
                 return;
             }
@@ -789,16 +889,16 @@ void RgbLedComponent::playFrame() {
 
 size_t RgbLedComponent::calcTotalMemoryUsed() const {
     size_t total = 0;
-    for (const auto& p : presets) {
-        total += p.data.size();
+    for (const auto& kv : presets) {
+        total += kv.second.data.size();
     }
     return total;
 }
 
 void RgbLedComponent::deletePresetByIndex(int index) {
-    if (index < 0 || index >= (int)presets.size()) {
-        ESP_LOGW(TAG, "Cannot delete preset %d: only %d presets exist",
-                 index, (int)presets.size());
+    auto it = presets.find((int16_t)index);
+    if (it == presets.end()) {
+        ESP_LOGW(TAG, "Cannot delete preset %d: not found", index);
         return;
     }
     
@@ -807,27 +907,33 @@ void RgbLedComponent::deletePresetByIndex(int index) {
     }
     
     // Free the preset's memory explicitly before erasing
-    { std::vector<uint8_t>().swap(presets[index].data); }
-    presets.erase(presets.begin() + index);
+    { std::vector<uint8_t>().swap(it->second.data); }
+    presets.erase(it);
     
-    // Adjust active preset index after the shift
-    if (presets.empty()) {
+    // If we deleted the active preset, stop playback
+    if (index == active_preset_index) {
         active_preset_index = -1;
         if (playing) playing->setValue(0, 0, false);
-    } else if (index == active_preset_index) {
-        // Deleted the active preset — select the first one
-        active_preset_index = 0;
-        animation_current_frame = 0;
-        animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
-    } else if (index < active_preset_index) {
-        // Everything shifted down
-        active_preset_index--;
+    }
+    // NOTE: No index shifting needed - IDs are stable!
+    
+    // Clear priority tiers that pointed to the deleted preset
+    // (no shifting needed since IDs are stable)
+    if (presetPriorityParam) {
+        for (size_t tier = 0; tier < 3; tier++) {
+            int16_t tierVal = (int16_t)presetPriorityParam->getValue(tier, 0);
+            if (tierVal == index) {
+                // This tier pointed to the deleted preset - clear it
+                presetPriorityParam->setValue(tier, 0, -1);
+            }
+            // No shifting needed - other tiers keep their stable IDs!
+        }
     }
     
     giveMutex();
     
-    ESP_LOGI(TAG, "Deleted preset %d (%d remaining, %zu bytes used)",
-             index, (int)presets.size(), calcTotalMemoryUsed());
+    ESP_LOGI(TAG, "Deleted preset %d (%zu remaining, %zu bytes used)",
+             index, presets.size(), calcTotalMemoryUsed());
     
     updateStatusParams();
     if (activePresetParam) activePresetParam->setValue(0, 0, active_preset_index);
@@ -840,8 +946,9 @@ void RgbLedComponent::updateStatusParams() {
     
     // Show frame count of the active preset
     if (animFrameCount) {
-        if (active_preset_index >= 0 && active_preset_index < (int16_t)presets.size()) {
-            animFrameCount->setValue(0, 0, presets[active_preset_index].frame_count);
+        auto it = presets.find(active_preset_index);
+        if (it != presets.end()) {
+            animFrameCount->setValue(0, 0, it->second.frame_count);
         } else {
             animFrameCount->setValue(0, 0, 0);
         }
