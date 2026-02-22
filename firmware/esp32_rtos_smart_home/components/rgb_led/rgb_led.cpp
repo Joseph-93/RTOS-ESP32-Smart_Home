@@ -104,6 +104,29 @@ static int base64_decode(const char* input, size_t input_len, uint8_t* output, s
     return (int)out_len;
 }
 
+// Base64 encode table
+static const char base64_encode_table[] = 
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// Encode binary data to base64 string
+static std::string base64_encode(const uint8_t* input, size_t len) {
+    std::string result;
+    result.reserve(((len + 2) / 3) * 4);
+    
+    for (size_t i = 0; i < len; i += 3) {
+        uint32_t n = ((uint32_t)input[i]) << 16;
+        if (i + 1 < len) n |= ((uint32_t)input[i + 1]) << 8;
+        if (i + 2 < len) n |= input[i + 2];
+        
+        result += base64_encode_table[(n >> 18) & 0x3F];
+        result += base64_encode_table[(n >> 12) & 0x3F];
+        result += (i + 1 < len) ? base64_encode_table[(n >> 6) & 0x3F] : '=';
+        result += (i + 2 < len) ? base64_encode_table[n & 0x3F] : '=';
+    }
+    
+    return result;
+}
+
 // ============================================================================
 // RgbLedComponent Implementation
 // ============================================================================
@@ -239,12 +262,29 @@ void RgbLedComponent::onInitialize() {
     animFrameCount = addIntParam("anim_frame_count", 1, 1, 0, 65535, 0, true);  // Read-only
     animMemoryUsed = addIntParam("anim_memory_used", 1, 1, 0, INT32_MAX, 0, true);  // Read-only
     animMemoryMax = addIntParam("anim_memory_max", 1, 1, 0, INT32_MAX, RGB_LED_MAX_ANIMATION_MEMORY, true);  // Read-only
+    presetCountParam = addIntParam("preset_count", 1, 1, 0, 255, 0, true);  // Read-only
+    
+    // Preset management parameters (writable)
+    activePresetParam = addIntParam("active_preset", 1, 1, -1, 255, -1);
+    deletePresetParam = addIntParam("delete_preset", 1, 1, -1, 255, -1);
     
     // Animation upload parameters (writable)
     animTotalFrames = addIntParam("anim_total_frames", 1, 1, 0, 65535, 0);
     animUploadChunkIndex = addIntParam("anim_chunk_index", 1, 1, 0, 65535, 0);
     animUploadData = addStringParam("anim_chunk_data", 1, 1, "");
+    animPresetName = addStringParam("anim_preset_name", 1, 1, "");
+    animUploadLoop = addBoolParam("anim_upload_loop", 1, 1, true);  // Loop setting for upload
     animCommit = addBoolParam("anim_commit", 1, 1, false);
+    
+    // Preset query/download parameters
+    queryPresetIndex = addIntParam("query_preset_index", 1, 1, -1, 255, -1);
+    queryPresetName = addStringParam("query_preset_name", 1, 1, "", true);  // Read-only
+    queryPresetFrameCount = addIntParam("query_preset_frame_count", 1, 1, 0, 65535, 0, true);  // Read-only
+    queryPresetDataSize = addIntParam("query_preset_data_size", 1, 1, 0, INT32_MAX, 0, true);  // Read-only
+    queryPresetLoop = addBoolParam("query_preset_loop", 1, 1, true, true);  // Read-only
+    chunkSizeParam = addIntParam("chunk_size", 1, 1, 0, INT32_MAX, RGB_LED_CHUNK_SIZE, true);  // Read-only
+    queryDownloadChunkIndex = addIntParam("query_download_chunk_index", 1, 1, -1, 65535, -1);
+    queryDownloadChunkData = addStringParam("query_download_chunk_data", 1, 1, "", true);  // Read-only
     
     // Set up onChange callbacks
     if (playing) {
@@ -279,6 +319,33 @@ void RgbLedComponent::onInitialize() {
         });
     }
     
+    if (activePresetParam) {
+        activePresetParam->setOnChange([this](size_t row, size_t col, int val) {
+            if (val >= 0 && val < (int)presets.size()) {
+                active_preset_index = (int16_t)val;
+                animation_current_frame = 0;
+                animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+                updateStatusParams();
+                ESP_LOGI(TAG, "Active preset changed to %d", val);
+            } else if (val == -1) {
+                active_preset_index = -1;
+                updateStatusParams();
+                ESP_LOGI(TAG, "Active preset cleared");
+            } else {
+                ESP_LOGW(TAG, "Invalid preset index: %d (have %d presets)", val, (int)presets.size());
+            }
+        });
+    }
+    
+    if (deletePresetParam) {
+        deletePresetParam->setOnChange([this](size_t row, size_t col, int val) {
+            if (val >= 0) {
+                deletePresetByIndex(val);
+                deletePresetParam->setValue(0, 0, -1);  // Reset trigger
+            }
+        });
+    }
+    
     if (animUploadData && animUploadChunkIndex) {
         animUploadData->setOnChange([this](size_t row, size_t col, const std::string& val) {
             if (val.empty()) return;
@@ -303,6 +370,59 @@ void RgbLedComponent::onInitialize() {
             }
             
             animUploadData->setValue(0, 0, "");  // Clear to detect next write
+        });
+    }
+    
+    // Query preset onChange - populate read-only query results
+    if (queryPresetIndex) {
+        queryPresetIndex->setOnChange([this](size_t row, size_t col, int val) {
+            if (val >= 0 && val < (int)presets.size()) {
+                const AnimationPreset& p = presets[val];
+                if (queryPresetName) queryPresetName->setValue(0, 0, p.name);
+                if (queryPresetFrameCount) queryPresetFrameCount->setValue(0, 0, p.frame_count);
+                if (queryPresetDataSize) queryPresetDataSize->setValue(0, 0, (int)p.data.size());
+                if (queryPresetLoop) queryPresetLoop->setValue(0, 0, p.loop);
+                ESP_LOGI(TAG, "Query preset %d: '%s', %u frames, %zu bytes, loop=%d",
+                         val, p.name.c_str(), p.frame_count, p.data.size(), p.loop);
+            } else {
+                // Clear query results
+                if (queryPresetName) queryPresetName->setValue(0, 0, "");
+                if (queryPresetFrameCount) queryPresetFrameCount->setValue(0, 0, 0);
+                if (queryPresetDataSize) queryPresetDataSize->setValue(0, 0, 0);
+                if (queryPresetLoop) queryPresetLoop->setValue(0, 0, true);
+            }
+        });
+    }
+    
+    // Download chunk onChange - return base64 chunk of queried preset data
+    if (queryDownloadChunkIndex) {
+        queryDownloadChunkIndex->setOnChange([this](size_t row, size_t col, int chunk_idx) {
+            if (chunk_idx < 0) return;
+            
+            int preset_idx = queryPresetIndex ? queryPresetIndex->getValue(0, 0) : -1;
+            if (preset_idx < 0 || preset_idx >= (int)presets.size()) {
+                ESP_LOGW(TAG, "Download chunk %d: no preset selected", chunk_idx);
+                if (queryDownloadChunkData) queryDownloadChunkData->setValue(0, 0, "");
+                return;
+            }
+            
+            const AnimationPreset& p = presets[preset_idx];
+            size_t offset = chunk_idx * RGB_LED_CHUNK_SIZE;
+            
+            if (offset >= p.data.size()) {
+                // Beyond end of data
+                if (queryDownloadChunkData) queryDownloadChunkData->setValue(0, 0, "");
+                return;
+            }
+            
+            size_t chunk_len = std::min((size_t)RGB_LED_CHUNK_SIZE, p.data.size() - offset);
+            
+            // Encode to base64
+            std::string b64 = base64_encode(p.data.data() + offset, chunk_len);
+            if (queryDownloadChunkData) queryDownloadChunkData->setValue(0, 0, b64);
+            
+            ESP_LOGD(TAG, "Download preset %d chunk %d: %zu bytes -> %zu b64",
+                     preset_idx, chunk_idx, chunk_len, b64.size());
         });
     }
     
@@ -390,13 +510,21 @@ esp_err_t RgbLedComponent::animationBegin(uint16_t total_frames) {
     size_t frame_size = getFrameSize();
     size_t total_bytes = total_frames * frame_size;
     
-    ESP_LOGI(TAG, "Animation begin: %u frames, %u bytes/frame, %zu total bytes",
-             total_frames, frame_size, total_bytes);
+    ESP_LOGI(TAG, "Upload begin: %u frames, %u bytes/frame, %zu total bytes",
+             total_frames, (unsigned)frame_size, total_bytes);
     
-    // Check memory limits
-    if (total_bytes > RGB_LED_MAX_ANIMATION_MEMORY) {
-        ESP_LOGE(TAG, "Animation too large: %zu bytes requested, max %d bytes",
-                 total_bytes, RGB_LED_MAX_ANIMATION_MEMORY);
+    // Check if the new preset fits in the remaining memory pool
+    size_t current_usage = calcTotalMemoryUsed();
+    size_t available = (current_usage < RGB_LED_MAX_ANIMATION_MEMORY)
+                       ? RGB_LED_MAX_ANIMATION_MEMORY - current_usage : 0;
+    
+    if (total_bytes > available) {
+        ESP_LOGE(TAG, "Preset too large: needs %zu bytes, only %zu available "
+                 "(used %zu of %d across %d presets)",
+                 total_bytes, available, current_usage,
+                 RGB_LED_MAX_ANIMATION_MEMORY, (int)presets.size());
+        // Update memory params so front-end can see the current state
+        updateStatusParams();
         return ESP_ERR_NO_MEM;
     }
     
@@ -412,51 +540,42 @@ esp_err_t RgbLedComponent::animationBegin(uint16_t total_frames) {
         return ESP_ERR_TIMEOUT;
     }
     
-    // FREE existing animation memory BEFORE allocating new.
-    // std::vector::clear() keeps capacity — a subsequent reserve() for a
-    // larger size will briefly hold BOTH the old and new buffers, which can
-    // OOM when animations approach the memory limit.  swap-with-empty
-    // guarantees the old memory is released first.
-    { std::vector<uint8_t>().swap(animation_data); }
+    // Free any previous staging buffer before allocating new one
+    { std::vector<uint8_t>().swap(upload_staging_data); }
     
-    // Pre-allocate memory - use reserve + resize pattern to detect allocation failure
-    animation_data.reserve(total_bytes);
-    if (animation_data.capacity() < total_bytes) {
+    // Pre-allocate staging buffer
+    upload_staging_data.reserve(total_bytes);
+    if (upload_staging_data.capacity() < total_bytes) {
         giveMutex();
-        ESP_LOGE(TAG, "Failed to allocate %zu bytes for animation", total_bytes);
+        ESP_LOGE(TAG, "Failed to allocate %zu bytes for staging buffer", total_bytes);
         return ESP_ERR_NO_MEM;
     }
-    animation_data.resize(total_bytes, 0);
+    upload_staging_data.resize(total_bytes, 0);
     
-    animation_frame_count = total_frames;
-    animation_current_frame = 0;
-    animation_upload_offset = 0;
-    animation_uploading = true;
-    animation_led_count = RGB_LED_COUNT;
+    upload_frame_count = total_frames;
+    upload_led_count = RGB_LED_COUNT;
+    upload_offset = 0;
+    uploading = true;
     
     giveMutex();
     
-    ESP_LOGI(TAG, "Animation buffer allocated: %zu bytes for %u frames",
-             animation_data.size(), total_frames);
-    
-    // Update read-only parameters
-    if (animFrameCount) animFrameCount->setValue(0, 0, total_frames);
-    if (animMemoryUsed) animMemoryUsed->setValue(0, 0, (int)total_bytes);
+    ESP_LOGI(TAG, "Staging allocated: %zu bytes for %u frames (will become preset #%d)",
+             upload_staging_data.size(), total_frames, (int)presets.size());
     
     return ESP_OK;
 }
 
 esp_err_t RgbLedComponent::animationChunk(uint16_t chunk_index, const uint8_t* data, size_t len) {
-    if (!animation_uploading) {
+    if (!uploading) {
         ESP_LOGE(TAG, "Animation chunk received but no upload in progress");
         return ESP_ERR_INVALID_STATE;
     }
     
     size_t expected_offset = chunk_index * RGB_LED_CHUNK_SIZE;
     
-    if (expected_offset != animation_upload_offset) {
+    if (expected_offset != upload_offset) {
         ESP_LOGW(TAG, "Chunk out of order: expected offset %zu, got chunk %u (offset %zu)",
-                 animation_upload_offset, chunk_index, expected_offset);
+                 upload_offset, chunk_index, expected_offset);
         // Allow it anyway - might be a retry
     }
     
@@ -465,34 +584,34 @@ esp_err_t RgbLedComponent::animationChunk(uint16_t chunk_index, const uint8_t* d
     }
     
     // Bounds check
-    if (animation_upload_offset + len > animation_data.size()) {
+    if (upload_offset + len > upload_staging_data.size()) {
         giveMutex();
-        ESP_LOGE(TAG, "Chunk would overflow buffer: offset %zu + len %zu > size %zu",
-                 animation_upload_offset, len, animation_data.size());
+        ESP_LOGE(TAG, "Chunk would overflow staging buffer: offset %zu + len %zu > size %zu",
+                 upload_offset, len, upload_staging_data.size());
         return ESP_ERR_INVALID_SIZE;
     }
     
-    // Copy data
-    memcpy(animation_data.data() + animation_upload_offset, data, len);
-    animation_upload_offset += len;
+    // Copy data into staging buffer
+    memcpy(upload_staging_data.data() + upload_offset, data, len);
+    upload_offset += len;
     
     giveMutex();
     
-    ESP_LOGD(TAG, "Animation chunk %u: %zu bytes, total uploaded: %zu/%zu",
-             chunk_index, len, animation_upload_offset, animation_data.size());
+    ESP_LOGD(TAG, "Upload chunk %u: %zu bytes, total: %zu/%zu",
+             chunk_index, len, upload_offset, upload_staging_data.size());
     
     return ESP_OK;
 }
 
 esp_err_t RgbLedComponent::animationCommit() {
-    if (!animation_uploading) {
+    if (!uploading) {
         ESP_LOGE(TAG, "Animation commit but no upload in progress");
         return ESP_ERR_INVALID_STATE;
     }
     
-    if (animation_upload_offset != animation_data.size()) {
-        ESP_LOGW(TAG, "Animation incomplete: received %zu of %zu bytes",
-                 animation_upload_offset, animation_data.size());
+    if (upload_offset != upload_staging_data.size()) {
+        ESP_LOGW(TAG, "Upload incomplete: received %zu of %zu bytes",
+                 upload_offset, upload_staging_data.size());
         // Allow it - partial animations might still work
     }
     
@@ -500,25 +619,57 @@ esp_err_t RgbLedComponent::animationCommit() {
         return ESP_ERR_TIMEOUT;
     }
     
-    animation_uploading = false;
-    animation_current_frame = 0;
-    animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
-
+    // Move staging data into a new preset
+    AnimationPreset preset;
+    preset.data = std::move(upload_staging_data);
+    preset.frame_count = upload_frame_count;
+    preset.led_count = upload_led_count;
+    
+    // Get the name from the param (default to "Preset N" if empty)
+    std::string name = animPresetName ? animPresetName->getValue(0, 0) : "";
+    if (name.empty()) {
+        name = "Preset " + std::to_string(presets.size());
+    }
+    preset.name = name;
+    
+    // Get loop setting from upload param
+    preset.loop = animUploadLoop ? animUploadLoop->getValue(0, 0) : true;
+    
+    presets.push_back(std::move(preset));
+    int new_index = (int)presets.size() - 1;
+    
+    // Clear staging state
+    uploading = false;
+    upload_frame_count = 0;
+    upload_led_count = 0;
+    upload_offset = 0;
+    
+    // Clear the name param for next upload
+    if (animPresetName) animPresetName->setValue(0, 0, "");
+    
+    // Auto-activate the first preset if none is active yet
+    if (active_preset_index < 0) {
+        active_preset_index = (int16_t)new_index;
+        animation_current_frame = 0;
+        animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    }
+    
     // If already playing, kick the task to restart from frame 0 with the new data.
-    // Without this, the playing onChange never re-fires (value didn't change),
-    // and the old animation keeps running.
     bool was_playing = playing && playing->getValue(0, 0);
 
     giveMutex();
 
     // Reset the total_frames trigger back to 0 so the next upload always fires
     // the onChange callback even when uploading the same frame count as before.
-    // (onChange only fires on value *change*, so if count is the same, animationBegin
-    // would never be called and the commit would fail with "no upload in progress".)
     if (animTotalFrames) animTotalFrames->setValue(0, 0, 0);
 
-    ESP_LOGI(TAG, "Animation committed: %u frames%s",
-             animation_frame_count, was_playing ? " (restarting playback)" : "");
+    // Update all read-only status parameters
+    updateStatusParams();
+    if (activePresetParam) activePresetParam->setValue(0, 0, active_preset_index);
+
+    ESP_LOGI(TAG, "Preset #%d committed: %u frames (%d presets total, %zu bytes used)",
+             new_index, presets[new_index].frame_count,
+             (int)presets.size(), calcTotalMemoryUsed());
 
     if (was_playing && led_task_handle) {
         xTaskNotifyGive(led_task_handle);
@@ -532,41 +683,53 @@ void RgbLedComponent::animationClear() {
         return;
     }
     
-    animation_uploading = false;
-    animation_frame_count = 0;
+    // Clear staging
+    uploading = false;
+    upload_frame_count = 0;
+    upload_led_count = 0;
+    upload_offset = 0;
+    { std::vector<uint8_t>().swap(upload_staging_data); }
+    
+    // Clear all presets
+    presets.clear();
+    presets.shrink_to_fit();
+    active_preset_index = -1;
     animation_current_frame = 0;
-    animation_led_count = 0;
-    animation_data.clear();
-    animation_data.shrink_to_fit();  // Actually free memory
     
     giveMutex();
     
-    ESP_LOGI(TAG, "Animation cleared");
+    ESP_LOGI(TAG, "All presets cleared");
     
     // Update parameters
-    if (animFrameCount) animFrameCount->setValue(0, 0, 0);
-    if (animMemoryUsed) animMemoryUsed->setValue(0, 0, 0);
+    updateStatusParams();
+    if (activePresetParam) activePresetParam->setValue(0, 0, -1);
     
     // Stop playback
     if (playing) playing->setValue(0, 0, false);
 }
 
 void RgbLedComponent::playFrame() {
-    if (animation_frame_count == 0 || animation_data.empty()) {
-        return;  // No animation loaded
+    if (active_preset_index < 0 || active_preset_index >= (int16_t)presets.size()) {
+        return;  // No active preset
     }
     
-    size_t frame_size = getAnimationFrameSize();
+    const AnimationPreset& preset = presets[active_preset_index];
+    if (preset.frame_count == 0 || preset.data.empty()) {
+        return;  // Empty preset
+    }
+    
+    size_t frame_size = preset.getFrameSize();
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
     
     // Get current frame data pointer
     size_t frame_offset = animation_current_frame * frame_size;
-    if (frame_offset + frame_size > animation_data.size()) {
-        ESP_LOGE(TAG, "Frame %u out of bounds", animation_current_frame);
+    if (frame_offset + frame_size > preset.data.size()) {
+        ESP_LOGE(TAG, "Frame %u out of bounds in preset %d", 
+                 animation_current_frame, active_preset_index);
         return;
     }
     
-    const uint8_t* frame_data = animation_data.data() + frame_offset;
+    const uint8_t* frame_data = preset.data.data() + frame_offset;
     
     // Duration is last 2 bytes of frame (little-endian)
     uint16_t duration_ms = frame_data[frame_size - 2] | (frame_data[frame_size - 1] << 8);
@@ -577,10 +740,9 @@ void RgbLedComponent::playFrame() {
         // Advance to next frame
         animation_current_frame++;
         
-        if (animation_current_frame >= animation_frame_count) {
-            // Check loop parameter
-            bool should_loop = loop ? loop->getValue(0, 0) : true;
-            if (should_loop) {
+        if (animation_current_frame >= preset.frame_count) {
+            // Use the preset's loop setting (not global)
+            if (preset.loop) {
                 animation_current_frame = 0;
             } else {
                 // Animation complete, stop playback
@@ -595,30 +757,95 @@ void RgbLedComponent::playFrame() {
         
         // Recalculate frame pointer
         frame_offset = animation_current_frame * frame_size;
-        frame_data = animation_data.data() + frame_offset;
+        frame_data = preset.data.data() + frame_offset;
     }
     
     // Copy frame colors to buffer (excluding duration bytes)
     if (!takeMutex()) return;
     
-    // Use the LED count the animation was built for, not the live count.
-    // If the animation has fewer LEDs than the strip, zero the remainder
-    // so stale data from a previous animation doesn't leak through.
-    size_t anim_color_bytes = animation_led_count * 3;
+    // Use the LED count the preset was built for, not the live count.
+    // If the preset has fewer LEDs than the strip, zero the remainder
+    // so stale data from a previous preset doesn't leak through.
+    size_t anim_color_bytes = preset.led_count * 3;
     size_t buf_color_bytes  = RGB_LED_COUNT * 3;
     
     if (anim_color_bytes <= buf_color_bytes) {
         memcpy(color_buffer.data(), frame_data, anim_color_bytes);
-        // Zero LEDs beyond the animation's range
+        // Zero LEDs beyond the preset's range
         if (anim_color_bytes < buf_color_bytes) {
             memset(color_buffer.data() + anim_color_bytes, 0, buf_color_bytes - anim_color_bytes);
         }
     } else {
-        // Animation has more LEDs than the strip — truncate
+        // Preset has more LEDs than the strip — truncate
         memcpy(color_buffer.data(), frame_data, buf_color_bytes);
     }
     
     giveMutex();
+}
+
+// ============================================================================
+// Preset Management Helpers
+// ============================================================================
+
+size_t RgbLedComponent::calcTotalMemoryUsed() const {
+    size_t total = 0;
+    for (const auto& p : presets) {
+        total += p.data.size();
+    }
+    return total;
+}
+
+void RgbLedComponent::deletePresetByIndex(int index) {
+    if (index < 0 || index >= (int)presets.size()) {
+        ESP_LOGW(TAG, "Cannot delete preset %d: only %d presets exist",
+                 index, (int)presets.size());
+        return;
+    }
+    
+    if (!takeMutex()) {
+        return;
+    }
+    
+    // Free the preset's memory explicitly before erasing
+    { std::vector<uint8_t>().swap(presets[index].data); }
+    presets.erase(presets.begin() + index);
+    
+    // Adjust active preset index after the shift
+    if (presets.empty()) {
+        active_preset_index = -1;
+        if (playing) playing->setValue(0, 0, false);
+    } else if (index == active_preset_index) {
+        // Deleted the active preset — select the first one
+        active_preset_index = 0;
+        animation_current_frame = 0;
+        animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    } else if (index < active_preset_index) {
+        // Everything shifted down
+        active_preset_index--;
+    }
+    
+    giveMutex();
+    
+    ESP_LOGI(TAG, "Deleted preset %d (%d remaining, %zu bytes used)",
+             index, (int)presets.size(), calcTotalMemoryUsed());
+    
+    updateStatusParams();
+    if (activePresetParam) activePresetParam->setValue(0, 0, active_preset_index);
+}
+
+void RgbLedComponent::updateStatusParams() {
+    size_t total_mem = calcTotalMemoryUsed();
+    if (animMemoryUsed) animMemoryUsed->setValue(0, 0, (int)total_mem);
+    if (presetCountParam) presetCountParam->setValue(0, 0, (int)presets.size());
+    
+    // Show frame count of the active preset
+    if (animFrameCount) {
+        if (active_preset_index >= 0 && active_preset_index < (int16_t)presets.size()) {
+            animFrameCount->setValue(0, 0, presets[active_preset_index].frame_count);
+        } else {
+            animFrameCount->setValue(0, 0, 0);
+        }
+    }
 }
 
 void RgbLedComponent::ledTaskWrapper(void* pvParameters) {

@@ -1686,6 +1686,18 @@ code {
     margin-top: 0.5rem;
 }
 
+/* Effect generator buttons */
+.rgb-effect-btn {
+    transition: all 0.2s;
+}
+
+.rgb-effect-btn.active {
+    background: var(--accent-primary);
+    color: var(--bg-dark);
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.4);
+    transform: scale(1.05);
+}
+
 .rgb-preset-form {
     display: flex;
     flex-wrap: wrap;
@@ -1828,4 +1840,287 @@ code {
 #rgb-progress-label {
     font-size: 0.8rem;
     color: var(--text-secondary);
+}
+
+/* Device Preset Manager */
+.rgb-memory-bar {
+    margin-bottom: 0.75rem;
+}
+
+.rgb-mem-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.rgb-mem-track {
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.rgb-mem-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+/* Two-column layout */
+.rgb-two-column {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 20px;
+    min-height: 400px;
+}
+
+@media (max-width: 768px) {
+    .rgb-two-column {
+        grid-template-columns: 1fr;
+    }
+}
+
+.rgb-panel {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    padding: 16px;
+}
+
+.rgb-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.rgb-panel-header h4 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.rgb-panel-left {
+    display: flex;
+    flex-direction: column;
+}
+
+.rgb-panel-right {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.rgb-panel-right .rgb-section {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.rgb-panel-right h5 {
+    margin: 0 0 8px 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* Preset List */
+.rgb-preset-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    overflow-y: auto;
+    max-height: 500px;
+}
+
+.rgb-preset-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.rgb-preset-row:hover {
+    border-color: var(--accent-primary);
+    background: rgba(88, 166, 255, 0.08);
+}
+
+.rgb-preset-row.active {
+    border-color: var(--accent-primary);
+    background: rgba(88, 166, 255, 0.12);
+}
+
+.rgb-preset-row.playing {
+    background: rgba(39, 174, 96, 0.15);
+    border-color: #27ae60;
+}
+
+.rgb-preset-row.editing {
+    background: rgba(188, 140, 255, 0.15);
+    border-color: #bc8cff;
+    box-shadow: 0 0 0 2px rgba(188, 140, 255, 0.3);
+}
+
+.rgb-preset-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.rgb-preset-main .rgb-preset-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rgb-preset-meta {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.rgb-preset-controls {
+    display: flex;
+    gap: 4px;
+}
+
+.rgb-preset-controls .btn-sm {
+    padding: 4px 8px;
+    font-size: 0.85rem;
+}
+
+/* Editor metadata row */
+.rgb-editor-meta {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.rgb-editor-meta label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rgb-name-input {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 6px 10px;
+    width: 180px;
+}
+
+.rgb-name-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+/* Editor actions */
+.rgb-editor-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Legacy preset item styles (can be removed if not used) */
+.rgb-device-presets {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.rgb-preset-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    transition: border-color 0.2s;
+}
+
+.rgb-preset-item.active {
+    border-color: var(--accent-primary);
+    background: rgba(88, 166, 255, 0.1);
+}
+
+.rgb-preset-idx {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    min-width: 28px;
+}
+
+.rgb-preset-label {
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.rgb-preset-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.rgb-preset-actions .btn-sm {
+    padding: 4px 10px;
+    font-size: 0.8rem;
+}
+
+.rgb-preset-name {
+    flex: 1;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rgb-preset-info {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-right: 8px;
+}
+
+.rgb-upload-name-row {
+    margin-bottom: 10px;
+}
+
+.rgb-upload-name-row input {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    margin-left: 8px;
+}
+
+.rgb-upload-name-row input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.rgb-editing-indicator {
+    background: linear-gradient(135deg, #ffc10722, #ff980022);
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    color: #ffc107;
+}
+
+.rgb-editing-indicator strong {
+    color: #ffca2c;
 }

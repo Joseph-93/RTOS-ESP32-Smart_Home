@@ -1,5 +1,7 @@
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 import json
 import socket
 import logging
@@ -180,4 +182,123 @@ def message_builder(request, device_name):
         'device_name': device_name,
         'device': device_info
     })
+
+
+# =============================================================================
+# RGB Preset Metadata API
+# =============================================================================
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def rgb_presets_list(request, device_name, component_name):
+    """Get all preset metadata for a device/component"""
+    from .models import RgbPreset
+    
+    presets = RgbPreset.objects.filter(
+        device_id=device_name,
+        component_name=component_name
+    ).values('id', 'preset_name', 'effect_type', 'effect_params', 'loop', 'frame_count')
+    
+    return JsonResponse({'presets': list(presets)})
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def rgb_preset_get(request, device_name, component_name, preset_name):
+    """Get metadata for a specific preset"""
+    from .models import RgbPreset
+    
+    try:
+        preset = RgbPreset.objects.get(
+            device_id=device_name,
+            component_name=component_name,
+            preset_name=preset_name
+        )
+        return JsonResponse({
+            'id': preset.id,
+            'preset_name': preset.preset_name,
+            'effect_type': preset.effect_type,
+            'effect_params': preset.get_effect_params(),
+            'loop': preset.loop,
+            'frame_count': preset.frame_count,
+        })
+    except RgbPreset.DoesNotExist:
+        return JsonResponse({'error': 'Preset not found'}, status=404)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def rgb_preset_save(request, device_name, component_name):
+    """Save preset metadata (create or update)"""
+    from .models import RgbPreset
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    preset_name = data.get('preset_name', '').strip()
+    if not preset_name:
+        return JsonResponse({'error': 'preset_name required'}, status=400)
+    
+    preset, created = RgbPreset.objects.update_or_create(
+        device_id=device_name,
+        component_name=component_name,
+        preset_name=preset_name,
+        defaults={
+            'effect_type': data.get('effect_type', 'custom'),
+            'effect_params': data.get('effect_params', {}),
+            'loop': data.get('loop', True),
+            'frame_count': data.get('frame_count', 0),
+        }
+    )
+    
+    return JsonResponse({
+        'id': preset.id,
+        'created': created,
+        'preset_name': preset.preset_name,
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST", "DELETE"])
+def rgb_preset_delete(request, device_name, component_name, preset_name):
+    """Delete preset metadata"""
+    from .models import RgbPreset
+    
+    deleted, _ = RgbPreset.objects.filter(
+        device_id=device_name,
+        component_name=component_name,
+        preset_name=preset_name
+    ).delete()
+    
+    return JsonResponse({'deleted': deleted > 0})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def rgb_preset_rename(request, device_name, component_name, preset_name):
+    """Rename a preset (update its name in the database)"""
+    from .models import RgbPreset
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    new_name = data.get('new_name', '').strip()
+    if not new_name:
+        return JsonResponse({'error': 'new_name required'}, status=400)
+    
+    try:
+        preset = RgbPreset.objects.get(
+            device_id=device_name,
+            component_name=component_name,
+            preset_name=preset_name
+        )
+        preset.preset_name = new_name
+        preset.save()
+        return JsonResponse({'success': True, 'new_name': new_name})
+    except RgbPreset.DoesNotExist:
+        return JsonResponse({'error': 'Preset not found'}, status=404)
 

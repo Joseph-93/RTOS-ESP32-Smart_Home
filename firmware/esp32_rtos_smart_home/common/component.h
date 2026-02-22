@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <map>
 #include <functional>
 #include <memory>
 #include <climits>
@@ -518,6 +519,13 @@ public:
     
     // Memory diagnostics
     size_t getApproximateMemoryUsage() const;
+    
+    // Hub Store - key-value storage for GUI/central_hub metadata
+    // The ESP32 doesn't care about this data, it just stores it for the GUI
+    std::string hubStoreGet(const std::string& key) const;
+    void hubStoreSet(const std::string& key, const std::string& value);
+    bool hubStoreDelete(const std::string& key);
+    std::map<std::string, std::string> hubStoreGetAll() const;
 
 protected:
     static constexpr const char *TAG = "Component";
@@ -551,8 +559,23 @@ protected:
     
     StringParameter* addStringParam(const std::string &paramName, size_t rows, size_t cols, 
                                     const std::string &default_val = "", bool readOnly = false);
+    
+    // Hub Store setup (called during initialize)
+    void setupHubStore();
 
 private:
+    // Hub Store - key-value storage for GUI metadata
+    std::map<std::string, std::string> hubStore;
+    std::string hubStoreCurrentKey;
+    StringParameter* hubStoreKeyParam = nullptr;
+    StringParameter* hubStoreValueParam = nullptr;
+    BoolParameter* hubStoreDeleteParam = nullptr;
+    StringParameter* hubStoreDumpParam = nullptr;
+    
+    // Hub Store NVS persistence
+    void hubStoreLoadFromNvs();
+    void hubStoreSaveToNvs();
+    
     // NVS persistence helpers
     static void loadNextIds();
     static void saveNextIds();

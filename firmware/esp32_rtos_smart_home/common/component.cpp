@@ -110,6 +110,10 @@ Component::~Component() {
 
 void Component::initialize() {
     ESP_LOGI(TAG, "Initializing component: %s (id=%u)", name.c_str(), componentId);
+    
+    // Setup hub store BEFORE component-specific init
+    setupHubStore();
+    
     onInitialize();
     initialized = true;
     ESP_LOGI(TAG, "Component %s initialized successfully", name.c_str());
@@ -337,4 +341,198 @@ size_t Component::getApproximateMemoryUsage() const {
     xSemaphoreGive(paramsMutex);
     
     return total;
+}
+
+// ============================================================================
+// Hub Store - Key-Value Storage for GUI/Central Hub Metadata
+// ============================================================================
+
+void Component::setupHubStore() {
+    ESP_LOGI(TAG, "Setting up hub store for component '%s'", name.c_str());
+    
+    // Load any existing data from NVS
+    hubStoreLoadFromNvs();
+    
+    // Create params for key-value access
+    hubStoreKeyParam = addStringParam("hub_store_key", 1, 1, "");
+    hubStoreValueParam = addStringParam("hub_store_value", 1, 1, "");
+    hubStoreDeleteParam = addBoolParam("hub_store_delete", 1, 1, false);
+    hubStoreDumpParam = addStringParam("hub_store_dump", 1, 1, "", true);  // Read-only
+    
+    // When key changes, load the value for that key
+    hubStoreKeyParam->setOnChange([this](size_t, size_t, const std::string& key) {
+        hubStoreCurrentKey = key;
+        // Load current value for this key (empty if not found)
+        auto it = hubStore.find(key);
+        std::string val = (it != hubStore.end()) ? it->second : "";
+        hubStoreValueParam->setValue(0, 0, val);
+        ESP_LOGD(TAG, "[%s] Hub store key set to '%s', value='%s'", name.c_str(), key.c_str(), val.c_str());
+    });
+    
+    // When value is set, store it for the current key
+    hubStoreValueParam->setOnChange([this](size_t, size_t, const std::string& value) {
+        if (hubStoreCurrentKey.empty()) {
+            ESP_LOGW(TAG, "[%s] Hub store: cannot set value without key", name.c_str());
+            return;
+        }
+        if (value.empty()) {
+            // Empty value = delete key
+            hubStore.erase(hubStoreCurrentKey);
+            ESP_LOGI(TAG, "[%s] Hub store: deleted key '%s'", name.c_str(), hubStoreCurrentKey.c_str());
+        } else {
+            hubStore[hubStoreCurrentKey] = value;
+            ESP_LOGI(TAG, "[%s] Hub store: set '%s' = '%s' (%zu bytes)", 
+                     name.c_str(), hubStoreCurrentKey.c_str(), value.c_str(), value.length());
+        }
+        hubStoreSaveToNvs();
+        
+        // Update dump param
+        cJSON* dump = cJSON_CreateObject();
+        for (const auto& kv : hubStore) {
+            cJSON_AddStringToObject(dump, kv.first.c_str(), kv.second.c_str());
+        }
+        char* json = cJSON_PrintUnformatted(dump);
+        hubStoreDumpParam->setValue(0, 0, json ? json : "{}");
+        cJSON_free(json);
+        cJSON_Delete(dump);
+    });
+    
+    // Delete param - when set to true, delete current key
+    hubStoreDeleteParam->setOnChange([this](size_t, size_t, bool val) {
+        if (val && !hubStoreCurrentKey.empty()) {
+            hubStore.erase(hubStoreCurrentKey);
+            hubStoreValueParam->setValue(0, 0, "");
+            hubStoreSaveToNvs();
+            ESP_LOGI(TAG, "[%s] Hub store: deleted key '%s'", name.c_str(), hubStoreCurrentKey.c_str());
+            
+            // Update dump param
+            cJSON* dump = cJSON_CreateObject();
+            for (const auto& kv : hubStore) {
+                cJSON_AddStringToObject(dump, kv.first.c_str(), kv.second.c_str());
+            }
+            char* json = cJSON_PrintUnformatted(dump);
+            hubStoreDumpParam->setValue(0, 0, json ? json : "{}");
+            cJSON_free(json);
+            cJSON_Delete(dump);
+        }
+        // Reset to false
+        hubStoreDeleteParam->setValue(0, 0, false);
+    });
+    
+    // Initialize dump param with current contents
+    cJSON* dump = cJSON_CreateObject();
+    for (const auto& kv : hubStore) {
+        cJSON_AddStringToObject(dump, kv.first.c_str(), kv.second.c_str());
+    }
+    char* json = cJSON_PrintUnformatted(dump);
+    hubStoreDumpParam->setValue(0, 0, json ? json : "{}");
+    cJSON_free(json);
+    cJSON_Delete(dump);
+    
+    ESP_LOGI(TAG, "[%s] Hub store initialized with %zu entries", name.c_str(), hubStore.size());
+}
+
+std::string Component::hubStoreGet(const std::string& key) const {
+    auto it = hubStore.find(key);
+    return (it != hubStore.end()) ? it->second : "";
+}
+
+void Component::hubStoreSet(const std::string& key, const std::string& value) {
+    hubStore[key] = value;
+    hubStoreSaveToNvs();
+}
+
+bool Component::hubStoreDelete(const std::string& key) {
+    auto it = hubStore.find(key);
+    if (it != hubStore.end()) {
+        hubStore.erase(it);
+        hubStoreSaveToNvs();
+        return true;
+    }
+    return false;
+}
+
+std::map<std::string, std::string> Component::hubStoreGetAll() const {
+    return hubStore;
+}
+
+void Component::hubStoreLoadFromNvs() {
+    // Use component-specific namespace: "hs_<componentId>"
+    char nsName[16];
+    snprintf(nsName, sizeof(nsName), "hs_%lu", (unsigned long)componentId);
+    
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(nsName, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        // No saved data yet
+        ESP_LOGD(TAG, "[%s] No hub store data in NVS (namespace: %s)", name.c_str(), nsName);
+        return;
+    }
+    
+    // Read index (list of keys as JSON array)
+    size_t indexLen = 0;
+    err = nvs_get_str(handle, "_index", nullptr, &indexLen);
+    if (err == ESP_OK && indexLen > 0) {
+        char* indexStr = (char*)malloc(indexLen);
+        if (indexStr && nvs_get_str(handle, "_index", indexStr, &indexLen) == ESP_OK) {
+            cJSON* keys = cJSON_Parse(indexStr);
+            if (keys && cJSON_IsArray(keys)) {
+                cJSON* keyItem;
+                cJSON_ArrayForEach(keyItem, keys) {
+                    if (cJSON_IsString(keyItem)) {
+                        const char* key = keyItem->valuestring;
+                        // Read value for this key
+                        size_t valLen = 0;
+                        if (nvs_get_str(handle, key, nullptr, &valLen) == ESP_OK && valLen > 0) {
+                            char* val = (char*)malloc(valLen);
+                            if (val && nvs_get_str(handle, key, val, &valLen) == ESP_OK) {
+                                hubStore[key] = val;
+                            }
+                            free(val);
+                        }
+                    }
+                }
+            }
+            cJSON_Delete(keys);
+        }
+        free(indexStr);
+    }
+    
+    nvs_close(handle);
+    ESP_LOGI(TAG, "[%s] Loaded %zu hub store entries from NVS", name.c_str(), hubStore.size());
+}
+
+void Component::hubStoreSaveToNvs() {
+    // Use component-specific namespace: "hs_<componentId>"
+    char nsName[16];
+    snprintf(nsName, sizeof(nsName), "hs_%lu", (unsigned long)componentId);
+    
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(nsName, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "[%s] Failed to open NVS for hub store: %s", name.c_str(), esp_err_to_name(err));
+        return;
+    }
+    
+    // Build key index
+    cJSON* keys = cJSON_CreateArray();
+    for (const auto& kv : hubStore) {
+        cJSON_AddItemToArray(keys, cJSON_CreateString(kv.first.c_str()));
+        // Save value (truncate key to 15 chars for NVS key limit)
+        char nvsKey[16];
+        snprintf(nvsKey, sizeof(nvsKey), "%.15s", kv.first.c_str());
+        nvs_set_str(handle, nvsKey, kv.second.c_str());
+    }
+    
+    // Save index
+    char* indexStr = cJSON_PrintUnformatted(keys);
+    if (indexStr) {
+        nvs_set_str(handle, "_index", indexStr);
+        cJSON_free(indexStr);
+    }
+    cJSON_Delete(keys);
+    
+    nvs_commit(handle);
+    nvs_close(handle);
+    ESP_LOGD(TAG, "[%s] Saved %zu hub store entries to NVS", name.c_str(), hubStore.size());
 }
