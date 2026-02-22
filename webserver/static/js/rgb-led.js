@@ -133,13 +133,31 @@ function presetBreathing(ledCount, r, g, b, steps, cycleMs) {
     });
 }
 
-function presetChase(ledCount, r, g, b, tailLen, stepMs) {
+function presetChase(ledCount, r, g, b, tailLen, headLen, stepMs) {
     return Array.from({ length: ledCount }, (_, pos) => ({
         colors: Array.from({ length: ledCount }, (_, i) => {
-            const dist = (pos - i + ledCount) % ledCount;
-            if (dist >= tailLen) return [0, 0, 0];
-            const fade = 1 - dist / tailLen;
-            return [Math.round(r * fade), Math.round(g * fade), Math.round(b * fade)];
+            // Distance behind the root (for tail)
+            const behindDist = (pos - i + ledCount) % ledCount;
+            // Distance ahead of the root (for head)
+            const aheadDist = (i - pos + ledCount) % ledCount;
+            
+            let brightness = 0;
+            
+            // ROOT LED = full brightness (distance 0)
+            if (i === pos) {
+                brightness = 1;
+            }
+            // TAIL: LEDs behind the root, fading out (dist 1 to tailLen)
+            else if (tailLen > 0 && behindDist > 0 && behindDist <= tailLen) {
+                brightness = 1 - behindDist / (tailLen + 1);
+            }
+            // HEAD: LEDs ahead of the root, fading in (dist 1 to headLen)
+            else if (headLen > 0 && aheadDist > 0 && aheadDist <= headLen) {
+                brightness = 1 - aheadDist / (headLen + 1);
+            }
+            
+            if (brightness <= 0) return [0, 0, 0];
+            return [Math.round(r * brightness), Math.round(g * brightness), Math.round(b * brightness)];
         }),
         duration_ms: stepMs
     }));
@@ -854,7 +872,8 @@ class RgbLedAnimationBuilder {
                 <button class="btn btn-primary btn-sm" onclick="rgbBuilder._applyBreathing()">Apply</button>`,
             chase: `
                 ${colorField('rp-color', 'Color:')}
-                <label>Tail: <input type="number" id="rp-tail" value="${savedParams.tail || 5}" min="1" max="30" style="width:60px"></label>
+                <label>Head: <input type="number" id="rp-head" value="${savedParams.head ?? 0}" min="0" max="30" style="width:60px" title="Leading fade-in length"></label>
+                <label>Tail: <input type="number" id="rp-tail" value="${savedParams.tail ?? 5}" min="0" max="30" style="width:60px" title="Trailing fade-out length"></label>
                 <label>ms/frame: <input type="number" id="rp-ms" value="${savedParams.step_ms || 50}" min="16" max="1000" style="width:80px"></label>
                 <button class="btn btn-primary btn-sm" onclick="rgbBuilder._applyChase()">Apply</button>`,
         };
@@ -873,7 +892,12 @@ class RgbLedAnimationBuilder {
 
     _val(id, fallback) {
         const el = document.getElementById(id);
-        return el ? (el.type === 'number' ? (parseInt(el.value) || fallback) : el.value) : fallback;
+        if (!el) return fallback;
+        if (el.type === 'number') {
+            const parsed = parseInt(el.value);
+            return isNaN(parsed) ? fallback : parsed;
+        }
+        return el.value;
     }
 
     _applyOff() {
@@ -917,12 +941,13 @@ class RgbLedAnimationBuilder {
     
     _applyChase() {
         const color = this._val('rp-color', '#ff0000');
+        const head = this._val('rp-head', 0);
         const tail = this._val('rp-tail', 5);
         const step_ms = this._val('rp-ms', 50);
         const [r,g,b] = hexToRgb(color);
         this.editingEffectType = 'chase';
-        this.editingEffectParams = { color, tail, step_ms };
-        this.frames = presetChase(this.ledCount, r, g, b, tail, step_ms);
+        this.editingEffectParams = { color, head, tail, step_ms };
+        this.frames = presetChase(this.ledCount, r, g, b, tail, head, step_ms);
         this._renderFrames();
     }
 
