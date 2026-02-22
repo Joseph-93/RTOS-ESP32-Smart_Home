@@ -253,10 +253,16 @@ void RgbLedComponent::onInitialize() {
     // Allocate color buffer (always 30 LEDs)
     color_buffer.resize(RGB_LED_COUNT * 3, 0);
     
+    // Allocate transition buffers
+    transition_from_buffer.resize(RGB_LED_COUNT * 3, 0);
+    transition_to_buffer.resize(RGB_LED_COUNT * 3, 0);
+    
     // Create parameters
     brightness = addIntParam("brightness", 1, 1, 0, 100, 100);
     playing = addBoolParam("playing", 1, 1, false);  // false=off, true=play animation
     loop = addIntParam("loop", 1, 1, -1, 1000, -1);  // -1=infinite, 0=play once, N=loop N times
+    transitionMs = addIntParam("transition_ms", 1, 1, 0, 5000, 200);  // Slick dick transition duration
+    transitionEasing = addIntParam("transition_easing", 1, 1, 0, 1, 0);  // 0=crossfade (merge), 1=through black
     
     // Animation status parameters (read-only)
     animFrameCount = addIntParam("anim_frame_count", 1, 1, 0, 65535, 0, true);  // Read-only
@@ -331,20 +337,17 @@ void RgbLedComponent::onInitialize() {
         activePresetParam->setOnChange([this](size_t row, size_t col, int val) {
             auto it = presets.find((int16_t)val);
             if (it != presets.end()) {
-                active_preset_index = (int16_t)val;
-                animation_current_frame = 0;
-                animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
-                animation_loops_remaining = it->second.loop;  // Reset loop counter
+                // Use slick dick transition
+                beginTransition((int16_t)val);
                 // Auto-start playback when selecting a preset
                 if (playing) playing->setValue(0, 0, true);
                 updateStatusParams();
-                ESP_LOGI(TAG, "Active preset changed to %d, auto-starting playback", val);
+                ESP_LOGI(TAG, "Active preset changed to %d, transitioning", val);
             } else if (val == -1) {
-                active_preset_index = -1;
-                // Stop playback when clearing preset
-                if (playing) playing->setValue(0, 0, false);
+                // Transition to off
+                beginTransition(-1);
                 updateStatusParams();
-                ESP_LOGI(TAG, "Active preset cleared, stopping playback");
+                ESP_LOGI(TAG, "Active preset cleared, transitioning to off");
             } else {
                 ESP_LOGW(TAG, "Invalid preset ID: %d (not found)", val);
             }
@@ -361,25 +364,17 @@ void RgbLedComponent::onInitialize() {
             
             // If resolved preset is different from current, switch to it
             if (resolved != active_preset_index) {
-                auto it = presets.find(resolved);
-                if (it != presets.end()) {
-                    // Start playing the new highest priority preset
-                    active_preset_index = resolved;
-                    animation_current_frame = 0;
-                    animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
-                    animation_loops_remaining = it->second.loop;
+                // Use slick dick transition for priority changes too
+                beginTransition(resolved);
+                if (resolved >= 0) {
                     if (activePresetParam) activePresetParam->setValue(0, 0, resolved);
                     if (playing) playing->setValue(0, 0, true);
-                    updateStatusParams();
-                    ESP_LOGI(TAG, "Priority resolved to preset %d, starting playback", resolved);
-                } else if (resolved < 0) {
-                    // No valid preset in priority queue
-                    active_preset_index = -1;
+                    ESP_LOGI(TAG, "Priority resolved to preset %d, transitioning", resolved);
+                } else {
                     if (activePresetParam) activePresetParam->setValue(0, 0, -1);
-                    if (playing) playing->setValue(0, 0, false);
-                    updateStatusParams();
-                    ESP_LOGI(TAG, "Priority queue empty, stopping playback");
+                    ESP_LOGI(TAG, "Priority queue empty, transitioning to off");
                 }
+                updateStatusParams();
             }
         });
     }
@@ -834,21 +829,14 @@ void RgbLedComponent::playFrame() {
                 // Resolve next preset from priority system
                 int16_t next_preset = resolvePresetPriority();
                 
-                auto next_it = presets.find(next_preset);
-                if (next_it != presets.end()) {
-                    // Switch to next priority preset
-                    active_preset_index = next_preset;
-                    animation_current_frame = 0;
-                    animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
-                    animation_loops_remaining = next_it->second.loop;
+                // Use slick dick transition to next preset (or to off)
+                beginTransition(next_preset);
+                if (next_preset >= 0) {
                     if (activePresetParam) activePresetParam->setValue(0, 0, next_preset);
-                    ESP_LOGI(TAG, "Preset %d complete, switching to priority preset %d", finished_preset, next_preset);
+                    ESP_LOGI(TAG, "Preset %d complete, transitioning to priority preset %d", finished_preset, next_preset);
                 } else {
-                    // No more presets in priority queue, stop playback
-                    active_preset_index = -1;
                     if (activePresetParam) activePresetParam->setValue(0, 0, -1);
-                    if (playing) playing->setValue(0, 0, false);
-                    ESP_LOGI(TAG, "Preset %d complete, no more in priority queue - stopping", finished_preset);
+                    ESP_LOGI(TAG, "Preset %d complete, transitioning to off", finished_preset);
                 }
                 return;
             }
@@ -966,6 +954,131 @@ void RgbLedComponent::updateStatusParams() {
     }
 }
 
+void RgbLedComponent::beginTransition(int16_t new_preset_id) {
+    // Slick dick mode: capture current state and set up smooth transition
+    
+    int trans_ms = transitionMs ? transitionMs->getValue(0, 0) : 0;
+    
+    // If transition disabled, just switch immediately
+    if (trans_ms <= 0) {
+        if (new_preset_id >= 0) {
+            auto it = presets.find(new_preset_id);
+            if (it != presets.end()) {
+                active_preset_index = new_preset_id;
+                animation_current_frame = 0;
+                animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+                animation_loops_remaining = it->second.loop;
+            }
+        } else {
+            active_preset_index = -1;
+            if (playing) playing->setValue(0, 0, false);
+        }
+        return;
+    }
+    
+    // Capture current LED state as "from" buffer
+    if (takeMutex()) {
+        memcpy(transition_from_buffer.data(), color_buffer.data(), RGB_LED_COUNT * 3);
+        giveMutex();
+    }
+    
+    // Build "to" buffer: first frame of new preset, or black for off
+    memset(transition_to_buffer.data(), 0, RGB_LED_COUNT * 3);
+    
+    if (new_preset_id >= 0) {
+        auto it = presets.find(new_preset_id);
+        if (it != presets.end()) {
+            const AnimationPreset& preset = it->second;
+            if (preset.frame_count > 0 && !preset.data.empty()) {
+                // Copy first frame's color data (not duration bytes)
+                size_t color_bytes = std::min((size_t)(preset.led_count * 3), (size_t)(RGB_LED_COUNT * 3));
+                memcpy(transition_to_buffer.data(), preset.data.data(), color_bytes);
+            }
+            // Set up the new preset (will start after transition)
+            active_preset_index = new_preset_id;
+            animation_current_frame = 0;
+            animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000) + trans_ms;
+            animation_loops_remaining = preset.loop;
+        }
+    } else {
+        // Transitioning to off - target is already black (zeroed above)
+        active_preset_index = -1;
+    }
+    
+    // Start transition
+    transitioning = true;
+    transition_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    
+    ESP_LOGI(TAG, "Beginning %dms transition to preset %d", trans_ms, new_preset_id);
+}
+
+bool RgbLedComponent::processTransition() {
+    if (!transitioning) return false;
+    
+    int trans_ms = transitionMs ? transitionMs->getValue(0, 0) : 0;
+    if (trans_ms <= 0) {
+        transitioning = false;
+        return false;
+    }
+    
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    uint32_t elapsed = now_ms - transition_start_ms;
+    
+    if (elapsed >= (uint32_t)trans_ms) {
+        // Transition complete
+        transitioning = false;
+        
+        // If we transitioned to off, stop playback
+        if (active_preset_index < 0) {
+            if (playing) playing->setValue(0, 0, false);
+        }
+        
+        return false;
+    }
+    
+    // Calculate progress (0.0 to 1.0)
+    float t = (float)elapsed / (float)trans_ms;
+    
+    // Transition mode: 0 = crossfade (merge colors), 1 = through black (dip to dark)
+    int mode = transitionEasing ? transitionEasing->getValue(0, 0) : 0;
+    
+    if (!takeMutex()) return true;
+    
+    if (mode == 1) {
+        // Through black: fade out first half, fade in second half
+        // t=0.0: 100% from, 0% to
+        // t=0.5: 0% from, 0% to (black)
+        // t=1.0: 0% from, 100% to
+        float from_factor, to_factor;
+        if (t < 0.5f) {
+            // First half: fade out from, to stays at 0
+            from_factor = 1.0f - (t * 2.0f);  // 1.0 → 0.0
+            to_factor = 0.0f;
+        } else {
+            // Second half: from at 0, fade in to
+            from_factor = 0.0f;
+            to_factor = (t - 0.5f) * 2.0f;  // 0.0 → 1.0
+        }
+        
+        for (size_t i = 0; i < RGB_LED_COUNT * 3; i++) {
+            uint8_t from_val = transition_from_buffer[i];
+            uint8_t to_val = transition_to_buffer[i];
+            color_buffer[i] = (uint8_t)(from_val * from_factor + to_val * to_factor);
+        }
+    } else {
+        // Crossfade: direct blend between from and to (colors merge)
+        for (size_t i = 0; i < RGB_LED_COUNT * 3; i++) {
+            uint8_t from_val = transition_from_buffer[i];
+            uint8_t to_val = transition_to_buffer[i];
+            color_buffer[i] = (uint8_t)(from_val + t * (to_val - from_val));
+        }
+    }
+    
+    giveMutex();
+    
+    return true;  // Still transitioning
+}
+
 void RgbLedComponent::ledTaskWrapper(void* pvParameters) {
     RgbLedComponent* self = static_cast<RgbLedComponent*>(pvParameters);
     self->ledTask();
@@ -1000,6 +1113,17 @@ void RgbLedComponent::ledTask() {
     while (!stop_requested.load()) {
         // Check playback state
         bool is_playing = playing ? playing->getValue(0, 0) : false;
+        
+        // Handle slick dick transitions first
+        if (transitioning) {
+            bool still_transitioning = processTransition();
+            if (still_transitioning) {
+                showBlocking();
+                vTaskDelay(pdMS_TO_TICKS(update_interval_ms));
+                continue;
+            }
+            // Transition complete - fall through to normal playback or off
+        }
         
         if (!is_playing) {
             // Not playing - turn LEDs off (only once when transitioning to off)

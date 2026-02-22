@@ -392,17 +392,19 @@ function presetRainbow(ledCount, steps, stepMs, brightness = 100, wavelength = n
  * @param {number} brightness - Max brightness 0-100 (default 100)
  * @param {number} curve - Curve exponent for non-linear brightness (default 1.0)
  *                         <1 = fast rise/slow fall (sqrt-like), >1 = slow rise/fast fall (squared-like)
+ * @param {number} minBrightness - Min brightness 0-100 (default 0), baseline that animation never goes below
  */
-function presetBreathing(ledCount, r, g, b, steps, cycleMs, brightness = 100, curve = 1.0) {
+function presetBreathing(ledCount, r, g, b, steps, cycleMs, brightness = 100, curve = 1.0, minBrightness = 0) {
     const stepMs = Math.round(cycleMs / steps);
     const maxBright = Math.max(0, Math.min(100, brightness)) / 100;
+    const minBright = Math.max(0, Math.min(100, minBrightness)) / 100;
     return Array.from({ length: steps }, (_, step) => {
         // Base sinusoidal brightness (0 to 1)
         let bright = (Math.sin((step / steps) * 2 * Math.PI - Math.PI / 2) + 1) / 2;
         // Apply curve: bright^curve changes the shape
         bright = Math.pow(bright, curve);
-        // Scale to max brightness
-        bright *= maxBright;
+        // Scale between min and max brightness
+        bright = minBright + bright * (maxBright - minBright);
         const color = [Math.round(r * bright), Math.round(g * bright), Math.round(b * bright)];
         return { colors: Array(ledCount).fill(color), duration_ms: stepMs };
     });
@@ -419,37 +421,105 @@ function presetBreathing(ledCount, r, g, b, steps, cycleMs, brightness = 100, cu
  * @param {number} curve - Curve exponent for tail/head fade (default 1.0)
  *                         <1 = gradual start, steep end (sqrt-like)
  *                         >1 = steep start, gradual end (squared-like)
+ * @param {number} minBrightness - Min brightness 0-100 (default 0), baseline for unlit LEDs
  */
-function presetChase(ledCount, r, g, b, tailLen, headLen, stepMs, brightness = 100, curve = 1.0) {
+function presetChase(ledCount, r, g, b, tailLen, headLen, stepMs, brightness = 100, curve = 1.0, direction = 1, bounce = false, loop = -1, minBrightness = 0) {
     const maxBright = Math.max(0, Math.min(100, brightness)) / 100;
-    return Array.from({ length: ledCount }, (_, pos) => ({
-        colors: Array.from({ length: ledCount }, (_, i) => {
-            // Distance behind the root (for tail)
-            const behindDist = (pos - i + ledCount) % ledCount;
-            // Distance ahead of the root (for head)
-            const aheadDist = (i - pos + ledCount) % ledCount;
-            
+    const minBright = Math.max(0, Math.min(100, minBrightness)) / 100;
+    
+    // If loop=1 (play once), add lead-in (head enters) and lead-out (tail exits)
+    // If loop=-1 or >1, just cycle through the strip positions for seamless looping
+    const cyclic = (loop !== 1);
+    
+    // For loop=1: we need extra frames so head enters and tail exits fully
+    // For cyclic: just use the base cycle length
+    let numFrames;
+    let frameOffset = 0;  // How many frames before root enters the strip
+    
+    if (bounce && ledCount > 1) {
+        numFrames = 2 * (ledCount - 1);
+        if (!cyclic) {
+            // For bounce with loop=1, add lead-in and lead-out
+            frameOffset = headLen;
+            numFrames += headLen + tailLen;
+        }
+    } else {
+        numFrames = ledCount;
+        if (!cyclic) {
+            // For wrap with loop=1, add lead-in and lead-out
+            frameOffset = headLen;
+            numFrames += headLen + tailLen;
+        }
+    }
+    
+    // Build position sequence - this is where the root "would be" at each logical step
+    // For loop=1, root starts off-screen and ends off-screen
+    const buildPos = (logicalIdx) => {
+        // logicalIdx is the "internal" step, where 0 = root at first LED
+        let pos;
+        if (bounce && ledCount > 1) {
+            const cycleLen = 2 * (ledCount - 1);
+            const wrapped = ((logicalIdx % cycleLen) + cycleLen) % cycleLen;
+            if (wrapped < ledCount) {
+                pos = wrapped;
+            } else {
+                pos = 2 * (ledCount - 1) - wrapped;
+            }
+        } else {
+            pos = ((logicalIdx % ledCount) + ledCount) % ledCount;
+        }
+        if (direction < 0) pos = ledCount - 1 - pos;
+        return pos;
+    };
+    
+    // Helper to get position at any frame index
+    // For loop=1: frame 0 has root at position buildPos(-frameOffset), i.e., off-screen
+    const getPos = (frameIdx, allowCyclic) => {
+        const logicalIdx = frameIdx - frameOffset;
+        
+        if (!cyclic) {
+            // For loop=1: positions outside the valid range are "off-screen"
+            // Root enters from off-screen (negative logical idx) and exits off-screen
+            const baseCycleLen = (bounce && ledCount > 1) ? 2 * (ledCount - 1) : ledCount;
+            if (logicalIdx < 0 || logicalIdx >= baseCycleLen) {
+                return -1;  // Off-screen, won't match any LED
+            }
+        }
+        
+        return buildPos(logicalIdx);
+    };
+    
+    return Array.from({ length: numFrames }, (_, frameIdx) => ({
+        colors: Array.from({ length: ledCount }, (_, ledIdx) => {
             let bright = 0;
             
-            // ROOT LED = full brightness (distance 0)
-            if (i === pos) {
-                bright = 1;
-            }
-            // TAIL: LEDs behind the root, fading out (dist 1 to tailLen)
-            else if (tailLen > 0 && behindDist > 0 && behindDist <= tailLen) {
-                // Linear fade from 1 (close) to 0 (far)
-                const linearFade = 1 - behindDist / (tailLen + 1);
-                // Apply curve
-                bright = Math.pow(linearFade, curve);
-            }
-            // HEAD: LEDs ahead of the root, fading in (dist 1 to headLen)
-            else if (headLen > 0 && aheadDist > 0 && aheadDist <= headLen) {
-                const linearFade = 1 - aheadDist / (headLen + 1);
-                bright = Math.pow(linearFade, curve);
+            // Root (current position)
+            if (getPos(frameIdx, cyclic) === ledIdx) {
+                bright = Math.max(bright, 1);
             }
             
-            // Apply max brightness
-            bright *= maxBright;
+            // Tail: look back at history
+            // Only use cyclic wrapping if loop != 1
+            for (let k = 1; k <= tailLen; k++) {
+                if (getPos(frameIdx - k, cyclic) === ledIdx) {
+                    const linearFade = 1 - k / (tailLen + 1);
+                    const tailBright = Math.pow(linearFade, curve);
+                    bright = Math.max(bright, tailBright);
+                }
+            }
+            
+            // Head: look ahead at future positions
+            // Only use cyclic wrapping if loop != 1
+            for (let k = 1; k <= headLen; k++) {
+                if (getPos(frameIdx + k, cyclic) === ledIdx) {
+                    const linearFade = 1 - k / (headLen + 1);
+                    const headBright = Math.pow(linearFade, curve);
+                    bright = Math.max(bright, headBright);
+                }
+            }
+            
+            // Scale between min and max brightness
+            bright = minBright + bright * (maxBright - minBright);
             
             if (bright <= 0) return [0, 0, 0];
             return [Math.round(r * bright), Math.round(g * bright), Math.round(b * bright)];
@@ -562,9 +632,44 @@ class RgbLedAnimationBuilder {
         this.editingEffectParams = {};   // Effect parameters for editing
         this.editorOpen = false;         // Is the editor panel visible?
         
+        // Loading state
+        this.isLoading = false;
+        
         this._render();
         this._subscribeToParams();
         this._startPolling();  // Poll active_preset to catch when playback ends
+    }
+    
+    // Show loading spinner on preset list
+    _showPresetListLoading(text = 'Loading...') {
+        const container = document.getElementById('rgb-preset-list');
+        if (container) {
+            container.innerHTML = `<div class="loading">${text}</div>`;
+        }
+    }
+    
+    // Show loading overlay on the whole builder
+    _showBuilderLoading(text = 'Loading...') {
+        this.isLoading = true;
+        let overlay = document.getElementById('rgb-builder-loading');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'rgb-builder-loading';
+            overlay.className = 'section-loading';
+            this.container.style.position = 'relative';
+            this.container.appendChild(overlay);
+        }
+        overlay.innerHTML = `<div class="spinner spinner-lg"></div><div class="loading-text">${text}</div>`;
+        overlay.classList.remove('hidden');
+    }
+    
+    // Hide builder loading overlay
+    _hideBuilderLoading() {
+        this.isLoading = false;
+        const overlay = document.getElementById('rgb-builder-loading');
+        if (overlay) {
+            overlay.classList.add('hidden');
+        }
     }
     
     // Poll active_preset and priority tiers every 500ms to catch changes
@@ -709,6 +814,9 @@ class RgbLedAnimationBuilder {
     
     async _refreshDeviceState() {
         if (!this.ws?.connected) return;
+        
+        this._showPresetListLoading('Loading presets...');
+        
         try {
             // Fetch each param value individually
             const getValue = async (param) => {
@@ -765,7 +873,10 @@ class RgbLedAnimationBuilder {
             
             this._renderPresetList();
             this._renderMemoryBar();
-        } catch (e) { console.warn('[RGB] refresh state:', e); }
+        } catch (e) { 
+            console.warn('[RGB] refresh state:', e); 
+            this._renderPresetList(); // Render even on error to clear loading state
+        }
     }
     
     // Called when param updates arrive via WebSocket
@@ -1096,7 +1207,8 @@ class RgbLedAnimationBuilder {
             return;
         }
         
-        _rgbNotify(`Downloading "${name}"...`, 'info');
+        // Show loading overlay on editor panel
+        this._showBuilderLoading(`Downloading "${name}"...`);
         
         try {
             // CRITICAL: Query chunk size from ESP32 BEFORE downloading
@@ -1124,6 +1236,7 @@ class RgbLedAnimationBuilder {
             // Check if user switched to a different preset while we were waiting
             if (this._downloadId !== downloadId) {
                 console.log('[RGB] Download cancelled - user switched presets');
+                this._hideBuilderLoading();
                 return;
             }
             
@@ -1136,6 +1249,7 @@ class RgbLedAnimationBuilder {
                 // Check for cancellation
                 if (this._downloadId !== downloadId) {
                     console.log('[RGB] Download cancelled mid-stream');
+                    this._hideBuilderLoading();
                     return;
                 }
                 
@@ -1155,6 +1269,7 @@ class RgbLedAnimationBuilder {
             // Final check before populating frames
             if (this._downloadId !== downloadId) {
                 console.log('[RGB] Download completed but user switched presets - discarding');
+                this._hideBuilderLoading();
                 return;
             }
             
@@ -1193,10 +1308,12 @@ class RgbLedAnimationBuilder {
             }
             
             this._renderFrames();
+            this._hideBuilderLoading();
             _rgbNotify(`Loaded "${name}" (${this.frames.length} frames)`, 'success');
             
         } catch (e) {
             console.error('[RGB] Download failed:', e);
+            this._hideBuilderLoading();
             _rgbNotify('Download failed: ' + e.message, 'error');
         }
     }
@@ -1240,7 +1357,8 @@ class RgbLedAnimationBuilder {
                 ${colorField('rp-color', 'Color:')}
                 <label>Frames: <input type="number" id="rp-steps" value="${savedParams.steps || 60}" min="8" style="width:70px"></label>
                 <label>Cycle (ms): <input type="number" id="rp-cycle" value="${savedParams.cycle_ms || 3000}" min="200" style="width:90px"></label>
-                <label title="Maximum brightness percentage">Bright%: <input type="number" id="rp-brightness" value="${savedParams.brightness ?? 100}" min="1" max="100" style="width:60px"></label>
+                <label title="Minimum brightness percentage (baseline)">Min%: <input type="number" id="rp-min-brightness" value="${savedParams.minBrightness ?? 0}" min="0" max="100" style="width:60px"></label>
+                <label title="Maximum brightness percentage">Max%: <input type="number" id="rp-brightness" value="${savedParams.brightness ?? 100}" min="1" max="100" style="width:60px"></label>
                 <label title="Exponent (power). 1=linear, 2=x², 0.5=√x. Higher=slower rise then fast peak, lower=fast rise then slow peak.">Curve (^n): <input type="number" id="rp-curve" value="${savedParams.curve ?? 1}" min="0.1" step="0.1" style="width:60px"></label>
                 <button class="btn btn-primary btn-sm" onclick="rgbBuilder._applyBreathing()">Apply</button>`,
             chase: `
@@ -1248,8 +1366,16 @@ class RgbLedAnimationBuilder {
                 <label title="Leading fade-in length">Head: <input type="number" id="rp-head" value="${savedParams.head ?? 0}" min="0" style="width:60px"></label>
                 <label title="Trailing fade-out length">Tail: <input type="number" id="rp-tail" value="${savedParams.tail ?? 5}" min="0" style="width:60px"></label>
                 <label>ms/frame: <input type="number" id="rp-ms" value="${savedParams.step_ms || 50}" min="16" style="width:80px"></label>
-                <label title="Maximum brightness percentage">Bright%: <input type="number" id="rp-brightness" value="${savedParams.brightness ?? 100}" min="1" max="100" style="width:60px"></label>
+                <label title="Minimum brightness percentage (baseline for unlit LEDs)">Min%: <input type="number" id="rp-min-brightness" value="${savedParams.minBrightness ?? 0}" min="0" max="100" style="width:60px"></label>
+                <label title="Maximum brightness percentage">Max%: <input type="number" id="rp-brightness" value="${savedParams.brightness ?? 100}" min="1" max="100" style="width:60px"></label>
                 <label title="Exponent (power) for tail/head fade. 1=linear, 2=concentrated near root, 0.5=spread out more.">Curve (^n): <input type="number" id="rp-curve" value="${savedParams.curve ?? 1}" min="0.1" step="0.1" style="width:60px"></label>
+                <label title="Direction of chase movement">Dir:
+                    <select id="rp-direction" style="padding:4px">
+                        <option value="1" ${(savedParams.direction ?? 1) === 1 ? 'selected' : ''}>→ Forward</option>
+                        <option value="-1" ${(savedParams.direction ?? 1) === -1 ? 'selected' : ''}>← Backward</option>
+                    </select>
+                </label>
+                <label title="Bounce back at edges instead of wrapping around"><input type="checkbox" id="rp-bounce" ${savedParams.bounce ? 'checked' : ''}> Bounce</label>
                 <button class="btn btn-primary btn-sm" onclick="rgbBuilder._applyChase()">Apply</button>`,
         };
         opts.innerHTML = `<div class="rgb-preset-form">${forms[type] || ''}</div>`;
@@ -1312,11 +1438,12 @@ class RgbLedAnimationBuilder {
         const steps = this._val('rp-steps', 60);
         const cycle_ms = this._val('rp-cycle', 3000);
         const brightness = this._val('rp-brightness', 100);
+        const minBrightness = this._val('rp-min-brightness', 0);
         const curve = this._val('rp-curve', 1);
         const [r,g,b] = hexToRgb(color);
         this.editingEffectType = 'breathing';
-        this.editingEffectParams = { color, steps, cycle_ms, brightness, curve };
-        this.frames = presetBreathing(this.ledCount, r, g, b, steps, cycle_ms, brightness, curve);
+        this.editingEffectParams = { color, steps, cycle_ms, brightness, minBrightness, curve };
+        this.frames = presetBreathing(this.ledCount, r, g, b, steps, cycle_ms, brightness, curve, minBrightness);
         this._renderFrames();
     }
     
@@ -1326,11 +1453,14 @@ class RgbLedAnimationBuilder {
         const tail = this._val('rp-tail', 5);
         const step_ms = this._val('rp-ms', 50);
         const brightness = this._val('rp-brightness', 100);
+        const minBrightness = this._val('rp-min-brightness', 0);
         const curve = this._val('rp-curve', 1);
+        const direction = parseInt(document.getElementById('rp-direction')?.value || '1', 10);
+        const bounce = document.getElementById('rp-bounce')?.checked || false;
         const [r,g,b] = hexToRgb(color);
         this.editingEffectType = 'chase';
-        this.editingEffectParams = { color, head, tail, step_ms, brightness, curve };
-        this.frames = presetChase(this.ledCount, r, g, b, tail, head, step_ms, brightness, curve);
+        this.editingEffectParams = { color, head, tail, step_ms, brightness, minBrightness, curve, direction, bounce };
+        this.frames = presetChase(this.ledCount, r, g, b, tail, head, step_ms, brightness, curve, direction, bounce, this.editingLoop, minBrightness);
         this._renderFrames();
     }
 

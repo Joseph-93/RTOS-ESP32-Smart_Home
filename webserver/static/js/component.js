@@ -13,6 +13,23 @@ let currentPage = 1;
 let pageSize = 25;
 let totalPages = 1;
 
+// Loading helpers
+function showPageLoading(text = 'Loading...') {
+    const overlay = document.getElementById('page-loading');
+    if (overlay) {
+        const textEl = overlay.querySelector('.loading-text');
+        if (textEl) textEl.textContent = text;
+        overlay.classList.remove('hidden');
+    }
+}
+
+function hidePageLoading() {
+    const overlay = document.getElementById('page-loading');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
+}
+
 function showError(message, details = null) {
     const banner = document.getElementById('error-banner');
     if (banner) {
@@ -34,6 +51,7 @@ function hideError() {
 async function initComponent(deviceName, componentName) {
     console.log('[JS] initComponent called for:', deviceName, componentName);
     hideError();
+    showPageLoading(`Connecting to ${deviceName}...`);
     
     currentDevice = deviceName;
     currentComponent = componentName;
@@ -51,12 +69,15 @@ async function initComponent(deviceName, componentName) {
     } catch (error) {
         console.error('[JS] WebSocket connection failed:', error);
         showError('Failed to connect to ESP32 WebSocket', error.message);
+        hidePageLoading();
         return;
     }
     
+    showPageLoading(`Loading ${componentName}...`);
     console.log('[JS] Loading parameters...');
     await loadParameters(deviceName, componentName);
     console.log('[JS] Done loading component');
+    hidePageLoading();
 }
 
 // Cleanup subscriptions when leaving page

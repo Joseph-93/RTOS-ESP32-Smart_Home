@@ -103,6 +103,8 @@ private:
     IntParameter* brightness;         // Global brightness (0-100)
     BoolParameter* playing;           // true=play animation, false=off
     IntParameter* loop;               // Loop count: -1=infinite, 1=play once, N=play N times
+    IntParameter* transitionMs;       // Transition duration in ms (0 = instant, slick dick mode)
+    IntParameter* transitionEasing;   // 0 = crossfade (merge colors), 1 = through black (dip to dark)
     
     // ESP-IDF led_strip handle (RMT backend)
     led_strip_handle_t led_strip;
@@ -131,6 +133,12 @@ private:
     uint16_t animation_current_frame{0};              // Current frame in active preset
     uint32_t animation_frame_start_ms{0};             // When current frame started
     int16_t animation_loops_remaining{-1};            // Loops left (-1=infinite)
+    
+    // Transition state (slick dick mode)
+    bool transitioning{false};                        // True during smooth transition
+    uint32_t transition_start_ms{0};                  // When transition started
+    std::vector<uint8_t> transition_from_buffer;     // LED state at start of transition
+    std::vector<uint8_t> transition_to_buffer;       // Target LED state (first frame of new preset, or black)
     
     // Upload staging area (builds a new preset before committing to pool)
     std::vector<uint8_t> upload_staging_data;
@@ -191,6 +199,14 @@ private:
     
     // Turn all LEDs off
     void ledsOff();
+    
+    // Begin a smooth transition to a new preset (or to off)
+    // Captures current LED state and sets up interpolation
+    void beginTransition(int16_t new_preset_id);
+    
+    // Process transition frame (interpolate between from/to buffers)
+    // Returns true if still transitioning, false when complete
+    bool processTransition();
     
     // Frame size for new uploads (uses hardware LED count)
     size_t getFrameSize() const { return (RGB_LED_COUNT * 3) + 2; }

@@ -12,6 +12,132 @@
     --danger: #f85149;
 }
 
+/* ============================================================================
+   Loading Spinner System
+   ============================================================================ */
+
+/* Keyframe animation for spinning */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Base spinner - can be used inline */
+.spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.spinner.spinner-sm {
+    width: 14px;
+    height: 14px;
+    border-width: 2px;
+}
+
+.spinner.spinner-lg {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+}
+
+.spinner.spinner-xl {
+    width: 48px;
+    height: 48px;
+    border-width: 4px;
+}
+
+/* Loading container with centered spinner and text */
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
+
+.loading-container .spinner {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+}
+
+.loading-container .loading-text {
+    font-size: 0.95rem;
+}
+
+/* Full-page loading overlay */
+.page-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(13, 17, 23, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    z-index: 10000;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.page-loading-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.page-loading-overlay .spinner {
+    width: 48px;
+    height: 48px;
+    border-width: 4px;
+}
+
+.page-loading-overlay .loading-text {
+    color: var(--text-secondary);
+    font-size: 1rem;
+}
+
+/* Section/panel loading overlay */
+.section-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(22, 27, 34, 0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    z-index: 100;
+    border-radius: inherit;
+}
+
+.section-loading.hidden {
+    display: none;
+}
+
+/* Inline loading state (replaces content) */
+.loading-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    padding: 1rem;
+}
+
+/* ============================================================================ */
+
 * {
     margin: 0;
     padding: 0;
@@ -445,9 +571,25 @@ header h1 {
 }
 
 .loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
     text-align: center;
     padding: 2rem;
     color: var(--text-secondary);
+}
+
+.loading::before {
+    content: '';
+    display: block;
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
 }
 
 .actions-group {
@@ -1216,11 +1358,7 @@ code {
     padding: 1rem;
 }
 
-.loading {
-    color: var(--text-secondary);
-    text-align: center;
-    padding: 1rem;
-}
+/* Note: .loading class defined earlier with spinner */
 
 /* Responsive */
 @media (max-width: 768px) {

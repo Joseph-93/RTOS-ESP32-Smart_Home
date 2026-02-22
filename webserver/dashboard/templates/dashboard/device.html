@@ -11,6 +11,12 @@
     <script src="{% static 'js/debug.js' %}"></script>
 </head>
 <body>
+    <!-- Page Loading Overlay -->
+    <div id="page-loading" class="page-loading-overlay">
+        <div class="spinner spinner-lg"></div>
+        <div class="loading-text">Connecting...</div>
+    </div>
+    
     <div class="container">
         <header>
             <div class="breadcrumb">
@@ -37,10 +43,30 @@
     <script>
         const esp32Host = '{{ device.host }}';
         
+        // Loading helpers
+        function showPageLoading(text = 'Loading...') {
+            const overlay = document.getElementById('page-loading');
+            if (overlay) {
+                const textEl = overlay.querySelector('.loading-text');
+                if (textEl) textEl.textContent = text;
+                overlay.classList.remove('hidden');
+            }
+        }
+        
+        function hidePageLoading() {
+            const overlay = document.getElementById('page-loading');
+            if (overlay) {
+                overlay.classList.add('hidden');
+            }
+        }
+        
         // Initialize WebSocket and get components
         const deviceWs = new ESP32WebSocket(esp32Host);
         
+        showPageLoading('Connecting to {{ device_name }}...');
+        
         deviceWs.connect().then(async () => {
+            showPageLoading('Loading components...');
             try {
                 const components = await deviceWs.getComponents();
                 const container = document.getElementById('component-list');
@@ -64,11 +90,14 @@
                 } else {
                     container.innerHTML = '<div class="empty-state"><h3>No components found</h3></div>';
                 }
+                hidePageLoading();
             } catch (err) {
+                hidePageLoading();
                 document.getElementById('component-list').innerHTML = 
                     `<div class="empty-state"><h3>Error loading components</h3><p>${err.message}</p></div>`;
             }
         }).catch(err => {
+            hidePageLoading();
             document.getElementById('component-list').innerHTML = 
                 `<div class="empty-state"><h3>Connection failed</h3><p>${err.message}</p></div>`;
         });

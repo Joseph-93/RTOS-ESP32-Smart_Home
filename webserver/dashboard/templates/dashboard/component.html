@@ -14,6 +14,12 @@
     <script src="{% static 'js/rgb-led.js' %}"></script>
 </head>
 <body>
+    <!-- Page loading overlay -->
+    <div id="page-loading" class="page-loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-text">Connecting to {{ device_name }}...</div>
+    </div>
+    
     <div class="container">
         <header>
             <div class="breadcrumb">
