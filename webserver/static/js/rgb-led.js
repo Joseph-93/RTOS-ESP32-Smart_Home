@@ -60,6 +60,201 @@ function hsvToRgb(h, s, v) {
     return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
 }
 
+// ============================================================================
+// OKLCH - Perceptually Uniform Color Space
+// Based on Björn Ottosson's OKLAB (2020)
+// OKLCH is the cylindrical form: L=lightness, C=chroma, H=hue (0-360°)
+// The hue channel is perceptually uniform - equal angle = equal perceived difference
+// ============================================================================
+
+/**
+ * Convert linear sRGB (0-1) to OKLAB
+ */
+function linearRgbToOklab(r, g, b) {
+    // RGB to LMS (cone responses)
+    const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+    const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+    const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+    
+    // Cube root (like CIELAB)
+    const l_ = Math.cbrt(l);
+    const m_ = Math.cbrt(m);
+    const s_ = Math.cbrt(s);
+    
+    // LMS to OKLAB
+    return [
+        0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,  // L
+        1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,  // a
+        0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_   // b
+    ];
+}
+
+/**
+ * Convert OKLAB to linear sRGB (0-1)
+ */
+function oklabToLinearRgb(L, a, b) {
+    // OKLAB to LMS
+    const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+    
+    // Cube (reverse of cbrt)
+    const l = l_ * l_ * l_;
+    const m = m_ * m_ * m_;
+    const s = s_ * s_ * s_;
+    
+    // LMS to RGB
+    return [
+        +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    ];
+}
+
+/**
+ * sRGB gamma correction: linear -> sRGB
+ */
+function linearToSrgb(x) {
+    return x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1/2.4) - 0.055;
+}
+
+/**
+ * sRGB gamma correction: sRGB -> linear
+ */
+function srgbToLinear(x) {
+    return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+}
+
+/**
+ * Check if linear RGB values are within sRGB gamut
+ */
+function isInGamut(lr, lg, lb) {
+    const epsilon = 0.0001;
+    return lr >= -epsilon && lr <= 1 + epsilon &&
+           lg >= -epsilon && lg <= 1 + epsilon &&
+           lb >= -epsilon && lb <= 1 + epsilon;
+}
+
+/**
+ * Find the maximum chroma that keeps the color in sRGB gamut
+ * Uses binary search for efficiency
+ */
+function findMaxChroma(L, h, maxC = 0.4) {
+    const hRad = h * Math.PI / 180;
+    let lo = 0, hi = maxC;
+    
+    // Binary search for max valid chroma
+    for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) / 2;
+        const a = mid * Math.cos(hRad);
+        const b = mid * Math.sin(hRad);
+        const [lr, lg, lb] = oklabToLinearRgb(L, a, b);
+        
+        if (isInGamut(lr, lg, lb)) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
+/**
+ * Find the lightness that allows maximum chroma for a given hue
+ * @param {number} h - Hue in degrees
+ * @returns {{L: number, C: number}} Optimal lightness and corresponding max chroma
+ */
+function findOptimalLightness(h) {
+    let bestL = 0.5, bestC = 0;
+    
+    // Search for lightness that gives max chroma
+    for (let L = 0.2; L <= 0.85; L += 0.05) {
+        const maxC = findMaxChroma(L, h, 0.5);
+        if (maxC > bestC) {
+            bestC = maxC;
+            bestL = L;
+        }
+    }
+    return { L: bestL, C: bestC };
+}
+
+/**
+ * Convert OKLCH to sRGB (0-255) with proper gamut mapping
+ * @param {number} L - Lightness (0-1)
+ * @param {number} C - Chroma (will be reduced if out of gamut)
+ * @param {number} h - Hue (0-360 degrees)
+ * @returns {number[]} [r, g, b] each 0-255
+ */
+function oklchToRgb(L, C, h) {
+    // Find max chroma for this L and h
+    const maxC = findMaxChroma(L, h, 0.4);
+    const clampedC = Math.min(C, maxC);
+    
+    // OKLCH to OKLAB
+    const hRad = h * Math.PI / 180;
+    const a = clampedC * Math.cos(hRad);
+    const b = clampedC * Math.sin(hRad);
+    
+    // OKLAB to linear RGB
+    let [lr, lg, lb] = oklabToLinearRgb(L, a, b);
+    
+    // Soft clamp for floating point errors
+    lr = Math.max(0, Math.min(1, lr));
+    lg = Math.max(0, Math.min(1, lg));
+    lb = Math.max(0, Math.min(1, lb));
+    
+    // Linear to sRGB with gamma
+    const r = linearToSrgb(lr);
+    const g = linearToSrgb(lg);
+    const b2 = linearToSrgb(lb);
+    
+    return [
+        Math.round(Math.max(0, Math.min(255, r * 255))),
+        Math.round(Math.max(0, Math.min(255, g * 255))),
+        Math.round(Math.max(0, Math.min(255, b2 * 255)))
+    ];
+}
+
+/**
+ * Convert OKLCH to sRGB with brightness scaling, using optimal lightness per hue
+ * This maximizes saturation for each hue, then scales by brightness
+ * @param {number} brightness - 0-100 percentage
+ * @param {number} h - Hue (0-360 degrees)
+ * @returns {number[]} [r, g, b] each 0-255
+ */
+function oklchToRgbBrightness(brightness, h) {
+    // Find optimal L and C for this hue (max saturation)
+    const { L: optimalL, C: optimalC } = findOptimalLightness(h);
+    
+    // Scale by brightness
+    const scale = brightness / 100;
+    const targetL = optimalL * scale;
+    
+    // Find max achievable chroma at the target lightness
+    const maxC = findMaxChroma(targetL, h, 0.5);
+    const useC = Math.min(optimalC * scale, maxC);
+    
+    // Convert to RGB
+    const hRad = h * Math.PI / 180;
+    const a = useC * Math.cos(hRad);
+    const b = useC * Math.sin(hRad);
+    
+    let [lr, lg, lb] = oklabToLinearRgb(targetL, a, b);
+    lr = Math.max(0, Math.min(1, lr));
+    lg = Math.max(0, Math.min(1, lg));
+    lb = Math.max(0, Math.min(1, lb));
+    
+    const r = linearToSrgb(lr);
+    const g = linearToSrgb(lg);
+    const b2 = linearToSrgb(lb);
+    
+    return [
+        Math.round(Math.max(0, Math.min(255, r * 255))),
+        Math.round(Math.max(0, Math.min(255, g * 255))),
+        Math.round(Math.max(0, Math.min(255, b2 * 255)))
+    ];
+}
+
 function hexToRgb(hex) {
     return [
         parseInt(hex.slice(1, 3), 16),
@@ -112,28 +307,121 @@ function presetSolid(ledCount, r, g, b, durationMs) {
     return [{ colors: Array(ledCount).fill([r, g, b]), duration_ms: durationMs }];
 }
 
-function presetRainbow(ledCount, steps, stepMs) {
+/**
+ * Calculate perceived luminance of an RGB color (0-255 scale)
+ * Based on ITU-R BT.709 coefficients for human eye sensitivity
+ */
+function rgbLuminance(r, g, b) {
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * Normalize an RGB color to a target luminance
+ * Scales all channels proportionally to achieve the target perceived brightness
+ */
+function normalizeToLuminance(r, g, b, targetLuminance) {
+    const currentLum = rgbLuminance(r, g, b);
+    if (currentLum <= 0) return [0, 0, 0];
+    
+    const scale = targetLuminance / currentLum;
+    // Clamp to 255 and round
+    return [
+        Math.min(255, Math.round(r * scale)),
+        Math.min(255, Math.round(g * scale)),
+        Math.min(255, Math.round(b * scale))
+    ];
+}
+
+/**
+ * Rainbow preset generator
+ * @param {number} ledCount - Number of LEDs
+ * @param {number} steps - Number of animation frames
+ * @param {number} stepMs - Duration per frame in ms
+ * @param {number} brightness - Max brightness 0-100 (default 100)
+ * @param {number} wavelength - LEDs per full rainbow cycle (360° of hue)
+ *                              wavelength = ledCount → one full rainbow across strip
+ *                              wavelength < ledCount → multiple rainbows
+ *                              wavelength > ledCount → partial rainbow (slower gradient)
+ * @param {boolean} normalize - If true, normalize all colors to equal perceived luminance
+ *                              This makes red/green/blue appear as bright as yellow/cyan/etc.
+ * @param {boolean} perceptual - If true, use OKLCH color space for perceptually uniform hue
+ *                               Equal hue angle = equal perceived color difference
+ */
+function presetRainbow(ledCount, steps, stepMs, brightness = 100, wavelength = null, normalize = false, perceptual = false) {
+    const wl = wavelength || ledCount;  // Default to one full rainbow
+    
+    // Target luminance for normalize mode
+    const maxLuminance = rgbLuminance(0, 255, 0);  // ~182.4 (green is brightest)
+    const targetLum = (brightness / 100) * maxLuminance;
+    
     return Array.from({ length: steps }, (_, step) => {
         const offset = (step / steps) * 360;
         return {
-            colors: Array.from({ length: ledCount }, (_, i) =>
-                hsvToRgb((offset + (i / ledCount) * 360) % 360, 1, 1)
-            ),
+            colors: Array.from({ length: ledCount }, (_, i) => {
+                const hue = (offset + i * (360 / wl)) % 360;
+                
+                if (perceptual) {
+                    // Use OKLCH with optimal lightness per hue
+                    // This maximizes saturation for each color while keeping perceptual uniformity
+                    return oklchToRgbBrightness(brightness, hue);
+                } else {
+                    // Use HSV (original behavior)
+                    const [r, g, b] = hsvToRgb(hue, 1, 1);
+                    
+                    if (normalize) {
+                        // Normalize to equal perceived luminance
+                        return normalizeToLuminance(r, g, b, targetLum);
+                    } else {
+                        // Simple HSV brightness scaling
+                        const scale = brightness / 100;
+                        return [Math.round(r * scale), Math.round(g * scale), Math.round(b * scale)];
+                    }
+                }
+            }),
             duration_ms: stepMs
         };
     });
 }
 
-function presetBreathing(ledCount, r, g, b, steps, cycleMs) {
+/**
+ * Breathing preset generator
+ * @param {number} ledCount - Number of LEDs
+ * @param {number} r,g,b - Base color RGB values (0-255)
+ * @param {number} steps - Number of animation frames per cycle
+ * @param {number} cycleMs - Total cycle duration in ms
+ * @param {number} brightness - Max brightness 0-100 (default 100)
+ * @param {number} curve - Curve exponent for non-linear brightness (default 1.0)
+ *                         <1 = fast rise/slow fall (sqrt-like), >1 = slow rise/fast fall (squared-like)
+ */
+function presetBreathing(ledCount, r, g, b, steps, cycleMs, brightness = 100, curve = 1.0) {
     const stepMs = Math.round(cycleMs / steps);
+    const maxBright = Math.max(0, Math.min(100, brightness)) / 100;
     return Array.from({ length: steps }, (_, step) => {
-        const bright = (Math.sin((step / steps) * 2 * Math.PI - Math.PI / 2) + 1) / 2;
+        // Base sinusoidal brightness (0 to 1)
+        let bright = (Math.sin((step / steps) * 2 * Math.PI - Math.PI / 2) + 1) / 2;
+        // Apply curve: bright^curve changes the shape
+        bright = Math.pow(bright, curve);
+        // Scale to max brightness
+        bright *= maxBright;
         const color = [Math.round(r * bright), Math.round(g * bright), Math.round(b * bright)];
         return { colors: Array(ledCount).fill(color), duration_ms: stepMs };
     });
 }
 
-function presetChase(ledCount, r, g, b, tailLen, headLen, stepMs) {
+/**
+ * Chase preset generator
+ * @param {number} ledCount - Number of LEDs
+ * @param {number} r,g,b - Base color RGB values (0-255)
+ * @param {number} tailLen - Number of LEDs in the trailing tail
+ * @param {number} headLen - Number of LEDs in the leading head
+ * @param {number} stepMs - Duration per frame in ms
+ * @param {number} brightness - Max brightness 0-100 (default 100)
+ * @param {number} curve - Curve exponent for tail/head fade (default 1.0)
+ *                         <1 = gradual start, steep end (sqrt-like)
+ *                         >1 = steep start, gradual end (squared-like)
+ */
+function presetChase(ledCount, r, g, b, tailLen, headLen, stepMs, brightness = 100, curve = 1.0) {
+    const maxBright = Math.max(0, Math.min(100, brightness)) / 100;
     return Array.from({ length: ledCount }, (_, pos) => ({
         colors: Array.from({ length: ledCount }, (_, i) => {
             // Distance behind the root (for tail)
@@ -141,23 +429,30 @@ function presetChase(ledCount, r, g, b, tailLen, headLen, stepMs) {
             // Distance ahead of the root (for head)
             const aheadDist = (i - pos + ledCount) % ledCount;
             
-            let brightness = 0;
+            let bright = 0;
             
             // ROOT LED = full brightness (distance 0)
             if (i === pos) {
-                brightness = 1;
+                bright = 1;
             }
             // TAIL: LEDs behind the root, fading out (dist 1 to tailLen)
             else if (tailLen > 0 && behindDist > 0 && behindDist <= tailLen) {
-                brightness = 1 - behindDist / (tailLen + 1);
+                // Linear fade from 1 (close) to 0 (far)
+                const linearFade = 1 - behindDist / (tailLen + 1);
+                // Apply curve
+                bright = Math.pow(linearFade, curve);
             }
             // HEAD: LEDs ahead of the root, fading in (dist 1 to headLen)
             else if (headLen > 0 && aheadDist > 0 && aheadDist <= headLen) {
-                brightness = 1 - aheadDist / (headLen + 1);
+                const linearFade = 1 - aheadDist / (headLen + 1);
+                bright = Math.pow(linearFade, curve);
             }
             
-            if (brightness <= 0) return [0, 0, 0];
-            return [Math.round(r * brightness), Math.round(g * brightness), Math.round(b * brightness)];
+            // Apply max brightness
+            bright *= maxBright;
+            
+            if (bright <= 0) return [0, 0, 0];
+            return [Math.round(r * bright), Math.round(g * bright), Math.round(b * bright)];
         }),
         duration_ms: stepMs
     }));
@@ -446,18 +741,23 @@ class RgbLedAnimationBuilder {
             
             console.log('[RGB] Device state:', { presetCount: this.presetCount, activePreset: this.activePreset, tier1: this.tier1Preset, tier2: this.tier2Preset, memoryUsed: this.memoryUsed, memoryMax: this.memoryMax });
             
-            // Query each preset's metadata (name, frame count, loop)
+            // Get list of actual preset IDs (may be non-sequential due to deletions)
+            const presetIdsStr = await getValue('preset_ids') ?? '';
+            const presetIds = presetIdsStr ? presetIdsStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)) : [];
+            console.log('[RGB] Preset IDs:', presetIds);
+            
+            // Query each preset's metadata by its actual ID
             this.devicePresets = [];
-            for (let i = 0; i < this.presetCount; i++) {
-                // Set query index
-                await this.ws.send({ type: 'set_param', comp: this.compName, param: 'query_preset_index', row: 0, col: 0, value: i });
+            for (const id of presetIds) {
+                // Set query index to the actual preset ID
+                await this.ws.send({ type: 'set_param', comp: this.compName, param: 'query_preset_index', row: 0, col: 0, value: id });
                 await sleep(30);
                 // Read results
-                const name = await getValue('query_preset_name') ?? `Preset ${i}`;
+                const name = await getValue('query_preset_name') ?? `Preset ${id}`;
                 const frameCount = await getValue('query_preset_frame_count') ?? 0;
                 const dataSize = await getValue('query_preset_data_size') ?? 0;
                 const loop = await getValue('query_preset_loop') ?? -1;  // Default -1 (infinite) if param missing
-                this.devicePresets.push({ index: i, name, frameCount, dataSize, loop });
+                this.devicePresets.push({ id, name, frameCount, dataSize, loop });
             }
             
             // Load hub store metadata for all presets (effect recipes)
@@ -579,12 +879,13 @@ class RgbLedAnimationBuilder {
             return;
         }
         
-        container.innerHTML = this.devicePresets.map((p, i) => {
-            const isPlaying = i === this.activePreset;   // Actually showing on LEDs right now
-            const isInTier1 = i === this.tier1Preset;    // In tier 1 (override) - may or may not be playing
-            const isInTier2 = i === this.tier2Preset;    // In tier 2 (background) - may or may not be playing
-            const isEditing = i === this.editingPresetIndex;
-            const name = p.name || `Preset ${i}`;
+        container.innerHTML = this.devicePresets.map((p) => {
+            const id = p.id;  // Use actual preset ID, not array index
+            const isPlaying = id === this.activePreset;   // Actually showing on LEDs right now
+            const isInTier1 = id === this.tier1Preset;    // In tier 1 (override) - may or may not be playing
+            const isInTier2 = id === this.tier2Preset;    // In tier 2 (background) - may or may not be playing
+            const isEditing = id === this.editingPresetIndex;
+            const name = p.name || `Preset ${id}`;
             const frameInfo = p.frameCount ? `${p.frameCount}f` : '';
             const loopIcon = p.loop === -1 ? '🔁' : `${p.loop}×`;
             
@@ -594,39 +895,41 @@ class RgbLedAnimationBuilder {
             if (isInTier2) tierIndicator = ' 🌙';      // In tier 2
             
             return `
-            <div class="rgb-preset-row ${isPlaying ? 'active playing' : ''} ${isEditing ? 'editing' : ''}">
-                <div class="rgb-preset-main" onclick="rgbBuilder._editDevicePreset(${i})">
+            <div class="rgb-preset-row ${isPlaying ? 'active playing' : ''} ${isEditing ? 'editing' : ''}" data-preset-id="${id}">
+                <div class="rgb-preset-main" onclick="rgbBuilder._editDevicePreset(${id})">
                     <span class="rgb-preset-name">${name}${isPlaying ? ' ▶' : ''}</span>
                     <span class="rgb-preset-meta">${frameInfo} ${loopIcon}${tierIndicator}</span>
                 </div>
                 <div class="rgb-preset-controls">
                     <button class="btn btn-sm ${isInTier2 ? 'btn-info' : 'btn-outline'}" 
-                            onclick="event.stopPropagation(); rgbBuilder._setTier(${i}, 2)"
+                            onclick="event.stopPropagation(); rgbBuilder._setTier(${id}, 2)"
                             title="${isInTier2 ? 'Remove from tier 2' : 'Assign to tier 2 (background)'}">
                         🌙
                     </button>
                     <button class="btn btn-sm ${isInTier1 ? 'btn-warning' : 'btn-outline'}" 
-                            onclick="event.stopPropagation(); rgbBuilder._setTier(${i}, 1)"
+                            onclick="event.stopPropagation(); rgbBuilder._setTier(${id}, 1)"
                             title="${isInTier1 ? 'Remove from tier 1' : 'Assign to tier 1 (override)'}">
                         ⚡
                     </button>
                     <button class="btn btn-sm btn-danger" 
-                            onclick="event.stopPropagation(); rgbBuilder._deleteDevicePreset(${i})"
+                            onclick="event.stopPropagation(); rgbBuilder._deleteDevicePreset(${id})"
                             title="Delete">🗑️</button>
                 </div>
             </div>`;
         }).join('');
     }
     
-    async _setTier(idx, tier) {
+    async _setTier(presetId, tier) {
         if (!this.ws?.connected) { _rgbNotify('Not connected', 'error'); return; }
         
-        const name = this.devicePresets[idx]?.name || `Preset ${idx}`;
+        // Find preset by ID
+        const preset = this.devicePresets.find(p => p.id === presetId);
+        const name = preset?.name || `Preset ${presetId}`;
         const currentVal = tier === 1 ? this.tier1Preset : this.tier2Preset;
         const tierIcon = tier === 1 ? '⚡' : '🌙';
         
         try {
-            if (idx === currentVal) {
+            if (presetId === currentVal) {
                 // Already in this tier - remove it
                 await this.ws.send({ type: 'set_param', comp: this.compName, param: 'preset_priority', row: tier, col: 0, value: -1 });
                 if (tier === 1) this.tier1Preset = -1;
@@ -634,9 +937,9 @@ class RgbLedAnimationBuilder {
                 _rgbNotify(`${tierIcon} "${name}" removed from tier ${tier}`, 'success');
             } else {
                 // Assign to this tier
-                await this.ws.send({ type: 'set_param', comp: this.compName, param: 'preset_priority', row: tier, col: 0, value: idx });
-                if (tier === 1) this.tier1Preset = idx;
-                else this.tier2Preset = idx;
+                await this.ws.send({ type: 'set_param', comp: this.compName, param: 'preset_priority', row: tier, col: 0, value: presetId });
+                if (tier === 1) this.tier1Preset = presetId;
+                else this.tier2Preset = presetId;
                 _rgbNotify(`${tierIcon} "${name}" assigned to tier ${tier}`, 'success');
             }
             this._renderPresetList();
@@ -645,17 +948,17 @@ class RgbLedAnimationBuilder {
         }
     }
     
-    async _deleteDevicePreset(idx) {
+    async _deleteDevicePreset(presetId) {
         if (!this.ws?.connected) { _rgbNotify('Not connected', 'error'); return; }
-        const preset = this.devicePresets[idx];
-        const name = preset?.name || `Preset #${idx}`;
+        const preset = this.devicePresets.find(p => p.id === presetId);
+        const name = preset?.name || `Preset #${presetId}`;
         if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
         try {
             // If we're editing this preset, close the editor
-            if (this.editingPresetIndex === idx) {
+            if (this.editingPresetIndex === presetId) {
                 this._closeEditor();
             }
-            await this.ws.send({ type: 'set_param', comp: this.compName, param: 'delete_preset', row: 0, col: 0, value: idx });
+            await this.ws.send({ type: 'set_param', comp: this.compName, param: 'delete_preset', row: 0, col: 0, value: presetId });
             
             // Also delete hub store metadata
             try {
@@ -743,13 +1046,13 @@ class RgbLedAnimationBuilder {
     }
     
     // Download preset data from device and load into editor
-    async _editDevicePreset(idx) {
+    async _editDevicePreset(presetId) {
         if (!this.ws?.connected) { _rgbNotify('Not connected', 'error'); return; }
         
-        const preset = this.devicePresets[idx];
+        const preset = this.devicePresets.find(p => p.id === presetId);
         if (!preset) { _rgbNotify('Preset not found', 'error'); return; }
         
-        const name = preset.name || `Preset ${idx}`;
+        const name = preset.name || `Preset ${presetId}`;
         const dataSize = preset.dataSize || 0;
         const frameCount = preset.frameCount || 0;
         // Handle legacy boolean or new integer loop: true->-1, false->0, number->number
@@ -760,7 +1063,7 @@ class RgbLedAnimationBuilder {
         
         // CRITICAL: Clear frames FIRST to prevent stale data
         this.frames = [];
-        this.editingPresetIndex = idx;
+        this.editingPresetIndex = presetId;
         this.editingPresetName = name;
         this.editingLoop = loop;
         
@@ -810,7 +1113,7 @@ class RgbLedAnimationBuilder {
             }
             
             // Select preset for query
-            await this.ws.send({ type: 'set_param', comp: this.compName, param: 'query_preset_index', row: 0, col: 0, value: idx });
+            await this.ws.send({ type: 'set_param', comp: this.compName, param: 'query_preset_index', row: 0, col: 0, value: presetId });
             
             // CRITICAL: Reset chunk index to -1 BEFORE download loop
             // This ensures setting it to 0 actually triggers the onChange callback
@@ -921,19 +1224,32 @@ class RgbLedAnimationBuilder {
                 <label>Duration (ms): <input type="number" id="rp-dur" value="${savedParams.duration || 1000}" min="16" max="60000" style="width:90px"></label>
                 <button class="btn btn-primary btn-sm" onclick="rgbBuilder._applySolid()">Apply</button>`,
             rainbow: `
-                <label>Frames: <input type="number" id="rp-steps" value="${savedParams.steps || 60}" min="4" max="360" style="width:70px"></label>
-                <label>ms/frame: <input type="number" id="rp-ms" value="${savedParams.step_ms || 50}" min="16" max="2000" style="width:80px"></label>
+                <label>Frames: <input type="number" id="rp-steps" value="${savedParams.steps || 60}" min="4" style="width:70px"></label>
+                <label>ms/frame: <input type="number" id="rp-ms" value="${savedParams.step_ms || 50}" min="16" style="width:80px"></label>
+                <label title="Maximum brightness percentage">Bright%: <input type="number" id="rp-brightness" value="${savedParams.brightness ?? 100}" min="1" max="100" style="width:60px"></label>
+                <label title="LEDs per full rainbow cycle. Equal to LED count = 1 full rainbow. Smaller = more cycles, larger = slower gradient.">λ (LEDs/cycle): <input type="number" id="rp-wavelength" value="${savedParams.wavelength ?? this.ledCount}" min="1" step="1" style="width:70px"></label>
+                <br>
+                <label title="Use OKLCH color space instead of HSV. OKLCH has perceptually uniform hue - red/blue get equal visual time as green/purple. Also provides uniform brightness." style="cursor:pointer;">
+                    <input type="checkbox" id="rp-perceptual" ${savedParams.perceptual ? 'checked' : ''}> OKLCH (perceptual)
+                </label>
+                <label title="(HSV only) Normalize all colors to equal perceived brightness. Without this, yellow/cyan appear brighter than red/blue." style="cursor:pointer;">
+                    <input type="checkbox" id="rp-normalize" ${savedParams.normalize ? 'checked' : ''} ${savedParams.perceptual ? 'disabled' : ''}> Equal luminance
+                </label>
                 <button class="btn btn-primary btn-sm" onclick="rgbBuilder._applyRainbow()">Apply</button>`,
             breathing: `
                 ${colorField('rp-color', 'Color:')}
-                <label>Frames: <input type="number" id="rp-steps" value="${savedParams.steps || 60}" min="8" max="200" style="width:70px"></label>
-                <label>Cycle (ms): <input type="number" id="rp-cycle" value="${savedParams.cycle_ms || 3000}" min="200" max="20000" style="width:90px"></label>
+                <label>Frames: <input type="number" id="rp-steps" value="${savedParams.steps || 60}" min="8" style="width:70px"></label>
+                <label>Cycle (ms): <input type="number" id="rp-cycle" value="${savedParams.cycle_ms || 3000}" min="200" style="width:90px"></label>
+                <label title="Maximum brightness percentage">Bright%: <input type="number" id="rp-brightness" value="${savedParams.brightness ?? 100}" min="1" max="100" style="width:60px"></label>
+                <label title="Exponent (power). 1=linear, 2=x², 0.5=√x. Higher=slower rise then fast peak, lower=fast rise then slow peak.">Curve (^n): <input type="number" id="rp-curve" value="${savedParams.curve ?? 1}" min="0.1" step="0.1" style="width:60px"></label>
                 <button class="btn btn-primary btn-sm" onclick="rgbBuilder._applyBreathing()">Apply</button>`,
             chase: `
                 ${colorField('rp-color', 'Color:')}
-                <label>Head: <input type="number" id="rp-head" value="${savedParams.head ?? 0}" min="0" max="30" style="width:60px" title="Leading fade-in length"></label>
-                <label>Tail: <input type="number" id="rp-tail" value="${savedParams.tail ?? 5}" min="0" max="30" style="width:60px" title="Trailing fade-out length"></label>
-                <label>ms/frame: <input type="number" id="rp-ms" value="${savedParams.step_ms || 50}" min="16" max="1000" style="width:80px"></label>
+                <label title="Leading fade-in length">Head: <input type="number" id="rp-head" value="${savedParams.head ?? 0}" min="0" style="width:60px"></label>
+                <label title="Trailing fade-out length">Tail: <input type="number" id="rp-tail" value="${savedParams.tail ?? 5}" min="0" style="width:60px"></label>
+                <label>ms/frame: <input type="number" id="rp-ms" value="${savedParams.step_ms || 50}" min="16" style="width:80px"></label>
+                <label title="Maximum brightness percentage">Bright%: <input type="number" id="rp-brightness" value="${savedParams.brightness ?? 100}" min="1" max="100" style="width:60px"></label>
+                <label title="Exponent (power) for tail/head fade. 1=linear, 2=concentrated near root, 0.5=spread out more.">Curve (^n): <input type="number" id="rp-curve" value="${savedParams.curve ?? 1}" min="0.1" step="0.1" style="width:60px"></label>
                 <button class="btn btn-primary btn-sm" onclick="rgbBuilder._applyChase()">Apply</button>`,
         };
         opts.innerHTML = `<div class="rgb-preset-form">${forms[type] || ''}</div>`;
@@ -953,7 +1269,7 @@ class RgbLedAnimationBuilder {
         const el = document.getElementById(id);
         if (!el) return fallback;
         if (el.type === 'number') {
-            const parsed = parseInt(el.value);
+            const parsed = parseFloat(el.value);
             return isNaN(parsed) ? fallback : parsed;
         }
         return el.value;
@@ -981,9 +1297,13 @@ class RgbLedAnimationBuilder {
     _applyRainbow() {
         const steps = this._val('rp-steps', 60);
         const step_ms = this._val('rp-ms', 50);
+        const brightness = this._val('rp-brightness', 100);
+        const wavelength = this._val('rp-wavelength', this.ledCount);
+        const normalize = document.getElementById('rp-normalize')?.checked || false;
+        const perceptual = document.getElementById('rp-perceptual')?.checked || false;
         this.editingEffectType = 'rainbow';
-        this.editingEffectParams = { steps, step_ms };
-        this.frames = presetRainbow(this.ledCount, steps, step_ms);
+        this.editingEffectParams = { steps, step_ms, brightness, wavelength, normalize, perceptual };
+        this.frames = presetRainbow(this.ledCount, steps, step_ms, brightness, wavelength, normalize, perceptual);
         this._renderFrames();
     }
     
@@ -991,10 +1311,12 @@ class RgbLedAnimationBuilder {
         const color = this._val('rp-color', '#ff0000');
         const steps = this._val('rp-steps', 60);
         const cycle_ms = this._val('rp-cycle', 3000);
+        const brightness = this._val('rp-brightness', 100);
+        const curve = this._val('rp-curve', 1);
         const [r,g,b] = hexToRgb(color);
         this.editingEffectType = 'breathing';
-        this.editingEffectParams = { color, steps, cycle_ms };
-        this.frames = presetBreathing(this.ledCount, r, g, b, steps, cycle_ms);
+        this.editingEffectParams = { color, steps, cycle_ms, brightness, curve };
+        this.frames = presetBreathing(this.ledCount, r, g, b, steps, cycle_ms, brightness, curve);
         this._renderFrames();
     }
     
@@ -1003,10 +1325,12 @@ class RgbLedAnimationBuilder {
         const head = this._val('rp-head', 0);
         const tail = this._val('rp-tail', 5);
         const step_ms = this._val('rp-ms', 50);
+        const brightness = this._val('rp-brightness', 100);
+        const curve = this._val('rp-curve', 1);
         const [r,g,b] = hexToRgb(color);
         this.editingEffectType = 'chase';
-        this.editingEffectParams = { color, head, tail, step_ms };
-        this.frames = presetChase(this.ledCount, r, g, b, tail, head, step_ms);
+        this.editingEffectParams = { color, head, tail, step_ms, brightness, curve };
+        this.frames = presetChase(this.ledCount, r, g, b, tail, head, step_ms, brightness, curve);
         this._renderFrames();
     }
 
@@ -1116,10 +1440,9 @@ class RgbLedAnimationBuilder {
         if (progress) progress.style.display = 'block';
 
         try {
-            // Stop playback before uploading
-            await this._setPlayingSilent(false);
-            
             // If updating an existing preset, delete it first
+            // Note: Since preset IDs are stable, this won't affect other presets
+            // But we should NOT stop playback - other presets may still be playing!
             if (isUpdate) {
                 if (label) label.textContent = 'Deleting old preset...';
                 if (fill) fill.style.width = '5%';
@@ -1156,21 +1479,22 @@ class RgbLedAnimationBuilder {
             });
             
             // If we didn't provide a name, query the ESP32 for the name it assigned
-            // ESP32 defaults to "Preset N" where N is the preset index
+            // ESP32 defaults to "Preset N" where N is the preset ID
             let actualPresetName = presetName;
             if (!actualPresetName) {
                 try {
-                    // Get the new preset count (just created preset is at index count-1)
-                    const countResp = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'preset_count', row: 0, col: 0 });
-                    const newCount = countResp?.value || 0;
-                    if (newCount > 0) {
-                        // Query the name of the last preset (newly created)
-                        const newIdx = newCount - 1;
-                        await this.ws.send({ type: 'set_param', comp: this.compName, param: 'query_preset_index', row: 0, col: 0, value: newIdx });
+                    // Get preset IDs list and find the highest ID (most recently created)
+                    const idsResp = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'preset_ids', row: 0, col: 0 });
+                    const idsStr = idsResp?.value || '';
+                    const ids = idsStr.split(',').filter(s => s.trim()).map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+                    if (ids.length > 0) {
+                        // The newest preset has the highest ID (IDs are monotonically increasing)
+                        const newId = Math.max(...ids);
+                        await this.ws.send({ type: 'set_param', comp: this.compName, param: 'query_preset_index', row: 0, col: 0, value: newId });
                         await sleep(30);
                         const nameResp = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'query_preset_name', row: 0, col: 0 });
                         actualPresetName = nameResp?.value || '';
-                        console.log(`[RGB] ESP32 assigned preset name: "${actualPresetName}"`);
+                        console.log(`[RGB] ESP32 assigned preset name: "${actualPresetName}" (ID ${newId})`);
                     }
                 } catch (e) {
                     console.warn('[RGB] Failed to query assigned preset name:', e);

@@ -167,6 +167,7 @@ private:
     IntParameter* chunkSizeParam;                     // Read-only: chunk size for upload/download
     IntParameter* queryDownloadChunkIndex;            // Write: set to request a download chunk
     StringParameter* queryDownloadChunkData;          // Read-only: base64 chunk of preset data
+    StringParameter* presetIdsParam;                  // Read-only: comma-separated list of preset IDs
     
     // Initialize LED strip with RMT backend
     esp_err_t initLedStrip(gpio_num_t gpio, uint16_t led_count);

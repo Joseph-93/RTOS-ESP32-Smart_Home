@@ -287,6 +287,7 @@ void RgbLedComponent::onInitialize() {
     chunkSizeParam = addIntParam("chunk_size", 1, 1, 0, INT32_MAX, RGB_LED_CHUNK_SIZE, true);  // Read-only
     queryDownloadChunkIndex = addIntParam("query_download_chunk_index", 1, 1, -1, 65535, -1);
     queryDownloadChunkData = addStringParam("query_download_chunk_data", 1, 1, "", true);  // Read-only
+    presetIdsParam = addStringParam("preset_ids", 1, 1, "", true);  // Read-only: comma-separated IDs
     
     // Set up onChange callbacks
     if (playing) {
@@ -952,6 +953,16 @@ void RgbLedComponent::updateStatusParams() {
         } else {
             animFrameCount->setValue(0, 0, 0);
         }
+    }
+    
+    // Update preset_ids: comma-separated list of all valid preset IDs
+    if (presetIdsParam) {
+        std::string ids;
+        for (const auto& kv : presets) {
+            if (!ids.empty()) ids += ",";
+            ids += std::to_string(kv.first);
+        }
+        presetIdsParam->setValue(0, 0, ids);
     }
 }
 
