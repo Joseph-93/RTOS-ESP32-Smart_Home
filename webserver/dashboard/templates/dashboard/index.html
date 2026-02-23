@@ -4,31 +4,281 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Smart Home Hub</title>
+    <title>Smart Home Dashboard</title>
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="{% static 'js/notifications.js' %}"></script>
+    <script src="{% static 'js/websocket.js' %}"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🏠 ESP32 Smart Home Control Hub</h1>
-            <p class="subtitle">Intelligent Device Management System</p>
+            <h1>🏠 Smart Home Control Hub</h1>
+            <p class="subtitle">ESP32 & Central Hub Device Management</p>
         </header>
         
         <main>
-            <!-- Add Device Form -->
-            <div class="add-device-section">
-                <h2>➕ Add ESP32 Device</h2>
+            <!-- Central Hub Status Section -->
+            <div class="hub-status-section" id="hub-status-section">
+                <h2>🖥️ Central Hub Status</h2>
+                <div id="hub-connection-status" class="hub-connection-status">
+                    <span class="status-indicator disconnected"></span>
+                    <span>Connecting to Central Hub...</span>
+                </div>
+                
+                <div id="hub-controls" style="display: none;">
+                    <div class="hub-device-management">
+                        <h3>📡 Connected Devices</h3>
+                        <div id="hub-devices-list" class="hub-devices-list">
+                            <div class="loading">Loading...</div>
+                        </div>
+                        
+                        <div class="hub-add-device" style="margin-top: 1rem;">
+                            <h4>➕ Add Device to Central Hub</h4>
+                            <div class="form-row" style="margin-top: 0.5rem;">
+                                <input type="text" id="hub-add-ip" placeholder="ESP32 IP Address (e.g., 10.0.0.46)" style="flex: 1;">
+                                <button class="btn btn-primary" onclick="hubAddDevice()">Add to Hub</button>
+                                <button class="btn btn-secondary" onclick="hubRescan()">🔍 mDNS Scan</button>
+                            </div>
+                            <div id="hub-add-status" style="margin-top: 0.5rem; color: #888;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <script>
+            // Central Hub WebSocket connection
+            let hubWs = null;
+            let hubConnected = false;
+            
+            // Find the Central Hub in Django's device list
+            async function connectToHub() {
+                const statusDiv = document.getElementById('hub-connection-status');
+                const controlsDiv = document.getElementById('hub-controls');
+                
+                // Look for central-hub in the device list, or try common addresses
+                const hubCandidates = [];
+                
+                // Check Django's device list for central-hub
+                {% for name, device in devices.items %}
+                    {% if 'central' in name|lower or 'hub' in name|lower %}
+                    hubCandidates.push('{{ device.host }}:{{ device.port }}');
+                    {% endif %}
+                {% endfor %}
+                
+                // Also try localhost (if running on same machine)
+                hubCandidates.push('localhost:80');
+                hubCandidates.push('127.0.0.1:80');
+                
+                // Try to get local network IP
+                try {
+                    const resp = await fetch('/api/local-ip/');
+                    const data = await resp.json();
+                    if (data.ip) {
+                        hubCandidates.unshift(data.ip + ':80');
+                    }
+                } catch (e) {}
+                
+                for (const candidate of hubCandidates) {
+                    try {
+                        statusDiv.innerHTML = `<span class="status-indicator connecting"></span><span>Trying ${candidate}...</span>`;
+                        
+                        const ws = new WebSocket(`ws://${candidate}/ws`);
+                        
+                        const connected = await new Promise((resolve) => {
+                            const timeout = setTimeout(() => {
+                                ws.close();
+                                resolve(false);
+                            }, 2000);
+                            
+                            ws.onopen = () => {
+                                clearTimeout(timeout);
+                                resolve(true);
+                            };
+                            ws.onerror = () => {
+                                clearTimeout(timeout);
+                                resolve(false);
+                            };
+                        });
+                        
+                        if (connected) {
+                            hubWs = ws;
+                            hubConnected = true;
+                            
+                            statusDiv.innerHTML = `<span class="status-indicator connected"></span><span>Connected to Central Hub at ${candidate}</span>`;
+                            controlsDiv.style.display = 'block';
+                            
+                            // Setup message handler
+                            hubWs.onmessage = handleHubMessage;
+                            hubWs.onclose = () => {
+                                hubConnected = false;
+                                statusDiv.innerHTML = `<span class="status-indicator disconnected"></span><span>Disconnected from Central Hub</span>`;
+                                controlsDiv.style.display = 'none';
+                            };
+                            
+                            // Load devices
+                            loadHubDevices();
+                            return;
+                        }
+                    } catch (e) {
+                        console.log('Failed to connect to', candidate, e);
+                    }
+                }
+                
+                statusDiv.innerHTML = `<span class="status-indicator disconnected"></span><span>Could not connect to Central Hub. <button class="btn btn-sm btn-secondary" onclick="connectToHub()">Retry</button></span>`;
+            }
+            
+            let hubMessageId = 0;
+            const hubPendingRequests = {};
+            
+            function sendHubMessage(msg) {
+                return new Promise((resolve, reject) => {
+                    if (!hubWs || hubWs.readyState !== WebSocket.OPEN) {
+                        reject(new Error('Not connected to hub'));
+                        return;
+                    }
+                    
+                    const id = ++hubMessageId;
+                    msg.id = id;
+                    hubPendingRequests[id] = { resolve, reject };
+                    
+                    setTimeout(() => {
+                        if (hubPendingRequests[id]) {
+                            delete hubPendingRequests[id];
+                            reject(new Error('Timeout'));
+                        }
+                    }, 10000);
+                    
+                    hubWs.send(JSON.stringify(msg));
+                });
+            }
+            
+            function handleHubMessage(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.id && hubPendingRequests[data.id]) {
+                        hubPendingRequests[data.id].resolve(data);
+                        delete hubPendingRequests[data.id];
+                    }
+                } catch (e) {
+                    console.error('Error parsing hub message:', e);
+                }
+            }
+            
+            async function loadHubDevices() {
+                const listDiv = document.getElementById('hub-devices-list');
+                
+                try {
+                    const response = await sendHubMessage({ type: 'get_all_devices' });
+                    const devices = response.devices || [];
+                    
+                    if (devices.length === 0) {
+                        listDiv.innerHTML = '<div class="empty-hint">No devices registered</div>';
+                        return;
+                    }
+                    
+                    listDiv.innerHTML = devices.map(d => {
+                        const icon = d.device === 'self' ? '🏠' : '📡';
+                        const statusClass = d.connected ? 'connected' : 'disconnected';
+                        const statusText = d.connected ? 'Connected' : 'Disconnected';
+                        const compCount = d.components ? d.components.length : 0;
+                        
+                        return `
+                            <div class="hub-device-card ${statusClass}">
+                                <div class="hub-device-icon">${icon}</div>
+                                <div class="hub-device-info">
+                                    <strong>${d.name}</strong>
+                                    <span class="hub-device-ip">${d.device === 'self' ? 'Local' : d.device}</span>
+                                </div>
+                                <div class="hub-device-status">
+                                    <span class="status-indicator ${statusClass}"></span>
+                                    ${statusText}
+                                </div>
+                                <div class="hub-device-components">
+                                    ${compCount} component${compCount !== 1 ? 's' : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                } catch (e) {
+                    console.error('Failed to load hub devices:', e);
+                    listDiv.innerHTML = '<div class="error-hint">Error loading devices</div>';
+                }
+            }
+            
+            async function hubAddDevice() {
+                const ipInput = document.getElementById('hub-add-ip');
+                const statusDiv = document.getElementById('hub-add-status');
+                const ip = ipInput.value.trim();
+                
+                if (!ip) {
+                    statusDiv.textContent = '⚠️ Enter an IP address';
+                    return;
+                }
+                
+                statusDiv.textContent = '⏳ Adding device...';
+                
+                try {
+                    const result = await sendHubMessage({ type: 'add_device', ip: ip });
+                    
+                    if (result.error) {
+                        statusDiv.textContent = '❌ ' + result.error;
+                    } else {
+                        statusDiv.textContent = '✅ ' + (result.message || 'Device added');
+                        ipInput.value = '';
+                        
+                        // Reload device list after a moment
+                        setTimeout(loadHubDevices, 2000);
+                    }
+                } catch (e) {
+                    statusDiv.textContent = '❌ Failed: ' + e.message;
+                }
+            }
+            
+            async function hubRescan() {
+                const statusDiv = document.getElementById('hub-add-status');
+                statusDiv.textContent = '⏳ Scanning for devices (5 seconds)...';
+                
+                try {
+                    const result = await sendHubMessage({ type: 'rescan_devices' });
+                    
+                    const discovered = result.discovered || [];
+                    const added = result.added || [];
+                    
+                    if (added.length > 0) {
+                        statusDiv.textContent = `✅ Found ${added.length} new device(s): ${added.map(d => d.ip).join(', ')}`;
+                    } else if (discovered.length > 0) {
+                        statusDiv.textContent = `✅ Found ${discovered.length} device(s) (already connected)`;
+                    } else {
+                        statusDiv.textContent = '⚠️ No devices found via mDNS';
+                    }
+                    
+                    // Reload device list
+                    loadHubDevices();
+                } catch (e) {
+                    statusDiv.textContent = '❌ Scan failed: ' + e.message;
+                }
+            }
+            
+            // Connect to hub on page load
+            document.addEventListener('DOMContentLoaded', connectToHub);
+            </script>
+            
+            <!-- Django Device Registry (for direct connections) -->
+            <div class="add-device-section" style="margin-top: 2rem;">
+                <h2>📋 Device Registry</h2>
+                <p class="help-text">Devices stored for direct WebSocket access from this dashboard.</p>
                 <form method="post" action="{% url 'add_device' %}" class="add-device-form">
                     {% csrf_token %}
                     <div class="form-row">
-                        <input type="text" name="name" placeholder="Device Name (e.g., esp32-main)" required>
+                        <input type="text" name="name" placeholder="Device Name (e.g., esp32-lamp, central-hub)" required>
                         <input type="text" name="host" placeholder="IP Address" required>
                         <input type="number" name="port" value="80" placeholder="Port" required>
-                        <button type="submit" class="btn btn-primary">Add Device</button>
+                        <button type="submit" class="btn btn-primary">Add to Registry</button>
                     </div>
                 </form>
                 <div style="margin-top: 0.75rem;">
-                    <button id="scan-btn" class="btn btn-secondary" onclick="scanDevices()">🔍 Scan for ESP32s</button>
+                    <button id="scan-btn" class="btn btn-secondary" onclick="scanDevices()">🔍 Scan Network</button>
                     <span id="scan-status" style="margin-left: 1rem; color: #888;"></span>
                 </div>
                 <pre id="scan-log" style="display:none; margin-top:0.75rem; background:#111; color:#0f0; padding:0.75rem; border-radius:4px; font-size:0.75rem; max-height:300px; overflow-y:auto; white-space:pre-wrap;"></pre>
@@ -39,7 +289,7 @@
                 const status = document.getElementById('scan-status');
                 const logBox = document.getElementById('scan-log');
                 btn.disabled = true;
-                status.textContent = 'Scanning... (up to 4s)';
+                status.textContent = 'Scanning... (up to 5s)';
                 logBox.style.display = 'none';
                 logBox.textContent = '';
                 fetch('{% url "scan_devices" %}')
@@ -65,7 +315,7 @@
             }
             </script>
             
-            <h2 style="margin-top: 2rem;">Connected Devices</h2>
+            <h2 style="margin-top: 2rem;">Registered Devices</h2>
             <div class="device-grid">
                 {% for name, device in devices.items %}
                 <div class="device-card">
@@ -86,9 +336,8 @@
                 </div>
                 {% empty %}
                 <div class="empty-state">
-                    <h3>No ESP32 Devices Configured</h3>
-                    <p>Add devices in <code>dashboard/apps.py</code></p>
-                    <pre>esp32_manager.add_device('esp32-main', '192.168.1.100', 8888)</pre>
+                    <h3>No Devices in Registry</h3>
+                    <p>Click "Scan Network" to discover devices, or add manually above.</p>
                 </div>
                 {% endfor %}
             </div>

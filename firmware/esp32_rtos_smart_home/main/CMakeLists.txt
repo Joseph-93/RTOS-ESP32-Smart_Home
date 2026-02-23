@@ -10,7 +10,7 @@ message(STATUS "ENABLE_GUI = ${ENABLE_GUI}")
 # For now, include ALL optional components unconditionally in REQUIRES
 # The #ifdef guards in main.cpp will exclude unused code from compilation
 # This avoids CMake cache issues with conditional component lists
-list(APPEND REQUIRED_COMPONENTS heartbeat rgb_led)
+list(APPEND REQUIRED_COMPONENTS heartbeat rgb_led touch_sensor)
 
 # Only add these if they exist and are explicitly enabled
 if(ENABLE_GUI)

@@ -29,6 +29,13 @@ from typing import Any, Dict, Optional, Set, Tuple, TYPE_CHECKING
 import websockets
 from websockets.server import WebSocketServerProtocol
 
+# mDNS advertisement
+try:
+    from zeroconf import Zeroconf, ServiceInfo
+    ZEROCONF_AVAILABLE = True
+except ImportError:
+    ZEROCONF_AVAILABLE = False
+
 from .base import Component, IntParameter, StringParameter
 
 if TYPE_CHECKING:
@@ -136,11 +143,24 @@ class WebServerComponent(Component):
             read_only=True
         )
         
+        # connected_devices: JSON string showing all connected ESP32 devices
+        # Format: [{"ip": "10.0.0.46", "name": "esp32-lamp", "connected": true, "components": ["RgbLed", "WebServer"]}]
+        self.connected_devices_param = self.add_string_param(
+            "connected_devices",
+            rows=1, cols=1,
+            default_val="[]",
+            read_only=True
+        )
+        
         # Internal state
         self.server = None
         self.subscriptions = SubscriptionManager()
         self._clients: Set[WebSocketServerProtocol] = set()
         self._running = False
+        
+        # mDNS advertisement
+        self._zeroconf: Optional[Zeroconf] = None
+        self._mdns_info: Optional[ServiceInfo] = None
     
     def _get_local_ip(self) -> str:
         """Get the local IP address of this machine."""
@@ -158,7 +178,34 @@ class WebServerComponent(Component):
         # Update IP in case it changed
         self._local_ip = self._get_local_ip()
         self.local_ip_param.set_value(0, 0, self._local_ip, notify=False)
+        
+        # Start background task to periodically update connected_devices
+        asyncio.create_task(self._update_devices_loop())
+        
         logger.info("WebServer component initialized")
+    
+    async def _update_devices_loop(self):
+        """Periodically update the connected_devices parameter."""
+        while True:
+            await asyncio.sleep(2)  # Update every 2 seconds
+            self._update_connected_devices()
+    
+    def _update_connected_devices(self):
+        """Update the connected_devices parameter with current device info."""
+        if not self.hub:
+            return
+        
+        devices = []
+        for ip, device in self.hub.devices.items():
+            comp_names = list(device.components.keys()) if device.components else []
+            devices.append({
+                'ip': ip,
+                'name': device.nickname if hasattr(device, 'nickname') and device.nickname else ip,
+                'connected': device.connected if hasattr(device, 'connected') else False,
+                'components': comp_names
+            })
+        
+        self.connected_devices_param.set_value(0, 0, json.dumps(devices), notify=True)
     
     async def start(self):
         """Start the WebSocket server."""
@@ -177,20 +224,100 @@ class WebServerComponent(Component):
         
         logger.info(f"WebSocket server started at ws://{self._local_ip}:{self._port}/ws")
         
+        # Register with mDNS so Django webserver can discover us
+        await self._register_mdns()
+        
         # Print to console for user visibility
         print(f"\n{'='*60}")
         print(f"  CENTRAL HUB WebSocket Server")
         print(f"  URL: ws://{self._local_ip}:{self._port}/ws")
         print(f"  Web: http://{self._local_ip}:{self._port}")
+        if self._zeroconf:
+            print(f"  mDNS: central-hub._ws._tcp.local.")
         print(f"{'='*60}\n")
     
     async def stop(self):
         """Stop the WebSocket server."""
         self._running = False
+        
+        # Unregister from mDNS
+        await self._unregister_mdns()
+        
         if self.server:
             self.server.close()
             await self.server.wait_closed()
         logger.info("WebSocket server stopped")
+    
+    async def _register_mdns(self):
+        """Register this server with mDNS for discovery."""
+        if not ZEROCONF_AVAILABLE:
+            logger.warning("zeroconf not installed - mDNS advertisement disabled")
+            logger.warning("Install with: pip install zeroconf")
+            return
+        
+        def _do_register():
+            """Blocking registration - runs in executor."""
+            try:
+                # Get local IP as bytes for ServiceInfo
+                ip_bytes = socket.inet_aton(self._local_ip)
+                
+                # Create service info
+                # Service type must match what Django scans for: _ws._tcp.local.
+                self._mdns_info = ServiceInfo(
+                    type_="_ws._tcp.local.",
+                    name="central-hub._ws._tcp.local.",
+                    addresses=[ip_bytes],
+                    port=self._port,
+                    properties={
+                        b'type': b'central-hub',
+                        b'version': b'1.0',
+                    },
+                    server="central-hub.local."
+                )
+                
+                # Create Zeroconf instance
+                self._zeroconf = Zeroconf()
+                self._zeroconf.register_service(self._mdns_info)
+                
+                logger.info(f"mDNS: Registered as central-hub._ws._tcp.local. on {self._local_ip}:{self._port}")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Failed to register mDNS service: {type(e).__name__}: {e}")
+                import traceback
+                logger.debug(traceback.format_exc())
+                self._zeroconf = None
+                self._mdns_info = None
+                return False
+        
+        # Run blocking zeroconf operations in executor
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _do_register)
+    
+    async def _unregister_mdns(self):
+        """Unregister from mDNS."""
+        if not self._zeroconf and not self._mdns_info:
+            return
+            
+        def _do_unregister():
+            """Blocking unregistration - runs in executor."""
+            if self._zeroconf and self._mdns_info:
+                try:
+                    self._zeroconf.unregister_service(self._mdns_info)
+                    logger.info("mDNS: Unregistered central-hub service")
+                except Exception as e:
+                    logger.error(f"Error unregistering mDNS service: {e}")
+                finally:
+                    try:
+                        self._zeroconf.close()
+                    except Exception:
+                        pass
+                    self._zeroconf = None
+                    self._mdns_info = None
+        
+        # Run blocking zeroconf operations in executor
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _do_unregister)
     
     def _setup_broadcast_callbacks(self):
         """Set up onChange callbacks on all parameters to broadcast updates."""
@@ -337,6 +464,52 @@ class WebServerComponent(Component):
                 })
             
             return {'devices': devices}
+        
+        # ====================================================================
+        # add_device - Add a new ESP32 device by IP address
+        # ====================================================================
+        elif msg_type == 'add_device':
+            ip = request.get('ip', '').strip()
+            if not ip:
+                return {'error': 'missing ip field'}
+            
+            # Validate IP format (basic check)
+            import re
+            if not re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip):
+                return {'error': f'invalid IP format: {ip}'}
+            
+            result = await self.hub.add_device_dynamically(ip)
+            return result
+        
+        # ====================================================================
+        # rescan_devices - Re-scan for devices via mDNS
+        # ====================================================================
+        elif msg_type == 'rescan_devices':
+            # Import the discovery function - use absolute import
+            import sys
+            import os
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from central_hub import discover_esp32_devices
+            from config import MDNS_DISCOVERY_TIMEOUT, MDNS_SERVICE_TYPE
+            
+            # Run discovery in executor to not block
+            loop = asyncio.get_event_loop()
+            discovered = await loop.run_in_executor(
+                None,
+                lambda: discover_esp32_devices(MDNS_DISCOVERY_TIMEOUT, MDNS_SERVICE_TYPE)
+            )
+            
+            # Add any newly discovered devices
+            added = []
+            for name, ip in discovered.items():
+                if ip not in self.hub.devices:
+                    await self.hub.add_device_dynamically(ip)
+                    added.append({'name': name, 'ip': ip})
+            
+            return {
+                'discovered': [{'name': n, 'ip': i} for n, i in discovered.items()],
+                'added': added
+            }
         
         # ====================================================================
         # get_device_component_params - Get params for a component on any device

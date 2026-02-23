@@ -40,6 +40,9 @@
 #ifdef ENABLE_DOOR_SENSOR
 #include "door_sensor.h"
 #endif
+#ifdef ENABLE_TOUCH_SENSOR
+#include "touch_sensor.h"
+#endif
 #ifdef ENABLE_RGB_LED
 #include "rgb_led.h"
 #endif
@@ -78,6 +81,9 @@ static MotionSensorComponent motion_sensor_component;
 #endif
 #ifdef ENABLE_DOOR_SENSOR
 static DoorSensorComponent door_sensor_component;
+#endif
+#ifdef ENABLE_TOUCH_SENSOR
+static TouchSensorComponent touch_sensor_component;
 #endif
 #ifdef ENABLE_RGB_LED
 static RgbLedComponent rgb_led_component;
@@ -138,6 +144,11 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "  - Door sensor component registered");
 #endif
 
+#ifdef ENABLE_TOUCH_SENSOR
+    component_graph->registerComponent(&touch_sensor_component);
+    ESP_LOGI(TAG, "  - Touch sensor component registered");
+#endif
+
 #ifdef ENABLE_RGB_LED
     component_graph->registerComponent(&rgb_led_component);
     ESP_LOGI(TAG, "  - RGB LED component registered");
@@ -160,7 +171,7 @@ extern "C" void app_main(void)
     gui_component.createSimpleButtonGrid();
     ESP_LOGI(TAG, "GUI created successfully");
     log_memory_checkpoint("AFTER GUI CREATION");
-#endif;
+#endif
     
     ESP_LOGI(TAG, "System initialized - ready!");
     

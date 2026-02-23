@@ -53,6 +53,11 @@ class ParameterPicker {
                             <div class="picker-list" id="picker-devices">
                                 <div class="loading">Loading...</div>
                             </div>
+                            <div class="picker-device-actions" style="margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap;">
+                                <button class="btn btn-sm btn-secondary" id="picker-rescan-btn" title="Scan for devices via mDNS">🔍 Scan</button>
+                                <input type="text" id="picker-add-ip" placeholder="10.0.0.x" style="flex: 1; min-width: 80px; padding: 4px 6px; font-size: 12px;">
+                                <button class="btn btn-sm btn-primary" id="picker-add-btn" title="Add device by IP">➕</button>
+                            </div>
                         </div>
                         <div class="picker-column">
                             <h4>Component</h4>
@@ -91,6 +96,75 @@ class ParameterPicker {
         this.modal.querySelector('#picker-select-btn').onclick = () => this._confirmSelection();
         this.modal.querySelector('#picker-row').onchange = () => this._updatePreview();
         this.modal.querySelector('#picker-col').onchange = () => this._updatePreview();
+        
+        // Device management buttons
+        this.modal.querySelector('#picker-rescan-btn').onclick = () => this._rescanDevices();
+        this.modal.querySelector('#picker-add-btn').onclick = () => this._addDeviceByIp();
+        this.modal.querySelector('#picker-add-ip').onkeypress = (e) => {
+            if (e.key === 'Enter') this._addDeviceByIp();
+        };
+    }
+    
+    async _rescanDevices() {
+        const btn = this.modal.querySelector('#picker-rescan-btn');
+        const originalText = btn.textContent;
+        btn.textContent = '⏳...';
+        btn.disabled = true;
+        
+        try {
+            const result = await this.ws.send({ type: 'rescan_devices' });
+            console.log('Rescan result:', result);
+            
+            if (result.added && result.added.length > 0) {
+                showNotification(`Found ${result.added.length} new device(s)`, 'success');
+            } else if (result.discovered && result.discovered.length > 0) {
+                showNotification(`Found ${result.discovered.length} device(s) (already known)`, 'info');
+            } else {
+                showNotification('No devices found via mDNS', 'warning');
+            }
+            
+            // Reload device list
+            await this._loadComponents();
+        } catch (e) {
+            console.error('Rescan failed:', e);
+            showNotification('Scan failed: ' + e.message, 'error');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    }
+    
+    async _addDeviceByIp() {
+        const input = this.modal.querySelector('#picker-add-ip');
+        const ip = input.value.trim();
+        
+        if (!ip) {
+            showNotification('Enter an IP address', 'warning');
+            return;
+        }
+        
+        const btn = this.modal.querySelector('#picker-add-btn');
+        btn.disabled = true;
+        
+        try {
+            const result = await this.ws.send({ type: 'add_device', ip: ip });
+            console.log('Add device result:', result);
+            
+            if (result.error) {
+                showNotification(result.error, 'error');
+            } else {
+                showNotification(result.message || `Added ${ip}`, 'success');
+                input.value = '';
+                
+                // Wait a moment for connection, then reload
+                setTimeout(() => this._loadComponents(), 1500);
+            }
+        } catch (e) {
+            console.error('Add device failed:', e);
+            showNotification('Failed to add device: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+        }
     }
 
     async _loadComponents() {

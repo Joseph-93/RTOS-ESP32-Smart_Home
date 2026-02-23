@@ -2342,3 +2342,168 @@ code {
     text-align: left;
     padding: 8px 12px;
 }
+
+/* ============================================================================
+   Central Hub Status Section
+   ============================================================================ */
+
+.hub-status-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.hub-status-section h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.3rem;
+    color: var(--text-primary);
+}
+
+.hub-connection-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    color: var(--text-secondary);
+}
+
+.status-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-indicator.connected {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+}
+
+.status-indicator.disconnected {
+    background: var(--danger);
+}
+
+.status-indicator.connecting {
+    background: var(--warning);
+    animation: pulse-glow 1s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+.hub-device-management h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.hub-device-management h4 {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.hub-devices-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.hub-devices-list .loading,
+.hub-devices-list .empty-hint,
+.hub-devices-list .error-hint {
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.hub-devices-list .error-hint {
+    color: var(--danger);
+}
+
+.hub-device-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    transition: border-color 0.2s;
+}
+
+.hub-device-card.connected {
+    border-left: 3px solid var(--success);
+}
+
+.hub-device-card.disconnected {
+    border-left: 3px solid var(--danger);
+    opacity: 0.7;
+}
+
+.hub-device-icon {
+    font-size: 1.5rem;
+}
+
+.hub-device-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.hub-device-info strong {
+    color: var(--text-primary);
+}
+
+.hub-device-ip {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-family: monospace;
+}
+
+.hub-device-status {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.hub-device-components {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.hub-add-device .form-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.hub-add-device .form-row input {
+    min-width: 200px;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+.help-text {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0.25rem 0 0.75rem 0;
+}

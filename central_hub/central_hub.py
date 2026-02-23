@@ -125,6 +125,9 @@ class CentralHub:
         self.devices: Dict[str, ESP32Device] = {}  # ip -> device
         self.running = False
         
+        # Store our own IP so we don't accidentally try to connect to ourselves
+        self.local_ip = self._get_local_ip()
+        
         # Local components for control logic
         self.local_components: Dict[str, BaseComponent] = {}
         
@@ -173,8 +176,7 @@ class CentralHub:
         
     async def start(self):
         """Start the central hub - connect to all devices."""
-        local_ip = self._get_local_ip()
-        logger.info(f"Starting Central Hub at {local_ip}")
+        logger.info(f"Starting Central Hub at {self.local_ip}")
         logger.info(f"Configured to connect to {len(self.esp32_ips)} ESP32 devices")
         self.running = True
         
@@ -624,6 +626,32 @@ class CentralHub:
             return False
         return self.devices[ip].connected
     
+    async def add_device_dynamically(self, ip: str) -> dict:
+        """
+        Add a device by IP address at runtime.
+        Returns status dict with success/error info.
+        """
+        # Don't add ourselves!
+        if ip == self.local_ip or ip == '127.0.0.1' or ip == 'localhost':
+            return {'success': False, 'error': f'Cannot add self ({ip}) as remote device'}
+        
+        # Check if already exists
+        if ip in self.devices:
+            if self.devices[ip].connected:
+                return {'success': True, 'message': f'Device {ip} already connected'}
+            else:
+                return {'success': True, 'message': f'Device {ip} exists, reconnecting...'}
+        
+        # Add to IP list and start managing it
+        if ip not in self.esp32_ips:
+            self.esp32_ips.append(ip)
+        
+        # Start managing the new device (this creates the connection task)
+        asyncio.create_task(self._manage_device(ip))
+        
+        logger.info(f"Added new device: {ip}")
+        return {'success': True, 'message': f'Connecting to {ip}...'}
+
     def get_state_snapshot(self) -> dict:
         """Get a complete snapshot of all device states."""
         snapshot = {}
@@ -676,49 +704,31 @@ class CentralHub:
 
 def discover_esp32_devices(timeout: float = 5.0, service_type: str = "_ws._tcp.local.") -> Dict[str, str]:
     """
-    Discover ESP32 devices via mDNS.
+    Discover ESP32 devices via mDNS hostname resolution.
     
     Returns:
         Dict mapping device names to IP addresses.
     """
-    try:
-        from zeroconf import Zeroconf, ServiceBrowser, ServiceListener
-    except ImportError:
-        logger.warning("zeroconf not installed - mDNS discovery unavailable")
-        logger.warning("Install with: pip install zeroconf")
-        return {}
-    
     discovered = {}
     
-    class ESP32Listener(ServiceListener):
-        def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-            info = zc.get_service_info(type_, name)
-            if info and info.addresses:
-                ip = socket.inet_ntoa(info.addresses[0])
-                device_name = name.replace(f".{type_}", "")
-                discovered[device_name] = ip
-                logger.info(f"Discovered device: {device_name} at {ip}")
-        
-        def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-            pass
-        
-        def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-            pass
+    # Just resolve known hostnames - much more reliable on Windows than ServiceBrowser
+    known_hostnames = ['esp32.local', 'esp32-sensor.local', 'esp32-light.local', 'esp32-hub.local']
     
-    logger.info(f"Scanning for ESP32 devices via mDNS ({timeout}s timeout)...")
-    zc = Zeroconf()
-    listener = ESP32Listener()
-    browser = ServiceBrowser(zc, service_type, listener)
+    logger.info(f"Looking for ESP32 devices via hostname resolution...")
     
-    import time
-    time.sleep(timeout)
-    
-    zc.close()
+    for hostname in known_hostnames:
+        try:
+            ip = socket.gethostbyname(hostname)
+            device_name = hostname.replace('.local', '')
+            discovered[device_name] = ip
+            logger.info(f"Found: {device_name} at {ip}")
+        except socket.gaierror:
+            pass  # Hostname didn't resolve
     
     if discovered:
-        logger.info(f"mDNS discovery found {len(discovered)} device(s)")
+        logger.info(f"Discovered {len(discovered)} device(s)")
     else:
-        logger.warning("No devices found via mDNS")
+        logger.warning("No devices found via hostname resolution")
     
     return discovered
 

@@ -17,6 +17,7 @@ else()
     set(ENABLE_MOTION_SENSOR ON)
     set(ENABLE_DOOR_SENSOR ON)
     set(ENABLE_RGB_LED ON)
+    set(ENABLE_TOUCH_SENSOR ON)
 endif()
 
 # Pass component enables as compile definitions
@@ -37,6 +38,9 @@ if(ENABLE_DOOR_SENSOR)
 endif()
 if(ENABLE_RGB_LED)
     add_compile_definitions(ENABLE_RGB_LED)
+endif()
+if(ENABLE_TOUCH_SENSOR)
+    add_compile_definitions(ENABLE_TOUCH_SENSOR)
 endif()
 
 # Add common directory to component search path

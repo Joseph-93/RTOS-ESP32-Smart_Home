@@ -58,16 +58,22 @@
     },
     "Watcher": {
       "variables": {
-        "0,0": "{\"Button1\":{\"device\":\"10.0.0.46\",\"component\":\"GUI\",\"param\":\"button_0_pressed\",\"row\":0,\"col\":0},\"ActionsOn\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0}}"
+        "0,0": "{\"Button1\":{\"device\":\"10.0.0.46\",\"component\":\"GUI\",\"param\":\"button_0_pressed\",\"row\":0,\"col\":0},\"ActionsOn\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0},\"lamp_touch0\":{\"device\":\"10.0.0.157\",\"component\":\"TouchSensor\",\"param\":\"touched\",\"row\":0,\"col\":0},\"enabled\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0},\"lamp_touch1\":{\"device\":\"10.0.0.157\",\"component\":\"TouchSensor\",\"param\":\"touched\",\"row\":0,\"col\":1}}"
       },
       "expressions": {
-        "0,0": "Button1 and ActionsOn"
+        "0,0": "Button1 and ActionsOn",
+        "1,0": "lamp_touch0 == true and enabled == true",
+        "2,0": "lamp_touch1 == true and ActionsOn == true"
       },
       "rising_actions": {
-        "0,0": "{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":0,\"wait_after_ms\":0}]}"
+        "0,0": "{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":0,\"wait_after_ms\":0}]}",
+        "1,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":0,\"col\":0,\"value\":0,\"wait_after_ms\":0}]}",
+        "2,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":2,\"wait_after_ms\":0}]}"
       },
       "falling_actions": {
-        "0,0": "{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":1,\"wait_after_ms\":0}]}"
+        "0,0": "{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":1,\"wait_after_ms\":0}]}",
+        "1,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":0,\"col\":0,\"value\":-1,\"wait_after_ms\":0}]}",
+        "2,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":-1,\"wait_after_ms\":0}]}"
       },
       "enabled": {
         "0,0": true

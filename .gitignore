@@ -46,3 +46,5 @@ firmware\esp32_rtos_smart_home\managed_components\**
 **/sdkconfig
 **/sdkconfig.defaults
 .vscode/
+
+.github/
