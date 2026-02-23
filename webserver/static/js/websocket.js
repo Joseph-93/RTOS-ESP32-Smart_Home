@@ -11,12 +11,9 @@ class ESP32WebSocket {
 
     connect() {
         return new Promise((resolve, reject) => {
-            console.log(`Connecting to WebSocket: ws://${this.host}/ws`);
-            
             this.ws = new WebSocket(`ws://${this.host}/ws`);
             
             this.ws.onopen = () => {
-                console.log('WebSocket connected');
                 this.connected = true;
                 if (this.reconnectTimer) {
                     clearTimeout(this.reconnectTimer);
@@ -26,7 +23,6 @@ class ESP32WebSocket {
             };
             
             this.ws.onmessage = (event) => {
-                console.log('WebSocket received:', event.data);
                 try {
                     const response = JSON.parse(event.data);
                     
@@ -56,14 +52,12 @@ class ESP32WebSocket {
             };
             
             this.ws.onclose = () => {
-                console.log('WebSocket closed');
                 this.connected = false;
                 
                 // Auto-reconnect after 2 seconds
                 if (!this.reconnectTimer) {
                     this.reconnectTimer = setTimeout(() => {
-                        console.log('Attempting to reconnect...');
-                        this.connect().catch(err => console.error('Reconnect failed:', err));
+                        this.connect().catch(() => {});
                     }, 2000);
                 }
             };
@@ -93,15 +87,12 @@ class ESP32WebSocket {
             }, 10000); // 10 second timeout
             
             const messageStr = JSON.stringify(message);
-            console.log('WebSocket sending:', messageStr);
             this.ws.send(messageStr);
         });
     }
 
     handlePushMessage(message) {
         // Handle unsolicited messages from ESP32 (parameter updates, etc.)
-        console.log('Push message from ESP32:', message);
-        
         // Dispatch custom event that UI can listen to
         window.dispatchEvent(new CustomEvent('esp32-push', { detail: message }));
     }

@@ -540,7 +540,6 @@ async function uploadAnimation(ws, compName, frames, ledCount, onProgress) {
         if (resp?.value && resp.value > 0) {
             chunkSize = resp.value;
             RGB_CHUNK_SIZE = chunkSize;  // Update global too
-            console.log('[RGB] Confirmed chunk size from ESP32:', chunkSize);
         } else {
             console.warn('[RGB] Could not get chunk_size, using fallback:', chunkSize);
         }
@@ -551,23 +550,15 @@ async function uploadAnimation(ws, compName, frames, ledCount, onProgress) {
     const raw = buildRawBytes(frames, ledCount);
     const numChunks = Math.ceil(raw.length / chunkSize);
 
-    console.group(`[RGB] Upload: ${frames.length} frame(s), ${raw.length} bytes, ${numChunks} chunk(s)`);
-    console.log('[RGB] LED count:', ledCount, '| Chunk size:', chunkSize);
-
     const send = async (label, msg) => {
-        console.log(`[RGB] → ${label}`, msg.value !== undefined ? `value=${JSON.stringify(msg.value).substring(0, 80)}` : '');
         const resp = await ws.send(msg);
-        console.log(`[RGB] ← ${label} response:`, resp);
         if (resp && resp.success === false) {
-            console.error(`[RGB] ✗ ${label} FAILED:`, resp.error);
             throw new Error(`ESP32 rejected ${label}: ${resp.error || 'unknown error'}`);
         }
-        console.log(`[RGB] ✓ ${label} OK`);
         return resp;
     };
 
     onProgress('Starting upload…', 0);
-    console.log('[RGB] Setting total frames:', frames.length);
     await send('anim_total_frames',
         { type: 'set_param', comp: compName, param: 'anim_total_frames', row: 0, col: 0, value: frames.length });
     await sleep(150);
@@ -576,7 +567,6 @@ async function uploadAnimation(ws, compName, frames, ledCount, onProgress) {
         const slice = raw.slice(i * chunkSize, (i + 1) * chunkSize);
         const pct = Math.round((i / numChunks) * 90);
         onProgress(`Chunk ${i + 1} / ${numChunks}`, pct);
-        console.log(`[RGB] Chunk ${i + 1}/${numChunks} — ${slice.length} bytes (${pct}%)`);
         await send(`chunk_index[${i}]`,
             { type: 'set_param', comp: compName, param: 'anim_chunk_index', row: 0, col: 0, value: i });
         await sleep(40);
@@ -586,13 +576,10 @@ async function uploadAnimation(ws, compName, frames, ledCount, onProgress) {
     }
 
     onProgress('Committing…', 95);
-    console.log('[RGB] Committing animation…');
     await send('anim_commit',
         { type: 'set_param', comp: compName, param: 'anim_commit', row: 0, col: 0, value: true });
     await sleep(150);
     onProgress('Done!', 100);
-    console.log('[RGB] Upload complete ✓');
-    console.groupEnd();
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -683,7 +670,6 @@ class RgbLedAnimationBuilder {
                 const resp = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'active_preset', row: 0, col: 0 });
                 const newActive = resp?.value ?? -1;
                 if (newActive !== this.activePreset) {
-                    console.log('[RGB] Poll: active_preset changed', this.activePreset, '->', newActive);
                     this.activePreset = newActive;
                     needsRender = true;
                 }
@@ -692,7 +678,6 @@ class RgbLedAnimationBuilder {
                 const t1Resp = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'preset_priority', row: 1, col: 0 });
                 const newT1 = t1Resp?.value ?? -1;
                 if (newT1 !== this.tier1Preset) {
-                    console.log('[RGB] Poll: tier1 changed', this.tier1Preset, '->', newT1);
                     this.tier1Preset = newT1;
                     needsRender = true;
                 }
@@ -701,7 +686,6 @@ class RgbLedAnimationBuilder {
                 const t2Resp = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'preset_priority', row: 2, col: 0 });
                 const newT2 = t2Resp?.value ?? -1;
                 if (newT2 !== this.tier2Preset) {
-                    console.log('[RGB] Poll: tier2 changed', this.tier2Preset, '->', newT2);
                     this.tier2Preset = newT2;
                     needsRender = true;
                 }
@@ -728,7 +712,6 @@ class RgbLedAnimationBuilder {
             // Get the full dump from hub_store_dump param
             const resp = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'hub_store_dump', row: 0, col: 0 });
             const json = resp?.value || '{}';
-            console.log('[RGB] Hub store raw dump:', json);
             const data = JSON.parse(json);
             
             // Convert to presetMetadata format (keys are "preset_<name>")
@@ -738,13 +721,11 @@ class RgbLedAnimationBuilder {
                     const presetName = key.substring(7); // Remove "preset_" prefix
                     try {
                         this.presetMetadata[presetName] = JSON.parse(value);
-                        console.log(`[RGB] Loaded metadata for "${presetName}":`, this.presetMetadata[presetName]);
                     } catch (e) {
                         console.warn('[RGB] Failed to parse hub store entry:', key, e);
                     }
                 }
             }
-            console.log('[RGB] Loaded hub store metadata:', Object.keys(this.presetMetadata));
         } catch (e) {
             console.warn('[RGB] Failed to load hub store metadata:', e);
         }
@@ -763,7 +744,6 @@ class RgbLedAnimationBuilder {
             
             // Update local cache
             this.presetMetadata[presetName] = metadata;
-            console.log('[RGB] Saved hub store metadata for:', presetName);
         } catch (e) {
             console.warn('[RGB] Failed to save hub store metadata:', e);
         }
@@ -780,7 +760,6 @@ class RgbLedAnimationBuilder {
             await this.ws.send({ type: 'set_param', comp: this.compName, param: 'hub_store_value', row: 0, col: 0, value: '' });
             
             delete this.presetMetadata[presetName];
-            console.log('[RGB] Deleted hub store metadata for:', presetName);
         } catch (e) {
             console.warn('[RGB] Failed to delete hub store metadata:', e);
         }
@@ -788,26 +767,20 @@ class RgbLedAnimationBuilder {
     
     // ========== Subscriptions ==========
     
-    // Subscribe to preset-related read-only params to keep UI in sync
+    // Initialize params and set up push listener
     async _subscribeToParams() {
         if (!this.ws?.connected) return;
-        const params = ['preset_count', 'active_preset', 'anim_frame_count', 'anim_memory_used', 'anim_memory_max'];
-        for (const p of params) {
-            try {
-                await this.ws.send({ type: 'subscribe', comp: this.compName, param: p });
-            } catch (e) { console.warn(`[RGB] subscribe ${p}:`, e); }
-        }
-        // Also request current values
+        
+        // Request current values (polling handles ongoing updates)
         this._refreshDeviceState();
         
-        // Listen for push updates from ESP32
+        // Listen for push updates from ESP32 (if subscriptions are set up elsewhere)
         window.addEventListener('esp32-push', (e) => this._handlePushEvent(e.detail));
     }
     
     _handlePushEvent(msg) {
         // Check if this is a param_update for our component
         if (msg.type === 'param_update' && msg.comp === this.compName) {
-            console.log('[RGB] Push update:', msg.param, '=', msg.value);
             this.onParamUpdate(msg.param, msg.value);
         }
     }
@@ -830,9 +803,6 @@ class RgbLedAnimationBuilder {
             const espChunkSize = await getValue('chunk_size');
             if (espChunkSize && espChunkSize > 0) {
                 RGB_CHUNK_SIZE = espChunkSize;
-                console.log('[RGB] Chunk size from ESP32:', RGB_CHUNK_SIZE);
-            } else {
-                console.warn('[RGB] Could not get chunk_size from ESP32, using default:', RGB_CHUNK_SIZE);
             }
             
             this.presetCount = await getValue('preset_count') ?? 0;
@@ -847,12 +817,9 @@ class RgbLedAnimationBuilder {
             this.memoryUsed = await getValue('anim_memory_used') ?? 0;
             this.memoryMax = await getValue('anim_memory_max') ?? 150 * 1024;
             
-            console.log('[RGB] Device state:', { presetCount: this.presetCount, activePreset: this.activePreset, tier1: this.tier1Preset, tier2: this.tier2Preset, memoryUsed: this.memoryUsed, memoryMax: this.memoryMax });
-            
             // Get list of actual preset IDs (may be non-sequential due to deletions)
             const presetIdsStr = await getValue('preset_ids') ?? '';
             const presetIds = presetIdsStr ? presetIdsStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)) : [];
-            console.log('[RGB] Preset IDs:', presetIds);
             
             // Query each preset's metadata by its actual ID
             this.devicePresets = [];
@@ -1207,15 +1174,12 @@ class RgbLedAnimationBuilder {
         
         // Load metadata from hub store cache (populated by _loadHubStoreMetadata)
         const metadata = this.presetMetadata[name];
-        console.log(`[RGB] Edit preset "${name}" - metadata from hub store:`, metadata);
         if (metadata) {
             this.editingEffectType = metadata.effect_type || 'custom';
             this.editingEffectParams = metadata.effect_params || {};
-            console.log(`[RGB] Using effect "${this.editingEffectType}" with params:`, this.editingEffectParams);
         } else {
             this.editingEffectType = 'custom';
             this.editingEffectParams = {};
-            console.log('[RGB] No metadata found, using custom effect');
         }
         
         // Open editor immediately with empty frames (will populate after download)
@@ -1223,10 +1187,7 @@ class RgbLedAnimationBuilder {
         
         // If we have stored effect type, show that preset UI with params
         if (this.editingEffectType && this.editingEffectType !== 'custom') {
-            console.log(`[RGB] Calling _showPreset("${this.editingEffectType}") with params:`, this.editingEffectParams);
             this._showPreset(this.editingEffectType);
-        } else {
-            console.log('[RGB] Skipping _showPreset - effect is custom or null');
         }
         
         if (dataSize === 0 || frameCount === 0) {
@@ -1245,7 +1206,6 @@ class RgbLedAnimationBuilder {
                 if (csResp?.value && csResp.value > 0) {
                     chunkSize = csResp.value;
                     RGB_CHUNK_SIZE = chunkSize;  // Update global too
-                    console.log('[RGB] Confirmed chunk size from ESP32:', chunkSize);
                 }
             } catch (e) {
                 console.warn('[RGB] Failed to query chunk_size, using default:', chunkSize);
@@ -1262,7 +1222,6 @@ class RgbLedAnimationBuilder {
             
             // Check if user switched to a different preset while we were waiting
             if (this._downloadId !== downloadId) {
-                console.log('[RGB] Download cancelled - user switched presets');
                 this._hideBuilderLoading();
                 return;
             }
@@ -1275,7 +1234,6 @@ class RgbLedAnimationBuilder {
             for (let i = 0; i < numChunks; i++) {
                 // Check for cancellation
                 if (this._downloadId !== downloadId) {
-                    console.log('[RGB] Download cancelled mid-stream');
                     this._hideBuilderLoading();
                     return;
                 }
@@ -1295,7 +1253,6 @@ class RgbLedAnimationBuilder {
             
             // Final check before populating frames
             if (this._downloadId !== downloadId) {
-                console.log('[RGB] Download completed but user switched presets - discarding');
                 this._hideBuilderLoading();
                 return;
             }
@@ -1603,7 +1560,6 @@ class RgbLedAnimationBuilder {
             if (isUpdate) {
                 if (label) label.textContent = 'Deleting old preset...';
                 if (fill) fill.style.width = '5%';
-                console.log(`[RGB] Deleting old preset at index ${this.editingPresetIndex} before update`);
                 await this.ws.send({ type: 'set_param', comp: this.compName, param: 'delete_preset', row: 0, col: 0, value: this.editingPresetIndex });
                 await sleep(100);
             }
@@ -1611,11 +1567,9 @@ class RgbLedAnimationBuilder {
             // Get preset name and loop setting (integer: -1=infinite, 1=once, N=play N times)
             let presetName = nameInput?.value?.trim() || this.editingPresetName || '';
             const loopValue = loopInput ? parseInt(loopInput.value) : (this.editingLoop ?? -1);
-            console.log(`[RGB] Save: nameInput=${nameInput}, value="${nameInput?.value}", trimmed="${nameInput?.value?.trim()}", presetName="${presetName}"`);
             
             // Set preset name - ALWAYS set it, even when updating
             if (presetName) {
-                console.log(`[RGB] Setting anim_preset_name to: "${presetName}"`);
                 await this.ws.send({ type: 'set_param', comp: this.compName, param: 'anim_preset_name', row: 0, col: 0, value: presetName });
                 await sleep(30);
             } else {
@@ -1651,7 +1605,6 @@ class RgbLedAnimationBuilder {
                         await sleep(30);
                         const nameResp = await this.ws.send({ type: 'get_param', comp: this.compName, param: 'query_preset_name', row: 0, col: 0 });
                         actualPresetName = nameResp?.value || '';
-                        console.log(`[RGB] ESP32 assigned preset name: "${actualPresetName}" (ID ${newId})`);
                     }
                 } catch (e) {
                     console.warn('[RGB] Failed to query assigned preset name:', e);
@@ -1660,7 +1613,6 @@ class RgbLedAnimationBuilder {
             
             const displayName = actualPresetName || 'Preset';
             const action = isUpdate ? 'Updated' : 'Saved';
-            console.log(`[RGB] ✅ ${action}: "${displayName}" (${this.frames.length} frame(s))`);
             _rgbNotify(`✅ ${action} "${displayName}" (${this.frames.length} frames)`, 'success');
             
             // Save metadata to hub store (effect type, params, loop, frame count)
@@ -1705,10 +1657,8 @@ class RgbLedAnimationBuilder {
 
     async _setPlaying(val) {
         if (!this.ws?.connected) { _rgbNotify('Not connected', 'error'); return; }
-        console.log(`[RGB] setPlaying(${val})`);
         try {
             const resp = await this.ws.send({ type: 'set_param', comp: this.compName, param: 'playing', row: 0, col: 0, value: val });
-            console.log('[RGB] setPlaying response:', resp);
             if (resp && resp.success === false) throw new Error(resp.error || 'ESP32 rejected');
             _rgbNotify(val ? '▶️ Playing' : '⏹️ Stopped', 'success');
         } catch (e) {
@@ -1719,10 +1669,8 @@ class RgbLedAnimationBuilder {
 
     async _setLoop(val) {
         if (!this.ws?.connected) return;
-        console.log(`[RGB] setLoop(${val})`);
         try {
             const resp = await this.ws.send({ type: 'set_param', comp: this.compName, param: 'loop', row: 0, col: 0, value: val });
-            console.log('[RGB] setLoop response:', resp);
             if (resp && resp.success === false) throw new Error(resp.error || 'ESP32 rejected');
         } catch (e) {
             console.error('[RGB] setLoop failed:', e);

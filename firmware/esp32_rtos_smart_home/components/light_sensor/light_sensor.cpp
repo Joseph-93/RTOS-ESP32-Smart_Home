@@ -9,43 +9,20 @@
 
 LightSensorComponent::LightSensorComponent() 
     : Component("LightSensor") {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER/EXIT] LightSensorComponent constructor");
-#endif
-    ESP_LOGI(TAG, "LightSensorComponent created");
 }
 
 LightSensorComponent::~LightSensorComponent() {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER/EXIT] ~LightSensorComponent");
-#endif
-    ESP_LOGI(TAG, "LightSensorComponent destroyed");
 }
 
 void LightSensorComponent::setUpDependencies(ComponentGraph* graph) {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER/EXIT] LightSensorComponent::setUpDependencies");
-#endif
     // Get reference to GUI component
     this->component_graph = graph;
     if (component_graph) {
         gui_component = component_graph->getComponent("GUI");
-        if (gui_component) {
-            ESP_LOGI(TAG, "GUI component reference obtained");
-        } else {
-            ESP_LOGW(TAG, "GUI component not found");
-        }
-    } else {
-        ESP_LOGE(TAG, "ComponentGraph not available!");
     }
 }
 
 void LightSensorComponent::onInitialize() {
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[ENTER] LightSensorComponent::initialize");
-#endif
-    ESP_LOGI(TAG, "Initializing LightSensorComponent...");
-    
     adc1_config_width(ADC_WIDTH_BIT_12);
     adc1_config_channel_atten(LIGHT_SENSOR_PIN, ADC_ATTEN_DB_12);
 
@@ -62,8 +39,6 @@ void LightSensorComponent::onInitialize() {
     );
     if (result != pdPASS) {
         ESP_LOGE(TAG, "Failed to create light sensor task");
-    } else {
-        ESP_LOGI(TAG, "Light sensor task created successfully");
     }
 
     light_sensor_timer_handle = xTimerCreate(
@@ -83,16 +58,10 @@ void LightSensorComponent::onInitialize() {
         result = xTimerStart(light_sensor_timer_handle, 0);
         if (result != pdPASS) {
             ESP_LOGE(TAG, "Failed to start light sensor timer");
-        } else {
-            ESP_LOGI(TAG, "Light sensor timer started successfully");
         }
     }
     
     initialized = true;
-    ESP_LOGI(TAG, "LightSensorComponent initialized");
-#ifdef DEBUG
-    ESP_LOGI(TAG, "[EXIT] LightSensorComponent::initialize");
-#endif
 }
 
 // Static task entry point - required for FreeRTOS task creation
@@ -103,8 +72,6 @@ void LightSensorComponent::lightSensorTaskWrapper(void* pvParameters) {
 
 // Instance method containing the actual task loop and logic
 void LightSensorComponent::lightSensorTask() {
-    ESP_LOGI(TAG, "Light sensor task started");
-    
     static int sample_count = 0;
 
     while (1) {

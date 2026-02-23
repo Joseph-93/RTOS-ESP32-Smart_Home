@@ -11,8 +11,6 @@ HeartbeatComponent::HeartbeatComponent()
 }
 
 void HeartbeatComponent::onInitialize() {
-    ESP_LOGI(TAG, "Setting up Heartbeat component");
-    
     // The heartbeat pulse - read-only, other devices subscribe to this
     heartbeat = addBoolParam("pulse", 1, 1, false, true);  // read-only
     
@@ -34,8 +32,6 @@ void HeartbeatComponent::onInitialize() {
     
     if (result != pdPASS) {
         ESP_LOGE(TAG, "Failed to create heartbeat task");
-    } else {
-        ESP_LOGI(TAG, "Heartbeat task created, rate: %.2f Hz", rateHz->getValue(0, 0));
     }
 }
 

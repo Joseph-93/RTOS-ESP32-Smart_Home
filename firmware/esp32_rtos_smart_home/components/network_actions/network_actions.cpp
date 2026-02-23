@@ -16,14 +16,12 @@ NetworkActionsComponent::NetworkActionsComponent()
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER/EXIT] NetworkActionsComponent constructor");
 #endif
-    ESP_LOGI(TAG, "NetworkActionsComponent created");
 }
 
 NetworkActionsComponent::~NetworkActionsComponent() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER/EXIT] ~NetworkActionsComponent");
 #endif
-    ESP_LOGI(TAG, "NetworkActionsComponent destroyed");
 }
 
 void NetworkActionsComponent::setUpDependencies(ComponentGraph* graph) {
@@ -37,11 +35,9 @@ void NetworkActionsComponent::onInitialize() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] NetworkActionsComponent::initialize");
 #endif
-    ESP_LOGI(TAG, "Initializing NetworkActionsComponent...");
     
     // Add WiFi connection status parameter and store pointer
     wifiConnected = addBoolParam("wifi_connected", 1, 1, false, true);
-    ESP_LOGI(TAG, "Added wifi_connected parameter");
     
     // Create EMPTY parameters (0 rows) with 1 column - will grow as we append messages
     // Need at least 1 column for appendValue to work (it divides by cols)
@@ -81,7 +77,6 @@ void NetworkActionsComponent::onInitialize() {
     // Check if WiFi is already connected (callback only fires on state changes)
     // If we registered after WiFi already connected, manually invoke callback
     if (wifi_is_connected()) {
-        ESP_LOGI(TAG, "WiFi already connected - updating parameter and sending notification");
         wifi_event_callback(true, this);
     }
     
@@ -89,8 +84,6 @@ void NetworkActionsComponent::onInitialize() {
     registerActions();
     
     initialized = true;
-    ESP_LOGI(TAG, "NetworkActionsComponent initialized: %zu TCP, %zu HTTP, %zu WS messages",
-             getTcpMessageCount(), getHttpMessageCount(), getWsMessageCount());
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] NetworkActionsComponent::initialize");
 #endif
@@ -136,8 +129,6 @@ void NetworkActionsComponent::send_next_from_queue() {
                     break;
                 }
             }
-            ESP_LOGI(TAG, "Sent network action (protocol: %d, index: %zu) - result: %d",
-                     static_cast<int>(item.protocol), item.message_index, result);
             
             // Send notification via ComponentGraph
             if (component_graph) {
@@ -164,10 +155,8 @@ void NetworkActionsComponent::wifi_event_callback(bool connected, void* user_dat
     if (self->component_graph) {
         if (connected) {
             self->component_graph->sendNotification("WiFi Connected", false, 3, 3000);
-            ESP_LOGI(TAG, "WiFi connected - notification sent");
         } else {
             self->component_graph->sendNotification("WiFi Disconnected", true, 5, 5000);
-            ESP_LOGW(TAG, "WiFi disconnected - notification sent");
         }
     }
 }
@@ -224,8 +213,6 @@ void NetworkActionsComponent::loadAllMessageExamples() {
         cJSON_free(item_json);
         cJSON_Delete(root);
     }
-    
-    ESP_LOGI(TAG, "Loaded %zu TCP, %zu HTTP, %zu WS message examples", tcp_count, http_count, ws_count);
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] loadAllMessageExamples");
 #endif
@@ -561,8 +548,6 @@ void NetworkActionsComponent::registerActions() {
             total_triggers++;
         }
     }
-    
-    ESP_LOGI(TAG, "Registered %zu triggers", total_triggers);
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] registerActions");
 #endif

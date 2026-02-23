@@ -7,19 +7,11 @@
 // Persistence save interval in milliseconds (30 seconds)
 static constexpr uint32_t PERSISTENCE_INTERVAL_MS = 30000;
 
-// Memory logging helper
-static void log_component_memory(const char* component_name, const char* stage) {
-    ESP_LOGI("ComponentGraph", "  [%s] %s - Free DRAM: %lu bytes", 
-             component_name, stage, heap_caps_get_free_size(MALLOC_CAP_8BIT));
-}
-
 // ============================================================================
 // Constructor / Destructor
 // ============================================================================
 
 ComponentGraph::ComponentGraph() {
-    ESP_LOGI(TAG, "ComponentGraph created");
-    
     // Create mutex for component maps
     componentsMutex = xSemaphoreCreateMutex();
     if (componentsMutex == nullptr) {
@@ -35,8 +27,6 @@ ComponentGraph::ComponentGraph() {
     
     if (!notification_queue_gui) {
         ESP_LOGE(TAG, "Failed to create GUI notification queue");
-    } else {
-        ESP_LOGI(TAG, "Notification queue created (GUI: 10 items)");
     }
     
     // Create persistence timer (saves dirty parameters every 30 seconds)
@@ -49,14 +39,10 @@ ComponentGraph::ComponentGraph() {
     );
     if (persistenceTimer == nullptr) {
         ESP_LOGE(TAG, "Failed to create persistence timer!");
-    } else {
-        ESP_LOGI(TAG, "Persistence timer created (interval: %lu ms)", PERSISTENCE_INTERVAL_MS);
     }
 }
 
 ComponentGraph::~ComponentGraph() {
-    ESP_LOGI(TAG, "ComponentGraph destroyed");
-    
     // Stop and delete persistence timer
     if (persistenceTimer) {
         xTimerStop(persistenceTimer, portMAX_DELAY);
@@ -115,8 +101,6 @@ void ComponentGraph::registerComponent(Component* component) {
     componentsById[id] = component;
     
     xSemaphoreGive(componentsMutex);
-    
-    ESP_LOGI(TAG, "Registered component: %s (id=%u)", name.c_str(), id);
 }
 
 Component* ComponentGraph::getComponent(const std::string& name) {
@@ -130,9 +114,6 @@ Component* ComponentGraph::getComponent(const std::string& name) {
     
     xSemaphoreGive(componentsMutex);
     
-    if (!result) {
-        ESP_LOGE(TAG, "Component '%s' not found in graph", name.c_str());
-    }
     return result;
 }
 
@@ -221,8 +202,7 @@ BaseParameter* ComponentGraph::getParamById(uint32_t paramId) {
 // ============================================================================
 
 void ComponentGraph::initializeAll() {
-    ESP_LOGI(TAG, "=== STARTING COMPONENT INITIALIZATION ===");
-    log_component_memory("GRAPH", "START of initializeAll");
+    ESP_LOGI(TAG, "Initializing %zu components...", componentsByName.size());
     
     // Build a snapshot of components to iterate over (avoid holding mutex during init)
     std::vector<std::pair<std::string, Component*>> components_snapshot;
@@ -239,43 +219,22 @@ void ComponentGraph::initializeAll() {
     
     xSemaphoreGive(componentsMutex);  // Release mutex BEFORE calling component methods
     
-    ESP_LOGI(TAG, "Setting up dependencies for all components (%zu total)...", components_snapshot.size());
-    log_component_memory("GRAPH", "BEFORE setUpDependencies phase");
-    
     // First pass: set up dependencies (mutex NOT held - components can call getComponent safely)
     for (auto& pair : components_snapshot) {
-        log_component_memory(pair.first.c_str(), "BEFORE setUpDependencies");
-        ESP_LOGI(TAG, "Setting up dependencies for: %s", pair.first.c_str());
         pair.second->setUpDependencies(this);
-        log_component_memory(pair.first.c_str(), "AFTER setUpDependencies");
     }
-    
-    log_component_memory("GRAPH", "AFTER setUpDependencies phase");
-    ESP_LOGI(TAG, "Initializing all components...");
-    log_component_memory("GRAPH", "BEFORE initialize phase");
     
     // Second pass: initialize (mutex NOT held)
     for (auto& pair : components_snapshot) {
-        log_component_memory(pair.first.c_str(), "BEFORE init");
-        ESP_LOGI(TAG, "Initializing component: %s", pair.first.c_str());
         pair.second->initialize();
-        log_component_memory(pair.first.c_str(), "AFTER init");
     }
     
-    log_component_memory("GRAPH", "AFTER initialize phase");
     // Third pass: Post-initialization (for tasks that need all components ready)
-    ESP_LOGI(TAG, "Running post-initialization for all components...");
-    log_component_memory("GRAPH", "BEFORE postInitialize phase");
     for (auto& pair : components_snapshot) {
-        log_component_memory(pair.first.c_str(), "BEFORE post-init");
-        ESP_LOGI(TAG, "Post-initializing component: %s", pair.first.c_str());
         pair.second->postInitialize();
-        log_component_memory(pair.first.c_str(), "AFTER post-init");
     }
     
-    log_component_memory("GRAPH", "AFTER postInitialize phase");
-    ESP_LOGI(TAG, "=== COMPONENT INITIALIZATION COMPLETE ===");
-    log_component_memory("GRAPH", "END of initializeAll");
+    ESP_LOGI(TAG, "All components initialized");
 }
 
 std::vector<std::string> ComponentGraph::getComponentNames() const {
@@ -362,7 +321,6 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
     }
     
     const char* msg_type = type_item->valuestring;
-    ESP_LOGI(TAG, "Executing message type: %s", msg_type);
     
     // ========================================================================
     // get_components - List all components with IDs
@@ -490,8 +448,6 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
     // set_param - Set parameter value by name or ID
     // ========================================================================
     else if (strcmp(msg_type, "set_param") == 0) {
-        ESP_LOGI(TAG, "=== SET PARAMETER ===");
-        
         cJSON* param_id_item = cJSON_GetObjectItem(request, "param_id");
         cJSON* comp_item = cJSON_GetObjectItem(request, "comp");
         cJSON* param_name_item = cJSON_GetObjectItem(request, "param");
@@ -541,9 +497,7 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
         
         cJSON* response = cJSON_CreateObject();
         cJSON_AddBoolToObject(response, "success", success);
-        if (success) {
-            ESP_LOGI(TAG, "Parameter '%s' set successfully", param->getName().c_str());
-        } else {
+        if (!success) {
             ESP_LOGE(TAG, "Failed to set parameter '%s'", param->getName().c_str());
             cJSON_AddStringToObject(response, "error", "failed to set value");
         }

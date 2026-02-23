@@ -49,7 +49,6 @@ function hideError() {
 }
 
 async function initComponent(deviceName, componentName) {
-    console.log('[JS] initComponent called for:', deviceName, componentName);
     hideError();
     showPageLoading(`Connecting to ${deviceName}...`);
     
@@ -61,7 +60,6 @@ async function initComponent(deviceName, componentName) {
     const esp32Host = window.esp32Host;
     try {
         await initWebSocket(esp32Host);
-        console.log('[JS] WebSocket connected');
         
         // Set up parameter update handler
         window.addEventListener('esp32-push', handleParameterUpdate);
@@ -74,15 +72,12 @@ async function initComponent(deviceName, componentName) {
     }
     
     showPageLoading(`Loading ${componentName}...`);
-    console.log('[JS] Loading parameters...');
     await loadParameters(deviceName, componentName);
-    console.log('[JS] Done loading component');
     hidePageLoading();
 }
 
 // Cleanup subscriptions when leaving page
 window.addEventListener('beforeunload', async () => {
-    console.log('[JS] Cleaning up subscriptions');
     for (const sub of activeSubscriptions) {
         try {
             // Use new ID-based unsubscribe
@@ -95,7 +90,6 @@ window.addEventListener('beforeunload', async () => {
 
 function handleParameterUpdate(event) {
     const data = event.detail;
-    console.log('[WS Push] Parameter update:', data);
     if (data.type !== 'param_update') return;
     
     // New API uses param_id - extract from push message
@@ -103,8 +97,6 @@ function handleParameterUpdate(event) {
     
     // Build input ID based on param_id
     const inputId = `param_${param_id}_${row}_${col}`;
-    
-    console.log('[WS Push] Looking for input with ID:', inputId);
     
     // Try to find the input element - could be various types
     const element = document.getElementById(inputId);
@@ -115,7 +107,6 @@ function handleParameterUpdate(event) {
         if (element.classList.contains('bool-buttons')) {
             const buttons = element.querySelectorAll('.bool-btn');
             const isTrue = (value === true || value === 'true' || value === 1);
-            console.log('[WS Push] Bool update - isTrue:', isTrue, 'value:', value);
             if (buttons.length >= 2) {
                 buttons[0].classList.toggle('active', isTrue);
                 buttons[1].classList.toggle('active', !isTrue);
@@ -133,8 +124,6 @@ function handleParameterUpdate(event) {
                 slider.value = value;
             }
         }
-    } else {
-        console.log('[WS Push] Element not found for ID:', inputId);
     }
     
     // No notification for push updates - they happen frequently and would spam the user
@@ -145,19 +134,15 @@ async function loadParameters(deviceName, componentName) {
     
     try {
         // Get COUNTS first via WebSocket - one type at a time
-        console.log('[JS] Getting int param count...');
         const intCount = (await esp32ws.getParamInfo(componentName, 'int', -1)).count || 0;
         await new Promise(r => setTimeout(r, 100));
         
-        console.log('[JS] Getting float param count...');
         const floatCount = (await esp32ws.getParamInfo(componentName, 'float', -1)).count || 0;
         await new Promise(r => setTimeout(r, 100));
         
-        console.log('[JS] Getting bool param count...');
         const boolCount = (await esp32ws.getParamInfo(componentName, 'bool', -1)).count || 0;
         await new Promise(r => setTimeout(r, 100));
         
-        console.log('[JS] Getting string param count...');
         const strCount = (await esp32ws.getParamInfo(componentName, 'str', -1)).count || 0;
         await new Promise(r => setTimeout(r, 100));
         
@@ -166,7 +151,6 @@ async function loadParameters(deviceName, componentName) {
         
         // Fetch each parameter and expand to individual entries
         for (let i = 0; i < intCount; i++) {
-            console.log(`[JS] Fetching int param ${i}...`);
             const param = await esp32ws.getParamInfo(componentName, 'int', i);
             // Expand to individual row/col entries
             for (let r = 0; r < param.rows; r++) {
@@ -178,7 +162,6 @@ async function loadParameters(deviceName, componentName) {
         }
         
         for (let i = 0; i < floatCount; i++) {
-            console.log(`[JS] Fetching float param ${i}...`);
             const param = await esp32ws.getParamInfo(componentName, 'float', i);
             for (let r = 0; r < param.rows; r++) {
                 for (let c = 0; c < param.cols; c++) {
@@ -189,7 +172,6 @@ async function loadParameters(deviceName, componentName) {
         }
         
         for (let i = 0; i < boolCount; i++) {
-            console.log(`[JS] Fetching bool param ${i}...`);
             const param = await esp32ws.getParamInfo(componentName, 'bool', i);
             for (let r = 0; r < param.rows; r++) {
                 for (let c = 0; c < param.cols; c++) {
@@ -200,7 +182,6 @@ async function loadParameters(deviceName, componentName) {
         }
         
         for (let i = 0; i < strCount; i++) {
-            console.log(`[JS] Fetching string param ${i}...`);
             const param = await esp32ws.getParamInfo(componentName, 'str', i);
             for (let r = 0; r < param.rows; r++) {
                 for (let c = 0; c < param.cols; c++) {
@@ -397,7 +378,6 @@ async function setParamValueById(paramId, row, col, value) {
         const success = await esp32ws.setParamById(paramId, row, col, value);
         
         if (success) {
-            console.log('Parameter updated successfully');
             notifications.success('Parameter updated');
         } else {
             notifications.error('Failed to update parameter');

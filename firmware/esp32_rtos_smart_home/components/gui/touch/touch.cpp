@@ -44,7 +44,6 @@ esp_lcd_touch_handle_t touch_init(void) {
     }
     
     touch_initialized = true;
-    ESP_LOGI(TAG, "Touch initialized");
     
     return touch_handle;
 }

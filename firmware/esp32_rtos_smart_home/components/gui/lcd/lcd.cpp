@@ -36,7 +36,6 @@ esp_lcd_panel_handle_t lcd_init(void) {
         ESP_LOGE(TAG, "SPI bus init failed: %s - LCD disabled", esp_err_to_name(ret));
         return NULL;
     }
-    ESP_LOGI(TAG, "SPI bus initialized");
 
     // Initialize ILI9341 LCD Display
     esp_lcd_panel_io_handle_t io_handle = NULL;
@@ -116,7 +115,6 @@ esp_lcd_panel_handle_t lcd_init(void) {
     lcd_initialized = true;
     lcd_set_brightness(100); // Set to full brightness initially
     
-    ESP_LOGI(TAG, "LCD initialized with PWM backlight control on GPIO %d at %d Hz", LCD_BACKLIGHT_GPIO, LCD_PWM_FREQ_HZ);
     return panel_handle;
 }
 

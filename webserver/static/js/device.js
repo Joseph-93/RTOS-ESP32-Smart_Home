@@ -25,27 +25,20 @@ function hideError() {
 }
 
 async function initDevice(deviceName) {
-    console.log('[JS] initDevice called for:', deviceName);
     try {
         // Get ESP32 connection info from Django
         const deviceInfoResponse = await fetch(`/api/${deviceName}/info/`);
         currentDeviceInfo = await deviceInfoResponse.json();
         
-        console.log('[JS] Device info:', currentDeviceInfo);
-        
         // Initialize WebSocket connection
         await initWebSocket(currentDeviceInfo.host);
-        console.log('[JS] WebSocket connected');
         
         // Get components via WebSocket
-        console.log('[JS] Getting components...');
         const components = await esp32ws.getComponents();
-        console.log('[JS] Components:', components);
         
         if (components && components.length > 0) {
             // Extract component names (new API returns {name, id} objects)
             const componentNames = components.map(c => typeof c === 'string' ? c : c.name);
-            console.log('[JS] Found', componentNames.length, 'components');
             await displayComponents(componentNames);
         } else {
             console.error('[JS] No components in response');
@@ -86,7 +79,6 @@ async function createComponentCard(componentName) {
     
     try {
         // Fetch parameter counts and info ONE AT A TIME to avoid overwhelming ESP32
-        console.log(`[JS] Getting param counts for ${componentName}...`);
         
         const intCount = (await esp32ws.getParamInfo(componentName, 'int', -1)).count || 0;
         await new Promise(r => setTimeout(r, 100));
@@ -280,7 +272,6 @@ async function setParamValueById(paramId, row, col, value) {
         const success = await esp32ws.setParamById(paramId, row, col, value);
         
         if (success) {
-            console.log('Parameter updated successfully');
             notifications.success('Parameter updated');
         } else {
             notifications.error('Failed to update parameter');
@@ -320,7 +311,6 @@ function escapeHtml(text) {
 
 // Cleanup when leaving page
 window.addEventListener('beforeunload', () => {
-    console.log('[JS] Cleaning up WebSocket connection');
     if (esp32ws) {
         esp32ws.close();
     }

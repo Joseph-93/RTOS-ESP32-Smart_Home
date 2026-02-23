@@ -141,7 +141,6 @@ RgbLedComponent::RgbLedComponent()
     , led_task_handle(nullptr)
 {
     // Atomic members are initialized via brace-init in header
-    ESP_LOGI(TAG, "RgbLedComponent created");
 }
 
 RgbLedComponent::~RgbLedComponent() {
@@ -188,9 +187,6 @@ RgbLedComponent::~RgbLedComponent() {
 }
 
 esp_err_t RgbLedComponent::initLedStrip(gpio_num_t gpio, uint16_t led_count) {
-    ESP_LOGI(TAG, "Initializing LED strip on core %d: GPIO %d, %d LEDs",
-             xPortGetCoreID(), gpio, led_count);
-    
     // Configure LED strip with RMT backend
     led_strip_config_t strip_config = {};
     strip_config.strip_gpio_num = gpio;
@@ -224,8 +220,6 @@ esp_err_t RgbLedComponent::initLedStrip(gpio_num_t gpio, uint16_t led_count) {
         ESP_LOGW(TAG, "Initial clear failed: %s", esp_err_to_name(ret));
     }
     
-    ESP_LOGI(TAG, "LED strip initialized: %d LEDs, GPIO %d, RMT %d Hz, 512 symbol buffer",
-             RGB_LED_COUNT, gpio, RGB_LED_RMT_RESOLUTION_HZ);
     return ESP_OK;
 }
 
@@ -241,8 +235,6 @@ void RgbLedComponent::giveMutex() {
 }
 
 void RgbLedComponent::onInitialize() {
-    ESP_LOGI(TAG, "Initializing RgbLedComponent...");
-    
     // Create mutex first — needed before the task starts
     strip_mutex = xSemaphoreCreateMutex();
     if (!strip_mutex) {
@@ -298,7 +290,6 @@ void RgbLedComponent::onInitialize() {
     // Set up onChange callbacks
     if (playing) {
         playing->setOnChange([this](size_t row, size_t col, bool val) {
-            ESP_LOGI(TAG, "Playing: %s", val ? "true" : "false");
             if (val) {
                 // Reset to frame 0 when starting playback
                 animation_current_frame = 0;
@@ -342,12 +333,10 @@ void RgbLedComponent::onInitialize() {
                 // Auto-start playback when selecting a preset
                 if (playing) playing->setValue(0, 0, true);
                 updateStatusParams();
-                ESP_LOGI(TAG, "Active preset changed to %d, transitioning", val);
             } else if (val == -1) {
                 // Transition to off
                 beginTransition(-1);
                 updateStatusParams();
-                ESP_LOGI(TAG, "Active preset cleared, transitioning to off");
             } else {
                 ESP_LOGW(TAG, "Invalid preset ID: %d (not found)", val);
             }
@@ -357,8 +346,6 @@ void RgbLedComponent::onInitialize() {
     // Priority system: when any tier changes, resolve and update active_preset
     if (presetPriorityParam) {
         presetPriorityParam->setOnChange([this](size_t row, size_t col, int val) {
-            ESP_LOGI(TAG, "Priority tier %zu set to %d", row, val);
-            
             // Resolve highest priority preset
             int16_t resolved = resolvePresetPriority();
             
@@ -369,10 +356,8 @@ void RgbLedComponent::onInitialize() {
                 if (resolved >= 0) {
                     if (activePresetParam) activePresetParam->setValue(0, 0, resolved);
                     if (playing) playing->setValue(0, 0, true);
-                    ESP_LOGI(TAG, "Priority resolved to preset %d, transitioning", resolved);
                 } else {
                     if (activePresetParam) activePresetParam->setValue(0, 0, -1);
-                    ESP_LOGI(TAG, "Priority queue empty, transitioning to off");
                 }
                 updateStatusParams();
             }
@@ -407,8 +392,6 @@ void RgbLedComponent::onInitialize() {
             esp_err_t ret = animationChunk((uint16_t)chunk_index, decoded.data(), (size_t)decoded_len);
             if (ret != ESP_OK) {
                 ESP_LOGE(TAG, "Animation chunk %d failed: %s", chunk_index, esp_err_to_name(ret));
-            } else {
-                ESP_LOGI(TAG, "Received animation chunk %d, %d bytes", chunk_index, decoded_len);
             }
             
             animUploadData->setValue(0, 0, "");  // Clear to detect next write
@@ -425,8 +408,6 @@ void RgbLedComponent::onInitialize() {
                 if (queryPresetFrameCount) queryPresetFrameCount->setValue(0, 0, p.frame_count);
                 if (queryPresetDataSize) queryPresetDataSize->setValue(0, 0, (int)p.data.size());
                 if (queryPresetLoop) queryPresetLoop->setValue(0, 0, p.loop);
-                ESP_LOGI(TAG, "Query preset %d: '%s', %u frames, %zu bytes, loop=%d",
-                         val, p.name.c_str(), p.frame_count, p.data.size(), p.loop);
             } else {
                 // Clear query results
                 if (queryPresetName) queryPresetName->setValue(0, 0, "");
@@ -486,9 +467,6 @@ void RgbLedComponent::onInitialize() {
     
     if (result != pdPASS) {
         ESP_LOGE(TAG, "Failed to create RGB LED task");
-    } else {
-        ESP_LOGI(TAG, "RGB LED task created, %d LEDs on GPIO %d", 
-                 RGB_LED_COUNT, RGB_LED_DEFAULT_PIN);
     }
 }
 
@@ -573,7 +551,6 @@ void RgbLedComponent::clearFinishedPriorityTier(int16_t finished_preset) {
     for (int tier = 0; tier < 3; tier++) {
         if (presetPriorityParam->getValue(tier, 0) == finished_preset) {
             presetPriorityParam->setValue(tier, 0, -1);
-            ESP_LOGI(TAG, "Cleared priority tier %d (was preset %d)", tier, finished_preset);
             break;  // Only clear the first match (highest priority)
         }
     }
@@ -582,9 +559,6 @@ void RgbLedComponent::clearFinishedPriorityTier(int16_t finished_preset) {
 esp_err_t RgbLedComponent::animationBegin(uint16_t total_frames) {
     size_t frame_size = getFrameSize();
     size_t total_bytes = total_frames * frame_size;
-    
-    ESP_LOGI(TAG, "Upload begin: %u frames, %u bytes/frame, %zu total bytes",
-             total_frames, (unsigned)frame_size, total_bytes);
     
     // Check if the new preset fits in the remaining memory pool
     size_t current_usage = calcTotalMemoryUsed();
@@ -631,9 +605,6 @@ esp_err_t RgbLedComponent::animationBegin(uint16_t total_frames) {
     uploading = true;
     
     giveMutex();
-    
-    ESP_LOGI(TAG, "Staging allocated: %zu bytes for %u frames (will become preset #%d)",
-             upload_staging_data.size(), total_frames, (int)presets.size());
     
     return ESP_OK;
 }
@@ -744,9 +715,7 @@ esp_err_t RgbLedComponent::animationCommit() {
 
     presetsModified = true;
     
-    ESP_LOGI(TAG, "Preset #%d committed: %u frames (%zu presets total, %zu bytes used)",
-             new_id, presets[new_id].frame_count,
-             presets.size(), calcTotalMemoryUsed());
+    ESP_LOGI(TAG, "NVS: Preset #%d committed", new_id);
 
     if (was_playing && led_task_handle) {
         xTaskNotifyGive(led_task_handle);
@@ -773,8 +742,6 @@ void RgbLedComponent::animationClear() {
     animation_current_frame = 0;
     
     giveMutex();
-    
-    ESP_LOGI(TAG, "All presets cleared");
     
     // Update parameters
     updateStatusParams();
@@ -839,10 +806,8 @@ void RgbLedComponent::playFrame() {
                 beginTransition(next_preset);
                 if (next_preset >= 0) {
                     if (activePresetParam) activePresetParam->setValue(0, 0, next_preset);
-                    ESP_LOGI(TAG, "Preset %d complete, transitioning to priority preset %d", finished_preset, next_preset);
                 } else {
                     if (activePresetParam) activePresetParam->setValue(0, 0, -1);
-                    ESP_LOGI(TAG, "Preset %d complete, transitioning to off", finished_preset);
                 }
                 return;
             }
@@ -929,8 +894,7 @@ void RgbLedComponent::deletePresetByIndex(int index) {
     
     giveMutex();
     
-    ESP_LOGI(TAG, "Deleted preset %d (%zu remaining, %zu bytes used)",
-             index, presets.size(), calcTotalMemoryUsed());
+    ESP_LOGI(TAG, "NVS: Deleted preset %d", index);
     
     updateStatusParams();
     if (activePresetParam) activePresetParam->setValue(0, 0, active_preset_index);
@@ -1016,8 +980,6 @@ void RgbLedComponent::beginTransition(int16_t new_preset_id) {
     // Start transition
     transitioning = true;
     transition_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
-    
-    ESP_LOGI(TAG, "Beginning %dms transition to preset %d", trans_ms, new_preset_id);
 }
 
 bool RgbLedComponent::processTransition() {
@@ -1099,8 +1061,6 @@ bool RgbLedComponent::takeMutexBlocking() {
 }
 
 void RgbLedComponent::ledTask() {
-    ESP_LOGI(TAG, "RGB LED task running on core %d", xPortGetCoreID());
-    
     // Initialize LED strip HERE so the RMT peripheral's ISR is registered
     // on this core (core 1), safely away from WiFi ISRs on core 0.
     esp_err_t ret = initLedStrip(RGB_LED_DEFAULT_PIN, RGB_LED_COUNT);
@@ -1152,7 +1112,6 @@ void RgbLedComponent::ledTask() {
     }
     
     // Clean exit
-    ESP_LOGI(TAG, "RGB LED task exiting");
     task_running.store(false);
     vTaskDelete(nullptr);
 }

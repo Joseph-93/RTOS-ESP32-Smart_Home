@@ -83,7 +83,6 @@ void GUIComponent::init_gaussian_lookup() {
     }
     
     gaussian_initialized = true;
-    ESP_LOGI(TAG, "Gaussian lookup table initialized");
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] init_gaussian_lookup");
 #endif
@@ -95,7 +94,6 @@ void GUIComponent::init_gaussian_lookup() {
 
 GUIComponent::GUIComponent() 
     : Component("GUI"), main_screen(nullptr) {
-    ESP_LOGI(TAG, "GUIComponent created");
 }
 
 GUIComponent::~GUIComponent() {
@@ -123,7 +121,6 @@ void GUIComponent::onInitialize() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] GUIComponent::initialize");
 #endif
-    ESP_LOGI(TAG, "Initializing GUIComponent...");
 
     // Add string parameter for button names (6 rows, 1 column) and store pointer
     buttonNames = addStringParam("button_names", NUM_BUTTONS, 1, "Button");
@@ -139,7 +136,6 @@ void GUIComponent::onInitialize() {
         buttonNames->setOnChange([this](size_t row, size_t col, const std::string& val) {
             // Signal LVGL task to update the button label
             button_label_update_pending = true;
-            ESP_LOGI(TAG, "Button name changed for button %zu: %s", row, val.c_str());
         });
     }
     
@@ -182,8 +178,6 @@ void GUIComponent::onInitialize() {
     );
     if (result != pdPASS) {
         ESP_LOGE(TAG, "Failed to create GUI status task");
-    } else {
-        ESP_LOGI(TAG, "GUI status task created successfully");
     }
 
     gui_status_timer_handle = xTimerCreate(
@@ -201,8 +195,6 @@ void GUIComponent::onInitialize() {
     result = xTimerStart(gui_status_timer_handle, 0);
     if (result != pdPASS) {
         ESP_LOGE(TAG, "Failed to start GUI status timer");
-    } else {
-        ESP_LOGI(TAG, "GUI status timer started successfully");
     }
 
     // Initialize Notification Task (reads from ComponentGraph notification queue)
@@ -251,7 +243,6 @@ void GUIComponent::onInitialize() {
     }
     if (touch_handle_ref) {
         gpio_isr_handler_add(TOUCH_IRQ_GPIO, GUIComponent::touch_irq_handler, NULL);
-        ESP_LOGI(TAG, "XPT2046 touch IRQ configured on GPIO %d", TOUCH_IRQ_GPIO);
     }
     
     // Initialize LVGL
@@ -277,7 +268,6 @@ void GUIComponent::onInitialize() {
     // Initialize LVGL theme (must be done AFTER display registration)
     lv_theme_t* theme = lv_theme_default_init(NULL, lv_palette_main(LV_PALETTE_BLUE), lv_palette_main(LV_PALETTE_RED), true, LV_FONT_DEFAULT);
     lv_disp_set_theme(NULL, theme);  // NULL = use default display (now it exists!)
-    ESP_LOGI(TAG, "LVGL default theme initialized");
     
     // Initialize LVGL input device driver (touch)
     lv_indev_drv_init(&lvgl_indev_drv);
@@ -285,9 +275,6 @@ void GUIComponent::onInitialize() {
     lvgl_indev_drv.read_cb = GUIComponent::lvgl_touch_read_cb;
     lvgl_indev_drv.user_data = this; // Store GUIComponent instance for callback
     lv_indev_drv_register(&lvgl_indev_drv);
-    
-    ESP_LOGI(TAG, "LVGL initialized");
-    ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
     
     // Create LVGL timer task with larger stack
     xTaskCreate(GUIComponent::lvgl_timer_task, "lvgl_timer", 6144, NULL, 5, NULL);
@@ -305,7 +292,6 @@ void GUIComponent::postInitialize() {
     // Only set brightness if hardware is available
     if (hardware_available && currentLcdBrightness) {
         lcd_set_brightness(currentLcdBrightness->getValue(0, 0));
-        ESP_LOGI(TAG, "Post-initialization: LCD brightness confirmed");
     }
 }
 
@@ -313,7 +299,6 @@ void GUIComponent::notificationTask() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "Notification task started");
 #endif
-    ESP_LOGI(TAG, "Notification task running - waiting for notifications...");
     
     if (!component_graph) {
         ESP_LOGE(TAG, "ComponentGraph not available - notification task exiting");
@@ -328,20 +313,13 @@ void GUIComponent::notificationTask() {
     
     while (true) {
         ComponentGraph::NotificationQueueItem item;
-        ESP_LOGI(TAG, "Waiting to receive from notification queue...");
         if (xQueueReceive(queue, &item, portMAX_DELAY) == pdTRUE) {
-            ESP_LOGI(TAG, "Received notification from queue: '%s', priority=%d, display_time=%lu ticks",
-                     item.message, item.priority, item.ticks_to_display);
-            
             if (!isInitialized()) {
-                ESP_LOGW(TAG, "GUI not initialized yet - skipping notification");
                 continue;
             }
             
             // Only process if higher or equal priority than current notification
             if (current_notification_priority > item.priority) {
-                ESP_LOGI(TAG, "Skipping notification (priority %d < %d): %s", 
-                         item.priority, current_notification_priority, item.message);
                 continue;
             }
             
@@ -349,7 +327,6 @@ void GUIComponent::notificationTask() {
             // (LVGL objects can only be created from LVGL task - not thread-safe!)
             pending_notification_item = item;
             pending_notification = true;
-            ESP_LOGI(TAG, "Notification queued for display by LVGL task");
         } else {
             ESP_LOGE(TAG, "xQueueReceive failed unexpectedly");
         }
@@ -369,11 +346,8 @@ void GUIComponent::createPendingNotification() {
     ComponentGraph::NotificationQueueItem item = pending_notification_item;
     pending_notification = false;  // Clear flag
     
-    ESP_LOGI(TAG, "LVGL task creating notification overlay...");
-    
     // Delete existing notification if present
     if (notification_overlay) {
-        ESP_LOGI(TAG, "Deleting existing notification overlay");
         lv_obj_del(notification_overlay);
         notification_overlay = nullptr;
     }
@@ -423,8 +397,6 @@ void GUIComponent::guiStatusTaskWrapper(void* pvParameters) {
 }
 
 void GUIComponent::guiStatusTask() {
-    ESP_LOGI(TAG, "GUI status task started");
-    
     // Sensor parameter pointers (will be looked up from other components)
     static IntParameter* light_sensor_param = nullptr;
     static IntParameter* motion_sensor_param = nullptr;
@@ -451,25 +423,13 @@ void GUIComponent::guiStatusTask() {
             brightnessChangePerSecond && lcdScreenTimeoutSeconds && motionInactivityScreenTimeoutSeconds &&
             lcdScreenOn && overrideAutoBrightness && overrideScreenTimeout && 
             overrideMotionInactivityScreenTimeout)) {
-            ESP_LOGW(TAG, "Some member parameter pointers are null - skipping cycle");
             continue;
         }
         
         // Try to get sensor parameters once (they may not exist yet or at all)
         if (component_graph && !(light_sensor_param && motion_sensor_param)) {
             light_sensor_param = component_graph->getIntParam("LightSensor", "current_light_level");
-            if (light_sensor_param) {
-                ESP_LOGI(TAG, "Successfully linked to LightSensor parameter");
-            } else {
-                ESP_LOGW(TAG, "LightSensor parameter not found - auto-brightness disabled");
-            }
-            
             motion_sensor_param = component_graph->getIntParam("MotionSensor", "last_motion_detected_seconds");
-            if (motion_sensor_param) {
-                ESP_LOGI(TAG, "Successfully linked to MotionSensor parameter");
-            } else {
-                ESP_LOGW(TAG, "MotionSensor/last_motion_detected_seconds parameter not found - motion-based screen timeout disabled");
-            }
         }
 
         // ===========================================
@@ -611,9 +571,6 @@ void GUIComponent::createSimpleButtonGrid() {
         return;
     }
     
-    ESP_LOGI(TAG, "Creating simple 3x2 button grid...");
-    ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
-    
     // Create main screen
     main_screen = lv_obj_create(NULL);
     if (!main_screen) {
@@ -696,8 +653,6 @@ void GUIComponent::createSimpleButtonGrid() {
     // Load the screen
     lv_scr_load(main_screen);
     
-    ESP_LOGI(TAG, "Simple button grid created successfully");
-    ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
 #ifdef DEBUG
     ESP_LOGI(TAG, "[EXIT] createSimpleButtonGrid");
 #endif
@@ -723,7 +678,6 @@ void GUIComponent::simple_button_event_cb(lv_event_t* e) {
     if (g_gui_component && g_gui_component->buttonPressed[button_index]) {
         BoolParameter* btn = g_gui_component->buttonPressed[button_index];
         btn->setValue(0, 0, true);  // Triggers onChange which broadcasts to subscribers
-        ESP_LOGI(TAG, "Button %d pressed - notifying subscribers", button_index);
         
         // Hold true briefly so it's visible in UI before resetting
         vTaskDelay(pdMS_TO_TICKS(150));
@@ -853,13 +807,11 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
                     // Check if screen is off
                     if (lcd_screen_on_param && !lcd_screen_on_param->getValue(0, 0)) {
                         // Screen off - wake it up and block this touch gesture
-                        ESP_LOGI(TAG, "Touch detected while screen off - waking screen, blocking gesture");
                         last_interaction_tick = xTaskGetTickCount();  // Wake screen by updating interaction time
                         state = BLOCKED;
                         data->state = LV_INDEV_STATE_RELEASED;
                     } else {
                         // Screen on - start tracking touch
-                        ESP_LOGI(TAG, "Touch started - entering TOUCHING state");
                         state = TOUCHING;
                         last_interaction_tick = xTaskGetTickCount();
                         data->state = LV_INDEV_STATE_PRESSED;
@@ -904,7 +856,6 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
             
             if (!still_touched || touchpad_cnt == 0) {
                 // Touch released - return to IDLE
-                ESP_LOGI(TAG, "Blocked touch released - returning to IDLE");
                 state = IDLE;
             }
             // Always report released to LVGL (touch blocked)
@@ -935,7 +886,6 @@ void GUIComponent::lvgl_timer_task(void *arg) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] lvgl_timer_task");
 #endif
-    ESP_LOGI(TAG, "LVGL timer task started");
     
     // Check if hardware is available
     if (!g_gui_component || !g_gui_component->hardware_available) {

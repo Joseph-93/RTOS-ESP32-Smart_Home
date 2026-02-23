@@ -25,7 +25,6 @@ static const char* s_mdns_hostname = "esp32";
 
 // Timer callback: periodically retry WiFi connection
 static void reconnect_timer_callback(TimerHandle_t xTimer) {
-    ESP_LOGI(TAG, "Reconnect timer fired — attempting WiFi reconnect...");
     esp_wifi_connect();
 }
 

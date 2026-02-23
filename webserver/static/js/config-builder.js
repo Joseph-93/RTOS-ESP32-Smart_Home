@@ -113,7 +113,6 @@ class ParameterPicker {
         
         try {
             const result = await this.ws.send({ type: 'rescan_devices' });
-            console.log('Rescan result:', result);
             
             if (result.added && result.added.length > 0) {
                 showNotification(`Found ${result.added.length} new device(s)`, 'success');
@@ -148,7 +147,6 @@ class ParameterPicker {
         
         try {
             const result = await this.ws.send({ type: 'add_device', ip: ip });
-            console.log('Add device result:', result);
             
             if (result.error) {
                 showNotification(result.error, 'error');
@@ -1497,7 +1495,6 @@ class NetworkActionEditor {
         if (typeof window.showNotification === 'function') {
             window.showNotification(message, type);
         } else {
-            console.log(`[${type}] ${message}`);
             if (type === 'error') alert(message);
         }
     }

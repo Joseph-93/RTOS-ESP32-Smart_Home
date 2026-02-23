@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 # Enable debug logging
-add_compile_definitions(DEBUG)
+# add_compile_definitions(DEBUG)
 
 # Load component configuration (copy components_config.example.cmake to components_config.cmake)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/components_config.cmake")

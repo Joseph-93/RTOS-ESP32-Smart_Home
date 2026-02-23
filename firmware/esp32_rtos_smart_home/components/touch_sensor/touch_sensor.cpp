@@ -16,7 +16,6 @@ TouchSensorComponent::TouchSensorComponent()
     for (size_t i = 0; i < TOUCH_SENSOR_COUNT; i++) {
         configured_pins[i] = -1;
     }
-    ESP_LOGI(TAG, "TouchSensorComponent created (supports %d sensors)", TOUCH_SENSOR_COUNT);
 }
 
 TouchSensorComponent::~TouchSensorComponent() {
@@ -24,7 +23,6 @@ TouchSensorComponent::~TouchSensorComponent() {
     for (size_t i = 0; i < TOUCH_SENSOR_COUNT; i++) {
         unconfigureGpio(i);
     }
-    ESP_LOGI(TAG, "TouchSensorComponent destroyed");
 }
 
 static void IRAM_ATTR touch_sensor_isr_handler(void* arg) {
@@ -37,8 +35,6 @@ static void IRAM_ATTR touch_sensor_isr_handler(void* arg) {
 }
 
 void TouchSensorComponent::onInitialize() {
-    ESP_LOGI(TAG, "Initializing TouchSensorComponent");
-
     // Create parameters
     // pins: array of GPIO pin numbers (writable, so user can reconfigure)
     // Using x-size = TOUCH_SENSOR_COUNT (cols), y-size = 1 (rows)
@@ -59,11 +55,7 @@ void TouchSensorComponent::onInitialize() {
 
     // Install ISR service if not already installed
     esp_err_t ret = gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
-    if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "GPIO ISR service installed");
-    } else if (ret == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(TAG, "GPIO ISR service already installed");
-    } else {
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_ERROR_CHECK(ret);
     }
 
@@ -84,8 +76,6 @@ void TouchSensorComponent::onInitialize() {
     
     if (result != pdPASS) {
         ESP_LOGE(TAG, "Failed to create touch sensor task");
-    } else {
-        ESP_LOGI(TAG, "Touch sensor task created");
     }
 
     initialized = true;
@@ -97,8 +87,6 @@ void TouchSensorComponent::onPinChanged(size_t row, size_t col, int32_t newPin) 
         ESP_LOGE(TAG, "Invalid sensor index: %zu", col);
         return;
     }
-    
-    ESP_LOGI(TAG, "Sensor %zu pin changed to %ld", col, (long)newPin);
     
     // Unconfigure old pin if it was configured
     unconfigureGpio(col);
@@ -143,7 +131,6 @@ void TouchSensorComponent::configureGpio(size_t index, int32_t pin) {
     }
     
     configured_pins[index] = pin;
-    ESP_LOGI(TAG, "Touch sensor %zu configured on GPIO %ld", index, (long)pin);
 }
 
 void TouchSensorComponent::unconfigureGpio(size_t index) {
@@ -159,7 +146,6 @@ void TouchSensorComponent::unconfigureGpio(size_t index) {
     gpio_reset_pin((gpio_num_t)pin);
     
     configured_pins[index] = -1;
-    ESP_LOGI(TAG, "Touch sensor %zu unconfigured (was GPIO %ld)", index, (long)pin);
 }
 
 void TouchSensorComponent::touchSensorTaskWrapper(void* pvParameters) {
@@ -168,8 +154,6 @@ void TouchSensorComponent::touchSensorTaskWrapper(void* pvParameters) {
 }
 
 void TouchSensorComponent::touchSensorTask() {
-    ESP_LOGI(TAG, "Touch sensor task started");
-    
     while (1) {
         // Wait for notification from ISR or timeout (100ms for periodic polling)
         // Polling ensures we catch states even if ISR is missed
@@ -180,13 +164,6 @@ void TouchSensorComponent::touchSensorTask() {
             int32_t pin = configured_pins[i];
             if (pin >= 0 && touched) {
                 bool state = gpio_get_level((gpio_num_t)pin) == 1;
-                
-                // Only log changes
-                bool previous = touched->getValue(0, i);
-                if (state != previous) {
-                    ESP_LOGI(TAG, "Touch sensor %zu: %s", i, state ? "TOUCHED" : "released");
-                }
-                
                 touched->setValue(0, i, state);
             }
         }

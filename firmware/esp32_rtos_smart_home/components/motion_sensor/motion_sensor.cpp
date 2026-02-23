@@ -13,14 +13,12 @@ MotionSensorComponent::MotionSensorComponent()
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER/EXIT] MotionSensorComponent constructor");
 #endif
-    ESP_LOGI(TAG, "MotionSensorComponent created");
 }
 
 MotionSensorComponent::~MotionSensorComponent() {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER/EXIT] ~MotionSensorComponent");
 #endif
-    ESP_LOGI(TAG, "MotionSensorComponent destroyed");
 }
 
 void MotionSensorComponent::setUpDependencies(ComponentGraph* graph) {
@@ -31,9 +29,7 @@ void MotionSensorComponent::setUpDependencies(ComponentGraph* graph) {
     this->component_graph = graph;
     if (component_graph) {
         gui_component = component_graph->getComponent("GUI");
-        if (gui_component) {
-            ESP_LOGI(TAG, "GUI component reference obtained");
-        } else {
+        if (!gui_component) {
             ESP_LOGW(TAG, "GUI component not found");
         }
     } else {
@@ -65,21 +61,14 @@ void MotionSensorComponent::onInitialize() {
     io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;  // Pull-down so default is LOW
     io_conf.intr_type = GPIO_INTR_POSEDGE;  // Trigger on rising edge (motion detected)
     ESP_ERROR_CHECK(gpio_config(&io_conf));
-    
-    ESP_LOGI(TAG, "Motion sensor GPIO %d configured", MOTION_SENSOR_PIN);
 
     // Install ISR service if not already installed (GUI might have already done this)
     esp_err_t ret = gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
-    if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "GPIO ISR service installed");
-    } else if (ret == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(TAG, "GPIO ISR service already installed (probably by GUI)");
-    } else {
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_ERROR_CHECK(ret);  // Fail on unexpected errors
     }
     
     ESP_ERROR_CHECK(gpio_isr_handler_add((gpio_num_t)MOTION_SENSOR_PIN, motion_sensor_isr_handler, this));
-    ESP_LOGI(TAG, "Motion sensor ISR handler registered for GPIO %d", MOTION_SENSOR_PIN);
 
     BaseType_t result = xTaskCreate(
         MotionSensorComponent::motionSensorTaskWrapper,
@@ -91,8 +80,6 @@ void MotionSensorComponent::onInitialize() {
     );
     if (result != pdPASS) {
         ESP_LOGE(TAG, "Failed to create motion sensor task");
-    } else {
-        ESP_LOGI(TAG, "Motion sensor task created successfully");
     }
 
     initialized = true;
@@ -109,7 +96,6 @@ void MotionSensorComponent::motionSensorTaskWrapper(void* pvParameters) {
 
 // Instance method containing the actual task loop and logic
 void MotionSensorComponent::motionSensorTask() {
-    ESP_LOGI(TAG, "Motion sensor task started");
     
     while (1) {
         // Wait for notification from ISR (blocking)

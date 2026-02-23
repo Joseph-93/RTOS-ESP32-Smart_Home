@@ -33,9 +33,6 @@ void WebServerComponent::setUpDependencies(ComponentGraph* graph) {
 }
 
 void WebServerComponent::onInitialize() {
-    ESP_LOGI(TAG, "Starting WebSocket-ONLY server on port 80");
-    ESP_LOGI(TAG, "Free heap BEFORE server: %lu bytes", esp_get_free_heap_size());
-    
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 80;
     config.max_uri_handlers = 10;
@@ -46,9 +43,6 @@ void WebServerComponent::onInitialize() {
     config.send_wait_timeout = 3;  // Shorter timeout
     config.recv_wait_timeout = 3;
     config.task_priority = 10;  // Higher priority to avoid starvation by WiFi tasks
-    
-    ESP_LOGI(TAG, "Config: stack=%d hdr_len=%d max_sockets=%d", 
-             config.stack_size, config.max_req_hdr_len, config.max_open_sockets);
     
     if (httpd_start(&http_server, &config) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start HTTP server (heap: %lu)", esp_get_free_heap_size());
@@ -67,9 +61,7 @@ void WebServerComponent::onInitialize() {
     };
     httpd_register_uri_handler(http_server, &ws_uri);
     
-    ESP_LOGI(TAG, "WebSocket-ONLY server started successfully");
-    ESP_LOGI(TAG, "WebSocket endpoint: ws://esp32/ws");
-    ESP_LOGI(TAG, "All communication through WebSocket - no HTTP REST endpoints");
+    ESP_LOGI(TAG, "WebSocket server started on port 80");
     
     // Create mutex for subscriptions map protection
     subscriptions_mutex = xSemaphoreCreateMutex();
@@ -98,46 +90,13 @@ void WebServerComponent::onInitialize() {
         ESP_LOGE(TAG, "Failed to create broadcast task - FATAL (heap: %lu)", esp_get_free_heap_size());
         abort();
     }
-    ESP_LOGI(TAG, "WebSocket broadcast task created (priority 15)");
     
     // NOTE: setupParameterBroadcasting() is now called in postInitialize()
     // to ensure all components have set their onChange callbacks first
 }
 
 void WebServerComponent::postInitialize() {
-    ESP_LOGI(TAG, "Setting up parameter broadcasting (all components initialized)");
-    
-    // Print memory diagnostics BEFORE setting up broadcasting
-    print_memory_diagnostics(TAG);
-    
-    // Component memory breakdown
-    if (component_graph) {
-        ESP_LOGI(TAG, "=== COMPONENT MEMORY USAGE ===");
-        const auto& comp_names = component_graph->getComponentNames();
-        ESP_LOGI(TAG, "Found %d components to analyze", comp_names.size());
-        
-        size_t total_component_mem = 0;
-        for (size_t i = 0; i < comp_names.size(); i++) {
-            const auto& comp_name = comp_names[i];
-            ESP_LOGI(TAG, "Analyzing component %d/%d: %s", i+1, comp_names.size(), comp_name.c_str());
-            
-            Component* comp = component_graph->getComponent(comp_name);
-            if (comp) {
-                size_t mem = comp->getApproximateMemoryUsage();
-                total_component_mem += mem;
-                ESP_LOGI(TAG, "  %s: ~%zu bytes", comp_name.c_str(), mem);
-            } else {
-                ESP_LOGW(TAG, "  %s: NULL component pointer!", comp_name.c_str());
-            }
-        }
-        ESP_LOGI(TAG, "  TOTAL COMPONENTS: ~%zu bytes", total_component_mem);
-        ESP_LOGI(TAG, "==============================");
-    }
-    
     setupParameterBroadcasting();
-    
-    // Print memory diagnostics AFTER setting up broadcasting
-    print_memory_diagnostics(TAG);
 }
 
 void WebServerComponent::setupParameterBroadcasting() {
@@ -249,8 +208,6 @@ void WebServerComponent::setupParameterBroadcasting() {
             }
         }
     }
-    
-    ESP_LOGI(TAG, "Parameter broadcasting set up for %d components", comp_names.size());
 }
 
 Component* WebServerComponent::get_component(const char* name) {
@@ -261,7 +218,6 @@ Component* WebServerComponent::get_component(const char* name) {
 // WebSocket handler for real-time updates
 esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
     if (req->method == HTTP_GET) {
-        ESP_LOGI("WebServer", "WebSocket handshake initiated");
         return ESP_OK;
     }
     
@@ -283,7 +239,6 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
     
     // Handle control frames (close, ping, pong)
     if (ws_pkt.type == HTTPD_WS_TYPE_CLOSE) {
-        ESP_LOGI("WebServer", "WebSocket close frame received from socket %d", socket_fd);
         WebServerComponent* self = (WebServerComponent*)req->user_ctx;
         self->clear_subscriptions(socket_fd);
         return ESP_OK;
@@ -291,8 +246,6 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
     
     // Respond to PING with PONG (must echo back any payload)
     if (ws_pkt.type == HTTPD_WS_TYPE_PING) {
-        ESP_LOGI("WebServer", "WebSocket PING received (len=%d)", ws_pkt.len);
-        
         // Control frame payloads are max 125 bytes per WebSocket spec
         uint8_t ping_payload[125];
         size_t ping_len = ws_pkt.len;
@@ -315,14 +268,11 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
         pong_pkt.payload = ping_len > 0 ? ping_payload : NULL;
         pong_pkt.len = ping_len;
         
-        esp_err_t pong_ret = httpd_ws_send_frame(req, &pong_pkt);
-        ESP_LOGI("WebServer", "Sent PONG (len=%d), ret=%d", ping_len, pong_ret);
-        return pong_ret;
+        return httpd_ws_send_frame(req, &pong_pkt);
     }
     
     // Ignore PONG frames (response to our pings, if any)
     if (ws_pkt.type == HTTPD_WS_TYPE_PONG) {
-        ESP_LOGI("WebServer", "WebSocket PONG received");
         return ESP_OK;
     }
     
@@ -331,8 +281,6 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
         ESP_LOGW("WebServer", "Ignoring non-TEXT frame type: %d", ws_pkt.type);
         return ESP_OK;
     }
-    
-    ESP_LOGI("WebServer", "WebSocket TEXT frame received, len: %d", ws_pkt.len);
     
     // Guard against oversized frames exhausting heap
     // Animation chunks are ~1400 bytes base64; normal JSON commands are <512 bytes.
@@ -358,8 +306,6 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
             free(buf);
             return ret;
         }
-        
-        ESP_LOGI("WebServer", "WS received: %s", ws_pkt.payload);
         
         // Parse JSON message and handle request
         WebServerComponent* self = (WebServerComponent*)req->user_ctx;
@@ -410,7 +356,6 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
             
             char* response_str = cJSON_PrintUnformatted(response);
             if (response_str) {
-                ESP_LOGI("WebServer", "WS sending: %s", response_str);
                 // Use fresh frame struct for sending (avoid any corruption from received frame)
                 httpd_ws_frame_t send_pkt;
                 memset(&send_pkt, 0, sizeof(httpd_ws_frame_t));
@@ -437,8 +382,6 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
 
 // WebSocket message handler - wrapper for executeMessage, handles subscriptions
 cJSON* WebServerComponent::handle_ws_message(cJSON* request, const char* msg_type, int socket_fd) {
-    ESP_LOGI(TAG, "Handling WebSocket message from socket %d", socket_fd);
-    
     // Subscribe/unsubscribe use param_id (UUID) instead of component/type/index
     if (strcmp(msg_type, "subscribe") == 0) {
         cJSON* param_id_item = cJSON_GetObjectItem(request, "param_id");
@@ -474,8 +417,6 @@ cJSON* WebServerComponent::handle_ws_message(cJSON* request, const char* msg_typ
             cJSON_AddItemToObject(response, "value", value);
         }
         
-        ESP_LOGI(TAG, "Subscribed socket %d to param %u[%d][%d]", 
-                 socket_fd, param_id, row, col);
         return response;
         
     } else if (strcmp(msg_type, "unsubscribe") == 0) {
@@ -497,9 +438,6 @@ cJSON* WebServerComponent::handle_ws_message(cJSON* request, const char* msg_typ
         SubscriptionKey key{param_id, row, col};
         unsubscribe_param(socket_fd, key);
         
-        ESP_LOGI(TAG, "Unsubscribed socket %d from param %u[%d][%d]", 
-                 socket_fd, param_id, row, col);
-        
         cJSON* response = cJSON_CreateObject();
         cJSON_AddBoolToObject(response, "success", true);
         return response;
@@ -513,10 +451,7 @@ cJSON* WebServerComponent::handle_ws_message(cJSON* request, const char* msg_typ
 void WebServerComponent::subscribe_param(int socket_fd, const SubscriptionKey& key) {
     if (xSemaphoreTake(subscriptions_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
         subscriptions[socket_fd].insert(key);
-        int count = subscriptions[socket_fd].size();
         xSemaphoreGive(subscriptions_mutex);
-        ESP_LOGI(TAG, "Socket %d subscribed to param %u[%d][%d]. Total subscriptions: %d",
-                 socket_fd, key.param_id, key.row, key.col, count);
     } else {
         ESP_LOGW(TAG, "subscribe_param: mutex timeout for socket %d", socket_fd);
     }
@@ -539,12 +474,7 @@ void WebServerComponent::unsubscribe_param(int socket_fd, const SubscriptionKey&
 
 void WebServerComponent::clear_subscriptions(int socket_fd) {
     if (xSemaphoreTake(subscriptions_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-        auto it = subscriptions.find(socket_fd);
-        if (it != subscriptions.end()) {
-            int count = it->second.size();
-            subscriptions.erase(it);
-            ESP_LOGI(TAG, "Cleared %d subscriptions for socket %d", count, socket_fd);
-        }
+        subscriptions.erase(socket_fd);
         xSemaphoreGive(subscriptions_mutex);
     } else {
         ESP_LOGW(TAG, "clear_subscriptions: mutex timeout for socket %d", socket_fd);
@@ -618,7 +548,6 @@ void WebServerComponent::broadcastTaskWrapper(void* pvParameters) {
 
 // Broadcast task - reads queue and sends WebSocket frames
 void WebServerComponent::broadcastTask() {
-    ESP_LOGI(TAG, "Broadcast task started");
     BroadcastQueueItem item;
     TickType_t last_purge = xTaskGetTickCount();
     const TickType_t purge_interval = pdMS_TO_TICKS(30000);  // Purge stale connections every 30s
@@ -717,11 +646,6 @@ void WebServerComponent::purgeStaleConnections() {
     }
     
     for (int fd : stale_sockets) {
-        ESP_LOGW(TAG, "Purging stale WebSocket connection: socket %d", fd);
         clear_subscriptions(fd);
-    }
-    
-    if (!stale_sockets.empty()) {
-        ESP_LOGI(TAG, "Purged %zu stale connections", stale_sockets.size());
     }
 }

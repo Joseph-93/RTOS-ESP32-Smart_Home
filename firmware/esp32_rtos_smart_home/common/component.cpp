@@ -97,11 +97,11 @@ Component::Component(const std::string &name) : name(name), initialized(false) {
         assert(false && "Mutex creation failed");
     }
     
-    ESP_LOGI(TAG, "Component '%s' created with id=%u", name.c_str(), componentId);
+    ESP_LOGD(TAG, "Component '%s' created with id=%u", name.c_str(), componentId);
 }
 
 Component::~Component() {
-    ESP_LOGI(TAG, "Component '%s' (id=%u) destroyed", name.c_str(), componentId);
+    ESP_LOGD(TAG, "Component '%s' (id=%u) destroyed", name.c_str(), componentId);
     
     if (paramsMutex != nullptr) {
         vSemaphoreDelete(paramsMutex);
@@ -109,14 +109,11 @@ Component::~Component() {
 }
 
 void Component::initialize() {
-    ESP_LOGI(TAG, "Initializing component: %s (id=%u)", name.c_str(), componentId);
-    
     // Setup hub store BEFORE component-specific init
     setupHubStore();
     
     onInitialize();
     initialized = true;
-    ESP_LOGI(TAG, "Component %s initialized successfully", name.c_str());
 }
 
 const std::string& Component::getName() const {
@@ -225,7 +222,6 @@ IntParameter* Component::addIntParam(const std::string &paramName, size_t rows, 
     // Save updated IDs to NVS
     saveNextIds();
     
-    ESP_LOGI(TAG, "Added int param '%s' (id=%u) to component '%s'", paramName.c_str(), paramId, name.c_str());
     return ptr;
 }
 
@@ -252,7 +248,6 @@ FloatParameter* Component::addFloatParam(const std::string &paramName, size_t ro
     xSemaphoreGive(paramsMutex);
     saveNextIds();
     
-    ESP_LOGI(TAG, "Added float param '%s' (id=%u) to component '%s'", paramName.c_str(), paramId, name.c_str());
     return ptr;
 }
 
@@ -280,7 +275,6 @@ BoolParameter* Component::addBoolParam(const std::string &paramName, size_t rows
     xSemaphoreGive(paramsMutex);
     saveNextIds();
     
-    ESP_LOGI(TAG, "Added bool param '%s' (id=%u) to component '%s'", paramName.c_str(), paramId, name.c_str());
     return ptr;
 }
 
@@ -307,7 +301,6 @@ StringParameter* Component::addStringParam(const std::string &paramName, size_t 
     xSemaphoreGive(paramsMutex);
     saveNextIds();
     
-    ESP_LOGI(TAG, "Added string param '%s' (id=%u) to component '%s'", paramName.c_str(), paramId, name.c_str());
     return ptr;
 }
 
@@ -348,8 +341,6 @@ size_t Component::getApproximateMemoryUsage() const {
 // ============================================================================
 
 void Component::setupHubStore() {
-    ESP_LOGI(TAG, "Setting up hub store for component '%s'", name.c_str());
-    
     // Load any existing data from NVS
     hubStoreLoadFromNvs();
     
@@ -378,11 +369,8 @@ void Component::setupHubStore() {
         if (value.empty()) {
             // Empty value = delete key
             hubStore.erase(hubStoreCurrentKey);
-            ESP_LOGI(TAG, "[%s] Hub store: deleted key '%s'", name.c_str(), hubStoreCurrentKey.c_str());
         } else {
             hubStore[hubStoreCurrentKey] = value;
-            ESP_LOGI(TAG, "[%s] Hub store: set '%s' = '%s' (%zu bytes)", 
-                     name.c_str(), hubStoreCurrentKey.c_str(), value.c_str(), value.length());
         }
         hubStoreSaveToNvs();
         
@@ -403,7 +391,6 @@ void Component::setupHubStore() {
             hubStore.erase(hubStoreCurrentKey);
             hubStoreValueParam->setValue(0, 0, "");
             hubStoreSaveToNvs();
-            ESP_LOGI(TAG, "[%s] Hub store: deleted key '%s'", name.c_str(), hubStoreCurrentKey.c_str());
             
             // Update dump param
             cJSON* dump = cJSON_CreateObject();
@@ -428,8 +415,6 @@ void Component::setupHubStore() {
     hubStoreDumpParam->setValue(0, 0, json ? json : "{}");
     cJSON_free(json);
     cJSON_Delete(dump);
-    
-    ESP_LOGI(TAG, "[%s] Hub store initialized with %zu entries", name.c_str(), hubStore.size());
 }
 
 std::string Component::hubStoreGet(const std::string& key) const {
@@ -499,7 +484,6 @@ void Component::hubStoreLoadFromNvs() {
     }
     
     nvs_close(handle);
-    ESP_LOGI(TAG, "[%s] Loaded %zu hub store entries from NVS", name.c_str(), hubStore.size());
 }
 
 void Component::hubStoreSaveToNvs() {

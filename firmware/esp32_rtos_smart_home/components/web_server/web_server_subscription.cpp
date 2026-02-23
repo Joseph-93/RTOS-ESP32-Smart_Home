@@ -23,12 +23,7 @@ void WebServerComponent::unsubscribe_param(int socket_fd, const SubscriptionKey&
 // clear_subscriptions - remove all subscriptions for a socket (on disconnect)
 void WebServerComponent::clear_subscriptions(int socket_fd) {
     if (xSemaphoreTake(subscriptions_mutex, portMAX_DELAY) == pdTRUE) {
-        auto it = subscriptions.find(socket_fd);
-        if (it != subscriptions.end()) {
-            int count = it->second.size();
-            subscriptions.erase(it);
-            ESP_LOGI(TAG, "Cleared %d subscriptions for socket %d", count, socket_fd);
-        }
+        subscriptions.erase(socket_fd);
         xSemaphoreGive(subscriptions_mutex);
     }
 }
