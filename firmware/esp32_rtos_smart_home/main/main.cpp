@@ -163,6 +163,10 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Initializing all components...");
     component_graph->initializeAll();
     
+    // Load saved parameter values from NVS and start persistence timer
+    ESP_LOGI(TAG, "Loading saved parameters from NVS...");
+    component_graph->loadAllParameters();
+    
     log_memory_checkpoint("AFTER INITIALIZE ALL");
     
 #ifdef ENABLE_GUI

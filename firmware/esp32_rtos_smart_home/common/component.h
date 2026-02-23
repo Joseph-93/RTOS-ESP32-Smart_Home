@@ -14,6 +14,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "cJSON.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 
 // Forward declarations
 class ComponentGraph;
@@ -48,7 +50,7 @@ inline const char* parameterTypeToString(ParameterType type) {
 class BaseParameter {
 public:
     BaseParameter(const std::string& name, uint32_t id, bool readOnly = false)
-        : name(name), parameterId(id), read_only(readOnly) {}
+        : name(name), parameterId(id), read_only(readOnly), dirty(false) {}
     
     virtual ~BaseParameter() = default;
     
@@ -73,6 +75,15 @@ public:
     // Access control
     bool isReadOnly() const { return read_only; }
     
+    // Dirty tracking for persistence
+    bool isDirty() const { return dirty; }
+    void markDirty() { dirty = true; }
+    void clearDirty() { dirty = false; }
+    
+    // NVS persistence (implemented by Parameter<T> specializations)
+    virtual bool saveToNvs(nvs_handle_t handle, const std::string& keyPrefix) = 0;
+    virtual bool loadFromNvs(nvs_handle_t handle, const std::string& keyPrefix) = 0;
+    
     // Generic JSON access for WebSocket API
     virtual cJSON* getValueAsJson(size_t row, size_t col) const = 0;
     virtual bool setValueFromJson(size_t row, size_t col, cJSON* value) = 0;
@@ -93,6 +104,7 @@ protected:
     std::string name;
     uint32_t parameterId;
     bool read_only;
+    bool dirty;
     
     static constexpr const char* TAG = "BaseParameter";
 };
@@ -198,6 +210,9 @@ public:
         bool changed = (current != val);
         if (changed) {
             current = val;
+            if (!read_only) {
+                dirty = true;  // Mark for persistence
+            }
         }
         xSemaphoreGive(mutex);
         
@@ -241,6 +256,9 @@ public:
         data.push_back(value);
         new_row = rows;
         rows = data.size() / cols;
+        if (!read_only) {
+            dirty = true;  // Mark for persistence
+        }
         xSemaphoreGive(mutex);
         
         // Invoke callback after releasing lock
@@ -322,6 +340,9 @@ public:
                 data[(startRow + r) * cols + startCol + c] = values[r * numCols + c];
             }
         }
+        if (!read_only) {
+            dirty = true;  // Mark for persistence
+        }
         
         xSemaphoreGive(mutex);
         
@@ -338,6 +359,10 @@ public:
     // JSON access - implementations below for each type
     cJSON* getValueAsJson(size_t row, size_t col) const override;
     bool setValueFromJson(size_t row, size_t col, cJSON* value) override;
+    
+    // NVS persistence - implementations in component.cpp
+    bool saveToNvs(nvs_handle_t handle, const std::string& keyPrefix) override;
+    bool loadFromNvs(nvs_handle_t handle, const std::string& keyPrefix) override;
     
     // Extended info
     cJSON* getInfoAsJson() const override {
@@ -496,6 +521,13 @@ public:
     virtual void onInitialize() = 0;
     virtual void postInitialize() {}
     virtual void setUpDependencies(ComponentGraph* graph) {}
+    
+    // Custom data persistence (override in subclasses for non-Parameter data)
+    // These are called by ComponentGraph during load/save cycles
+    // The namespace is already opened for this component - just use nvs_set_*/nvs_get_*
+    virtual void saveCustomData(nvs_handle_t handle) {}
+    virtual void loadCustomData(nvs_handle_t handle) {}
+    virtual bool hasCustomDataToSave() const { return false; }  // Return true if custom data is dirty
     
     // Identity
     uint32_t getComponentId() const { return componentId; }

@@ -536,3 +536,186 @@ void Component::hubStoreSaveToNvs() {
     nvs_close(handle);
     ESP_LOGD(TAG, "[%s] Saved %zu hub store entries to NVS", name.c_str(), hubStore.size());
 }
+
+// ============================================================================
+// Parameter NVS Persistence Specializations
+// ============================================================================
+
+// For scalar (1x1) parameters, save directly. For arrays, save as blob.
+
+template<>
+bool Parameter<int32_t>::saveToNvs(nvs_handle_t handle, const std::string& keyPrefix) {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) return false;
+    
+    bool success = false;
+    if (rows == 1 && cols == 1) {
+        // Scalar - save as i32
+        success = (nvs_set_i32(handle, keyPrefix.c_str(), data[0]) == ESP_OK);
+    } else {
+        // Array - save as blob
+        success = (nvs_set_blob(handle, keyPrefix.c_str(), data.data(), data.size() * sizeof(int32_t)) == ESP_OK);
+    }
+    
+    xSemaphoreGive(mutex);
+    return success;
+}
+
+template<>
+bool Parameter<int32_t>::loadFromNvs(nvs_handle_t handle, const std::string& keyPrefix) {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) return false;
+    
+    bool success = false;
+    if (rows == 1 && cols == 1) {
+        // Scalar - load as i32
+        int32_t val;
+        if (nvs_get_i32(handle, keyPrefix.c_str(), &val) == ESP_OK) {
+            data[0] = val;
+            success = true;
+        }
+    } else {
+        // Array - load as blob
+        size_t required_size = data.size() * sizeof(int32_t);
+        size_t stored_size = 0;
+        if (nvs_get_blob(handle, keyPrefix.c_str(), nullptr, &stored_size) == ESP_OK &&
+            stored_size == required_size) {
+            success = (nvs_get_blob(handle, keyPrefix.c_str(), data.data(), &stored_size) == ESP_OK);
+        }
+    }
+    
+    xSemaphoreGive(mutex);
+    return success;
+}
+
+template<>
+bool Parameter<float>::saveToNvs(nvs_handle_t handle, const std::string& keyPrefix) {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) return false;
+    
+    // Always save as blob (NVS doesn't have native float support)
+    bool success = (nvs_set_blob(handle, keyPrefix.c_str(), data.data(), data.size() * sizeof(float)) == ESP_OK);
+    
+    xSemaphoreGive(mutex);
+    return success;
+}
+
+template<>
+bool Parameter<float>::loadFromNvs(nvs_handle_t handle, const std::string& keyPrefix) {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) return false;
+    
+    bool success = false;
+    size_t required_size = data.size() * sizeof(float);
+    size_t stored_size = 0;
+    if (nvs_get_blob(handle, keyPrefix.c_str(), nullptr, &stored_size) == ESP_OK &&
+        stored_size == required_size) {
+        success = (nvs_get_blob(handle, keyPrefix.c_str(), data.data(), &stored_size) == ESP_OK);
+    }
+    
+    xSemaphoreGive(mutex);
+    return success;
+}
+
+template<>
+bool Parameter<uint8_t>::saveToNvs(nvs_handle_t handle, const std::string& keyPrefix) {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) return false;
+    
+    bool success = false;
+    if (rows == 1 && cols == 1) {
+        // Scalar bool - save as u8
+        success = (nvs_set_u8(handle, keyPrefix.c_str(), data[0]) == ESP_OK);
+    } else {
+        // Array - save as blob
+        success = (nvs_set_blob(handle, keyPrefix.c_str(), data.data(), data.size()) == ESP_OK);
+    }
+    
+    xSemaphoreGive(mutex);
+    return success;
+}
+
+template<>
+bool Parameter<uint8_t>::loadFromNvs(nvs_handle_t handle, const std::string& keyPrefix) {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) return false;
+    
+    bool success = false;
+    if (rows == 1 && cols == 1) {
+        // Scalar bool - load as u8
+        uint8_t val;
+        if (nvs_get_u8(handle, keyPrefix.c_str(), &val) == ESP_OK) {
+            data[0] = val;
+            success = true;
+        }
+    } else {
+        // Array - load as blob
+        size_t required_size = data.size();
+        size_t stored_size = 0;
+        if (nvs_get_blob(handle, keyPrefix.c_str(), nullptr, &stored_size) == ESP_OK &&
+            stored_size == required_size) {
+            success = (nvs_get_blob(handle, keyPrefix.c_str(), data.data(), &stored_size) == ESP_OK);
+        }
+    }
+    
+    xSemaphoreGive(mutex);
+    return success;
+}
+
+template<>
+bool Parameter<std::string>::saveToNvs(nvs_handle_t handle, const std::string& keyPrefix) {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) return false;
+    
+    bool success = false;
+    if (rows == 1 && cols == 1) {
+        // Single string - save directly
+        success = (nvs_set_str(handle, keyPrefix.c_str(), data[0].c_str()) == ESP_OK);
+    } else {
+        // Multiple strings - save as JSON array blob
+        cJSON* arr = cJSON_CreateArray();
+        for (const auto& s : data) {
+            cJSON_AddItemToArray(arr, cJSON_CreateString(s.c_str()));
+        }
+        char* json = cJSON_PrintUnformatted(arr);
+        if (json) {
+            success = (nvs_set_str(handle, keyPrefix.c_str(), json) == ESP_OK);
+            cJSON_free(json);
+        }
+        cJSON_Delete(arr);
+    }
+    
+    xSemaphoreGive(mutex);
+    return success;
+}
+
+template<>
+bool Parameter<std::string>::loadFromNvs(nvs_handle_t handle, const std::string& keyPrefix) {
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) return false;
+    
+    bool success = false;
+    size_t str_len = 0;
+    
+    if (nvs_get_str(handle, keyPrefix.c_str(), nullptr, &str_len) == ESP_OK && str_len > 0) {
+        char* buf = (char*)malloc(str_len);
+        if (buf && nvs_get_str(handle, keyPrefix.c_str(), buf, &str_len) == ESP_OK) {
+            if (rows == 1 && cols == 1) {
+                // Single string
+                data[0] = buf;
+                success = true;
+            } else {
+                // Multiple strings - parse JSON array
+                cJSON* arr = cJSON_Parse(buf);
+                if (arr && cJSON_IsArray(arr)) {
+                    size_t idx = 0;
+                    cJSON* item;
+                    cJSON_ArrayForEach(item, arr) {
+                        if (idx < data.size() && cJSON_IsString(item)) {
+                            data[idx] = item->valuestring;
+                            idx++;
+                        }
+                    }
+                    success = true;
+                }
+                cJSON_Delete(arr);
+            }
+        }
+        free(buf);
+    }
+    
+    xSemaphoreGive(mutex);
+    return success;
+}

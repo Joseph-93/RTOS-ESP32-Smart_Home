@@ -2105,14 +2105,15 @@ code {
 
 .rgb-preset-row {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
-    padding: 8px 10px;
+    padding: 12px 14px;
     background: var(--bg-tertiary);
-    border-radius: 6px;
+    border-radius: 8px;
     border: 1px solid var(--border-color);
     cursor: pointer;
     transition: all 0.2s;
+    min-height: 72px;
 }
 
 .rgb-preset-row:hover {
@@ -2144,35 +2145,84 @@ code {
     color: #3498db;
 }
 
+/* Top row: index + name */
 .rgb-preset-main {
     flex: 1;
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
     min-width: 0;
 }
 
+.rgb-preset-main .rgb-preset-index {
+    font-family: monospace;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--accent-primary);
+    background: rgba(88, 166, 255, 0.2);
+    padding: 4px 10px;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
 .rgb-preset-main .rgb-preset-name {
-    font-weight: 500;
+    flex: 1;
+    min-width: 80px;
+    font-weight: 600;
+    font-size: 1rem;
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.rgb-preset-main .rgb-preset-meta {
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.rgb-preset-main .rgb-preset-name.empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.rgb-preset-row.empty-slot {
+    opacity: 0.5;
+    background: var(--bg-secondary);
+    border-style: dashed;
+    cursor: default;
+    min-height: 48px;
+}
+
+.rgb-preset-row.empty-slot:hover {
+    border-color: var(--border-color);
+    background: var(--bg-secondary);
+}
+
 .rgb-preset-meta {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     color: var(--text-secondary);
 }
 
+/* Bottom row: controls */
 .rgb-preset-controls {
     display: flex;
-    gap: 4px;
+    gap: 8px;
+    flex-shrink: 0;
+    justify-content: flex-end;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .rgb-preset-controls .btn-sm {
-    padding: 4px 8px;
-    font-size: 0.85rem;
+    padding: 6px 12px;
+    font-size: 1rem;
 }
 
 /* Editor metadata row */

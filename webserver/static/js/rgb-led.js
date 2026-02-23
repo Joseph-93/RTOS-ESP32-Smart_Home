@@ -990,8 +990,32 @@ class RgbLedAnimationBuilder {
             return;
         }
         
-        container.innerHTML = this.devicePresets.map((p) => {
-            const id = p.id;  // Use actual preset ID, not array index
+        // Build a map of existing presets by ID for quick lookup
+        const presetMap = new Map();
+        for (const p of this.devicePresets) {
+            presetMap.set(p.id, p);
+        }
+        
+        // Find max ID to know how many slots to show
+        const maxId = this.devicePresets.reduce((max, p) => Math.max(max, p.id), -1);
+        
+        // Render slots from 0 to maxId, showing gaps as empty slots
+        let html = '';
+        for (let id = 0; id <= maxId; id++) {
+            const p = presetMap.get(id);
+            
+            if (!p) {
+                // Empty slot (deleted preset) - show placeholder
+                html += `
+                <div class="rgb-preset-row empty-slot" data-preset-id="${id}">
+                    <div class="rgb-preset-main">
+                        <span class="rgb-preset-index">#${id}</span>
+                        <span class="rgb-preset-name empty">(empty)</span>
+                    </div>
+                </div>`;
+                continue;
+            }
+            
             const isPlaying = id === this.activePreset;   // Actually showing on LEDs right now
             const isInTier1 = id === this.tier1Preset;    // In tier 1 (override) - may or may not be playing
             const isInTier2 = id === this.tier2Preset;    // In tier 2 (background) - may or may not be playing
@@ -1005,9 +1029,10 @@ class RgbLedAnimationBuilder {
             if (isInTier1) tierIndicator = ' ⚡';      // In tier 1
             if (isInTier2) tierIndicator = ' 🌙';      // In tier 2
             
-            return `
+            html += `
             <div class="rgb-preset-row ${isPlaying ? 'active playing' : ''} ${isEditing ? 'editing' : ''}" data-preset-id="${id}">
                 <div class="rgb-preset-main" onclick="rgbBuilder._editDevicePreset(${id})">
+                    <span class="rgb-preset-index">#${id}</span>
                     <span class="rgb-preset-name">${name}${isPlaying ? ' ▶' : ''}</span>
                     <span class="rgb-preset-meta">${frameInfo} ${loopIcon}${tierIndicator}</span>
                 </div>
@@ -1027,7 +1052,9 @@ class RgbLedAnimationBuilder {
                             title="Delete">🗑️</button>
                 </div>
             </div>`;
-        }).join('');
+        }
+        
+        container.innerHTML = html;
     }
     
     async _setTier(presetId, tier) {

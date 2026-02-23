@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
+#include "freertos/timers.h"
 #include <unordered_map>
 #include <map>
 #include <string>
@@ -40,6 +41,10 @@ private:
     QueueHandle_t notification_queue_gui;   // For GUI display
     QueueHandle_t notification_queue_uart;  // For UART logging
     
+    // Persistence timer (saves dirty parameters every 30 seconds)
+    TimerHandle_t persistenceTimer;
+    static void persistenceTimerCallback(TimerHandle_t timer);
+    
 public:
     ComponentGraph();
     ~ComponentGraph();
@@ -65,6 +70,12 @@ public:
     
     // Initialize all registered components in dependency order
     void initializeAll();
+    
+    // Load all component parameters from NVS (called after initializeAll)
+    void loadAllParameters();
+    
+    // Save all dirty parameters to NVS immediately
+    void saveDirtyParameters();
     
     // Get all component names (useful for debugging)
     std::vector<std::string> getComponentNames() const;

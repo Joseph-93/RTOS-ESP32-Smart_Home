@@ -1,6 +1,11 @@
 #include "component_graph.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "nvs_flash.h"
+#include "nvs.h"
+
+// Persistence save interval in milliseconds (30 seconds)
+static constexpr uint32_t PERSISTENCE_INTERVAL_MS = 30000;
 
 // Memory logging helper
 static void log_component_memory(const char* component_name, const char* stage) {
@@ -33,10 +38,30 @@ ComponentGraph::ComponentGraph() {
     } else {
         ESP_LOGI(TAG, "Notification queue created (GUI: 10 items)");
     }
+    
+    // Create persistence timer (saves dirty parameters every 30 seconds)
+    persistenceTimer = xTimerCreate(
+        "persist_timer",
+        pdMS_TO_TICKS(PERSISTENCE_INTERVAL_MS),
+        pdTRUE,  // Auto-reload
+        this,    // Timer ID = this pointer
+        persistenceTimerCallback
+    );
+    if (persistenceTimer == nullptr) {
+        ESP_LOGE(TAG, "Failed to create persistence timer!");
+    } else {
+        ESP_LOGI(TAG, "Persistence timer created (interval: %lu ms)", PERSISTENCE_INTERVAL_MS);
+    }
 }
 
 ComponentGraph::~ComponentGraph() {
     ESP_LOGI(TAG, "ComponentGraph destroyed");
+    
+    // Stop and delete persistence timer
+    if (persistenceTimer) {
+        xTimerStop(persistenceTimer, portMAX_DELAY);
+        xTimerDelete(persistenceTimer, portMAX_DELAY);
+    }
     
     // Delete mutex
     if (componentsMutex) {
@@ -602,4 +627,146 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
     cJSON_AddStringToObject(error, "error", "unknown message type");
     return error;
 }
+
+// ============================================================================
+// Parameter Persistence
+// ============================================================================
+
+void ComponentGraph::persistenceTimerCallback(TimerHandle_t timer) {
+    ComponentGraph* self = static_cast<ComponentGraph*>(pvTimerGetTimerID(timer));
+    if (self) {
+        self->saveDirtyParameters();
+    }
+}
+
+void ComponentGraph::saveDirtyParameters() {
+    if (xSemaphoreTake(componentsMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        ESP_LOGW(TAG, "Could not acquire mutex for persistence save");
+        return;
+    }
+    
+    int totalSaved = 0;
+    
+    for (const auto& [name, component] : componentsByName) {
+        // Create NVS namespace for this component: "p_<compId>"
+        char nsName[16];
+        snprintf(nsName, sizeof(nsName), "p_%lu", (unsigned long)component->getComponentId());
+        
+        nvs_handle_t handle;
+        bool handleOpened = false;
+        
+        const auto& params = component->getAllParams();
+        bool hasDirtyParams = false;
+        for (const auto& [paramName, param] : params) {
+            // Only save dirty, non-read-only parameters
+            if (!param->isDirty() || param->isReadOnly()) {
+                continue;
+            }
+            
+            // Open handle lazily (only if we have something to save)
+            if (!handleOpened) {
+                esp_err_t err = nvs_open(nsName, NVS_READWRITE, &handle);
+                if (err != ESP_OK) {
+                    ESP_LOGW(TAG, "[%s] Failed to open NVS for parameters: %s", 
+                             name.c_str(), esp_err_to_name(err));
+                    break;  // Skip this component
+                }
+                handleOpened = true;
+            }
+            
+            // Build key: truncate param name to 15 chars for NVS key limit
+            std::string keyPrefix = paramName.substr(0, 15);
+            
+            if (param->saveToNvs(handle, keyPrefix)) {
+                param->clearDirty();
+                totalSaved++;
+                ESP_LOGD(TAG, "[%s] Saved param '%s' to NVS", name.c_str(), paramName.c_str());
+            }
+            hasDirtyParams = true;
+        }
+        
+        // Check if component has custom data to save
+        bool hasCustomData = component->hasCustomDataToSave();
+        if (hasCustomData && !handleOpened) {
+            esp_err_t err = nvs_open(nsName, NVS_READWRITE, &handle);
+            if (err == ESP_OK) {
+                handleOpened = true;
+            }
+        }
+        
+        // Call component's custom save hook if handle is open
+        if (handleOpened && hasCustomData) {
+            component->saveCustomData(handle);
+            ESP_LOGD(TAG, "[%s] Saved custom data to NVS", name.c_str());
+        }
+        
+        if (handleOpened) {
+            nvs_commit(handle);
+            nvs_close(handle);
+        }
+    }
+    
+    xSemaphoreGive(componentsMutex);
+    
+    if (totalSaved > 0) {
+        ESP_LOGI(TAG, "Persistence: saved %d dirty parameters to NVS", totalSaved);
+    }
+}
+
+void ComponentGraph::loadAllParameters() {
+    if (xSemaphoreTake(componentsMutex, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGE(TAG, "Could not acquire mutex for parameter loading");
+        return;
+    }
+    
+    int totalLoaded = 0;
+    
+    for (const auto& [name, component] : componentsByName) {
+        // NVS namespace for this component: "p_<compId>"
+        char nsName[16];
+        snprintf(nsName, sizeof(nsName), "p_%lu", (unsigned long)component->getComponentId());
+        
+        nvs_handle_t handle;
+        esp_err_t err = nvs_open(nsName, NVS_READONLY, &handle);
+        if (err != ESP_OK) {
+            // No saved data yet - that's fine
+            ESP_LOGD(TAG, "[%s] No saved parameters in NVS (namespace: %s)", name.c_str(), nsName);
+            continue;
+        }
+        
+        const auto& params = component->getAllParams();
+        for (const auto& [paramName, param] : params) {
+            // Only load non-read-only parameters
+            if (param->isReadOnly()) {
+                continue;
+            }
+            
+            std::string keyPrefix = paramName.substr(0, 15);
+            
+            if (param->loadFromNvs(handle, keyPrefix)) {
+                totalLoaded++;
+                ESP_LOGD(TAG, "[%s] Loaded param '%s' from NVS", name.c_str(), paramName.c_str());
+            }
+        }
+        
+        // Call component's custom load hook
+        component->loadCustomData(handle);
+        
+        nvs_close(handle);
+    }
+    
+    xSemaphoreGive(componentsMutex);
+    
+    if (totalLoaded > 0) {
+        ESP_LOGI(TAG, "Persistence: loaded %d parameters from NVS", totalLoaded);
+    }
+    
+    // Start the persistence timer now that loading is done
+    if (persistenceTimer) {
+        xTimerStart(persistenceTimer, portMAX_DELAY);
+        ESP_LOGI(TAG, "Persistence timer started");
+    }
+}
+
+
 

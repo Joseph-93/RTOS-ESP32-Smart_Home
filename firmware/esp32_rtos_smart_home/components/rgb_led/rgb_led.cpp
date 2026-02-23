@@ -260,7 +260,7 @@ void RgbLedComponent::onInitialize() {
     // Create parameters
     brightness = addIntParam("brightness", 1, 1, 0, 100, 100);
     playing = addBoolParam("playing", 1, 1, false);  // false=off, true=play animation
-    loop = addIntParam("loop", 1, 1, -1, 1000, -1);  // -1=infinite, 0=play once, N=loop N times
+    loop = addIntParam("loop", 1, 1, -1, 1000, -1, true);  // -1=infinite, 0=play once, N=loop N times
     transitionMs = addIntParam("transition_ms", 1, 1, 0, 5000, 200);  // Slick dick transition duration
     transitionEasing = addIntParam("transition_easing", 1, 1, 0, 1, 0);  // 0=crossfade (merge), 1=through black
     
@@ -270,8 +270,8 @@ void RgbLedComponent::onInitialize() {
     animMemoryMax = addIntParam("anim_memory_max", 1, 1, 0, INT32_MAX, RGB_LED_MAX_ANIMATION_MEMORY, true);  // Read-only
     presetCountParam = addIntParam("preset_count", 1, 1, 0, 255, 0, true);  // Read-only
     
-    // Preset management parameters (writable)
-    activePresetParam = addIntParam("active_preset", 1, 1, -1, 255, -1);
+    // Preset management parameters
+    activePresetParam = addIntParam("active_preset", 1, 1, -1, 255, -1, true);  // Read-only (output of priority system)
     // 3-tier priority system: row 0 = top (immediate), row 1 = mid (manual), row 2 = low (auto)
     presetPriorityParam = addIntParam("preset_priority", 3, 1, -1, 255, -1);
     deletePresetParam = addIntParam("delete_preset", 1, 1, -1, 255, -1);
@@ -698,18 +698,23 @@ esp_err_t RgbLedComponent::animationCommit() {
     preset.frame_count = upload_frame_count;
     preset.led_count = upload_led_count;
     
+    // Find the lowest unused preset ID (fills gaps from deletions)
+    int16_t new_id = 0;
+    while (presets.find(new_id) != presets.end()) {
+        new_id++;
+    }
+    
     // Get the name from the param (default to "Preset N" if empty)
     std::string name = animPresetName ? animPresetName->getValue(0, 0) : "";
     if (name.empty()) {
-        name = "Preset " + std::to_string(next_preset_id);
+        name = "Preset " + std::to_string(new_id);
     }
     preset.name = name;
     
     // Get loop setting from upload param (-1=infinite, 0=once, N=N times)
     preset.loop = animUploadLoop ? (int16_t)animUploadLoop->getValue(0, 0) : -1;
     
-    // Assign stable ID and insert into map
-    int16_t new_id = next_preset_id++;
+    // Insert into map
     presets[new_id] = std::move(preset);
     
     // Clear staging state
@@ -737,6 +742,8 @@ esp_err_t RgbLedComponent::animationCommit() {
     updateStatusParams();
     if (activePresetParam) activePresetParam->setValue(0, 0, active_preset_index);
 
+    presetsModified = true;
+    
     ESP_LOGI(TAG, "Preset #%d committed: %u frames (%zu presets total, %zu bytes used)",
              new_id, presets[new_id].frame_count,
              presets.size(), calcTotalMemoryUsed());
@@ -760,9 +767,8 @@ void RgbLedComponent::animationClear() {
     upload_offset = 0;
     { std::vector<uint8_t>().swap(upload_staging_data); }
     
-    // Clear all presets and reset ID counter
+    // Clear all presets
     presets.clear();
-    next_preset_id = 0;
     active_preset_index = -1;
     animation_current_frame = 0;
     
@@ -918,6 +924,8 @@ void RgbLedComponent::deletePresetByIndex(int index) {
             // No shifting needed - other tiers keep their stable IDs!
         }
     }
+    
+    presetsModified = true;
     
     giveMutex();
     
@@ -1147,4 +1155,146 @@ void RgbLedComponent::ledTask() {
     ESP_LOGI(TAG, "RGB LED task exiting");
     task_running.store(false);
     vTaskDelete(nullptr);
+}
+
+// ============================================================================
+// NVS Persistence for Animation Presets
+// ============================================================================
+
+void RgbLedComponent::saveCustomData(nvs_handle_t handle) {
+    if (!presetsModified) {
+        return;
+    }
+    
+    // Save preset count
+    uint16_t count = static_cast<uint16_t>(presets.size());
+    nvs_set_u16(handle, "preset_cnt", count);
+    
+    // Save each preset with its ID as part of the key
+    int idx = 0;
+    for (const auto& [id, preset] : presets) {
+        char key[16];
+        
+        // Save preset ID
+        snprintf(key, sizeof(key), "pid%d", idx);
+        nvs_set_i16(handle, key, id);
+        
+        // Save metadata: frame_count, led_count, loop
+        snprintf(key, sizeof(key), "pm%d", idx);
+        uint32_t meta[3] = {
+            preset.frame_count,
+            preset.led_count,
+            static_cast<uint32_t>(static_cast<int32_t>(preset.loop))
+        };
+        nvs_set_blob(handle, key, meta, sizeof(meta));
+        
+        // Save name (truncated to 32 chars max)
+        snprintf(key, sizeof(key), "pn%d", idx);
+        std::string name = preset.name.substr(0, 32);
+        nvs_set_str(handle, key, name.c_str());
+        
+        // Save animation data - may need to split if > 4000 bytes
+        // NVS blob limit is ~4000 bytes, so we chunk large animations
+        size_t data_size = preset.data.size();
+        snprintf(key, sizeof(key), "pds%d", idx);
+        nvs_set_u32(handle, key, static_cast<uint32_t>(data_size));
+        
+        const size_t CHUNK_SIZE = 3900;  // Leave room for NVS overhead
+        size_t chunks = (data_size + CHUNK_SIZE - 1) / CHUNK_SIZE;
+        
+        for (size_t chunk = 0; chunk < chunks; chunk++) {
+            snprintf(key, sizeof(key), "d%02x%02x", (uint8_t)idx, (uint8_t)chunk);
+            size_t offset = chunk * CHUNK_SIZE;
+            size_t len = std::min(CHUNK_SIZE, data_size - offset);
+            nvs_set_blob(handle, key, preset.data.data() + offset, len);
+        }
+        
+        idx++;
+    }
+    
+    presetsModified = false;
+    ESP_LOGI(TAG, "Saved %d presets to NVS", count);
+}
+
+void RgbLedComponent::loadCustomData(nvs_handle_t handle) {
+    // Load preset count
+    uint16_t count = 0;
+    if (nvs_get_u16(handle, "preset_cnt", &count) != ESP_OK || count == 0) {
+        ESP_LOGI(TAG, "No presets in NVS");
+        return;
+    }
+    
+    if (!takeMutex()) {
+        return;
+    }
+    
+    presets.clear();
+    
+    for (int idx = 0; idx < count; idx++) {
+        char key[16];
+        AnimationPreset preset;
+        
+        // Load preset ID
+        snprintf(key, sizeof(key), "pid%d", idx);
+        int16_t id = 0;
+        if (nvs_get_i16(handle, key, &id) != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to load preset ID at index %d", idx);
+            continue;
+        }
+        
+        // Load metadata
+        snprintf(key, sizeof(key), "pm%d", idx);
+        uint32_t meta[3];
+        size_t meta_size = sizeof(meta);
+        if (nvs_get_blob(handle, key, meta, &meta_size) != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to load preset metadata at index %d", idx);
+            continue;
+        }
+        preset.frame_count = meta[0];
+        preset.led_count = meta[1];
+        preset.loop = static_cast<int16_t>(static_cast<int32_t>(meta[2]));
+        
+        // Load name
+        snprintf(key, sizeof(key), "pn%d", idx);
+        size_t name_len = 0;
+        if (nvs_get_str(handle, key, nullptr, &name_len) == ESP_OK && name_len > 0) {
+            std::vector<char> name_buf(name_len);
+            nvs_get_str(handle, key, name_buf.data(), &name_len);
+            preset.name = std::string(name_buf.data());
+        }
+        
+        // Load data size
+        snprintf(key, sizeof(key), "pds%d", idx);
+        uint32_t data_size = 0;
+        if (nvs_get_u32(handle, key, &data_size) != ESP_OK || data_size == 0) {
+            ESP_LOGW(TAG, "Failed to load preset data size at index %d", idx);
+            continue;
+        }
+        
+        // Load animation data chunks
+        preset.data.resize(data_size);
+        const size_t CHUNK_SIZE = 3900;
+        size_t chunks = (data_size + CHUNK_SIZE - 1) / CHUNK_SIZE;
+        bool load_ok = true;
+        
+        for (size_t chunk = 0; chunk < chunks && load_ok; chunk++) {
+            snprintf(key, sizeof(key), "d%02x%02x", (uint8_t)idx, (uint8_t)chunk);
+            size_t offset = chunk * CHUNK_SIZE;
+            size_t len = std::min(CHUNK_SIZE, static_cast<size_t>(data_size) - offset);
+            size_t actual_len = len;
+            if (nvs_get_blob(handle, key, preset.data.data() + offset, &actual_len) != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to load preset data chunk %d at index %d", (int)chunk, idx);
+                load_ok = false;
+            }
+        }
+        
+        if (load_ok) {
+            presets[id] = std::move(preset);
+        }
+    }
+    
+    giveMutex();
+    
+    updateStatusParams();
+    ESP_LOGI(TAG, "Loaded %zu presets from NVS", presets.size());
 }

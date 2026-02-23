@@ -67,6 +67,11 @@ public:
     
     void onInitialize() override;
     
+    // NVS persistence for preset data
+    void saveCustomData(nvs_handle_t handle) override;
+    void loadCustomData(nvs_handle_t handle) override;
+    bool hasCustomDataToSave() const override { return presetsModified; }
+    
     // ========================================================================
     // Animation API
     // ========================================================================
@@ -124,10 +129,11 @@ private:
     // Preset Storage (shared memory pool)
     // Presets are stored in a map with STABLE IDs - deleting preset 2 does NOT
     // shift presets 3, 4, 5... to indices 2, 3, 4... The ID is permanent.
+    // When a new preset is created, we find the lowest unused ID to fill gaps.
     // ========================================================================
     std::map<int16_t, AnimationPreset> presets;       // Stable ID -> Preset mapping
-    int16_t next_preset_id{0};                        // Next ID to assign (never reused)
     int16_t active_preset_index{-1};                  // Which preset ID is playing (-1 = none)
+    bool presetsModified{false};                      // True if presets changed since last NVS save
     
     // Playback state (for active preset)
     uint16_t animation_current_frame{0};              // Current frame in active preset
