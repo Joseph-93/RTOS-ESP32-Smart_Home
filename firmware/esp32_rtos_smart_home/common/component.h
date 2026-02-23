@@ -529,6 +529,10 @@ public:
     virtual void loadCustomData(nvs_handle_t handle) {}
     virtual bool hasCustomDataToSave() const { return false; }  // Return true if custom data is dirty
     
+    // Called after ALL NVS data (custom data + params) is loaded for ALL components
+    // Use this to reconcile state (e.g., start playback if priority queue has valid entries)
+    virtual void onPostLoadReconcile() {}
+    
     // Identity
     uint32_t getComponentId() const { return componentId; }
     const std::string& getName() const;

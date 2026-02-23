@@ -72,6 +72,9 @@ public:
     void loadCustomData(nvs_handle_t handle) override;
     bool hasCustomDataToSave() const override { return presetsModified; }
     
+    // Post-load reconciliation: ensure playback matches priority queue
+    void onPostLoadReconcile() override;
+    
     // ========================================================================
     // Animation API
     // ========================================================================
@@ -196,6 +199,12 @@ private:
     
     // Blocking show variant for LED task
     esp_err_t showBlocking();
+    
+    // Validate a preset exists and has playable frame data
+    bool isPresetPlayable(int16_t preset_id) const;
+    
+    // Reconcile playback state after NVS load (called from loadCustomData)
+    void reconcilePlaybackAfterLoad();
     
     // Apply brightness to a color value
     uint8_t applyBrightness(uint8_t color);

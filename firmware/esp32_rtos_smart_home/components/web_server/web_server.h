@@ -59,6 +59,7 @@ private:
     // Subscription tracking: socket_fd -> set of subscribed parameters
     std::map<int, std::set<SubscriptionKey>> subscriptions;
     SemaphoreHandle_t subscriptions_mutex = nullptr;  // Protect subscriptions map from concurrent access
+    SemaphoreHandle_t ws_send_mutex = nullptr;  // Prevent concurrent WebSocket frame sends
     
     // Broadcast queue and task for thread-safe WebSocket updates
     QueueHandle_t broadcast_queue = nullptr;

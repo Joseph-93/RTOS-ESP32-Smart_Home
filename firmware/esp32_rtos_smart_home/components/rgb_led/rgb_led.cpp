@@ -326,19 +326,22 @@ void RgbLedComponent::onInitialize() {
     
     if (activePresetParam) {
         activePresetParam->setOnChange([this](size_t row, size_t col, int val) {
-            auto it = presets.find((int16_t)val);
-            if (it != presets.end()) {
+            if (val == -1) {
+                // Transition to off
+                beginTransition(-1);
+                updateStatusParams();
+            } else if (isPresetPlayable((int16_t)val)) {
                 // Use slick dick transition
                 beginTransition((int16_t)val);
                 // Auto-start playback when selecting a preset
                 if (playing) playing->setValue(0, 0, true);
                 updateStatusParams();
-            } else if (val == -1) {
-                // Transition to off
-                beginTransition(-1);
-                updateStatusParams();
             } else {
-                ESP_LOGW(TAG, "Invalid preset ID: %d (not found)", val);
+                // Preset doesn't exist or has no frames - refuse to play
+                ESP_LOGW(TAG, "Cannot play preset %d: not found or empty", val);
+                // Reset active_preset to -1 since we can't play it
+                // (use internal var to avoid recursive onChange)
+                active_preset_index = -1;
             }
         });
     }
@@ -346,14 +349,14 @@ void RgbLedComponent::onInitialize() {
     // Priority system: when any tier changes, resolve and update active_preset
     if (presetPriorityParam) {
         presetPriorityParam->setOnChange([this](size_t row, size_t col, int val) {
-            // Resolve highest priority preset
+            // Resolve highest priority preset (only considers playable presets)
             int16_t resolved = resolvePresetPriority();
             
             // If resolved preset is different from current, switch to it
             if (resolved != active_preset_index) {
                 // Use slick dick transition for priority changes too
                 beginTransition(resolved);
-                if (resolved >= 0) {
+                if (resolved >= 0 && isPresetPlayable(resolved)) {
                     if (activePresetParam) activePresetParam->setValue(0, 0, resolved);
                     if (playing) playing->setValue(0, 0, true);
                 } else {
@@ -900,6 +903,46 @@ void RgbLedComponent::deletePresetByIndex(int index) {
     if (activePresetParam) activePresetParam->setValue(0, 0, active_preset_index);
 }
 
+bool RgbLedComponent::isPresetPlayable(int16_t preset_id) const {
+    if (preset_id < 0) return false;
+    
+    auto it = presets.find(preset_id);
+    if (it == presets.end()) return false;
+    
+    const AnimationPreset& preset = it->second;
+    // Must have at least 1 frame and actual data
+    return preset.frame_count > 0 && !preset.data.empty();
+}
+
+void RgbLedComponent::reconcilePlaybackAfterLoad() {
+    // Called after NVS load to ensure playback state matches priority queue
+    // This handles the case where params were loaded but playback didn't start
+    
+    int16_t resolved = resolvePresetPriority();
+    
+    if (resolved >= 0 && isPresetPlayable(resolved)) {
+        // There's a valid preset in the priority queue - start it
+        if (active_preset_index != resolved) {
+            active_preset_index = resolved;
+            animation_current_frame = 0;
+            animation_frame_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+            auto it = presets.find(resolved);
+            if (it != presets.end()) {
+                animation_loops_remaining = it->second.loop;
+            }
+            if (playing) playing->setValue(0, 0, true);
+            ESP_LOGI(TAG, "Reconcile: started playback of preset %d", resolved);
+        }
+        if (activePresetParam) activePresetParam->setValue(0, 0, resolved);
+    } else {
+        // Nothing playable in priority queue
+        active_preset_index = -1;
+        if (activePresetParam) activePresetParam->setValue(0, 0, -1);
+    }
+    
+    updateStatusParams();
+}
+
 void RgbLedComponent::updateStatusParams() {
     size_t total_mem = calcTotalMemoryUsed();
     if (animMemoryUsed) animMemoryUsed->setValue(0, 0, (int)total_mem);
@@ -1256,4 +1299,8 @@ void RgbLedComponent::loadCustomData(nvs_handle_t handle) {
     
     updateStatusParams();
     ESP_LOGI(TAG, "Loaded %zu presets from NVS", presets.size());
+}
+
+void RgbLedComponent::onPostLoadReconcile() {
+    reconcilePlaybackAfterLoad();
 }

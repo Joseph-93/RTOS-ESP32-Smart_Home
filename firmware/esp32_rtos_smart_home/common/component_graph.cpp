@@ -688,6 +688,10 @@ void ComponentGraph::loadAllParameters() {
             continue;
         }
         
+        // CRITICAL: Load custom data FIRST (e.g., animation presets) so that
+        // when parameter onChange callbacks fire, the data they reference exists
+        component->loadCustomData(handle);
+        
         const auto& params = component->getAllParams();
         for (const auto& [paramName, param] : params) {
             // Only load non-read-only parameters
@@ -703,10 +707,13 @@ void ComponentGraph::loadAllParameters() {
             }
         }
         
-        // Call component's custom load hook
-        component->loadCustomData(handle);
-        
         nvs_close(handle);
+    }
+    
+    // After ALL data is loaded, give each component a chance to reconcile state
+    // (e.g., RgbLed can now verify priority queue vs presets and start playback)
+    for (const auto& [name, component] : componentsByName) {
+        component->onPostLoadReconcile();
     }
     
     xSemaphoreGive(componentsMutex);

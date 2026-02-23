@@ -86,9 +86,13 @@ Component::Component(const std::string &name) : name(name), initialized(false) {
     // Load UUIDs from NVS on first component creation
     loadNextIds();
     
-    // Assign component ID and increment
-    componentId = nextComponentId++;
-    saveNextIds();
+    // Generate STABLE component ID from name hash (ensures same ID across reboots)
+    // Use djb2 hash algorithm for deterministic mapping
+    uint32_t hash = 5381;
+    for (char c : name) {
+        hash = ((hash << 5) + hash) + static_cast<uint8_t>(c);
+    }
+    componentId = hash;
     
     // Create params mutex
     paramsMutex = xSemaphoreCreateMutex();
@@ -363,7 +367,7 @@ void Component::setupHubStore() {
     // When value is set, store it for the current key
     hubStoreValueParam->setOnChange([this](size_t, size_t, const std::string& value) {
         if (hubStoreCurrentKey.empty()) {
-            ESP_LOGW(TAG, "[%s] Hub store: cannot set value without key", name.c_str());
+            // This can happen during NVS load - harmless, just skip
             return;
         }
         if (value.empty()) {

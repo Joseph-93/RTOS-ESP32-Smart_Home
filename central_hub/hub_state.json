@@ -67,12 +67,12 @@
       },
       "rising_actions": {
         "0,0": "{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":0,\"wait_after_ms\":0}]}",
-        "1,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":0,\"col\":0,\"value\":0,\"wait_after_ms\":0}]}",
-        "2,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":2,\"wait_after_ms\":0}]}"
+        "1,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":0,\"wait_after_ms\":0}]}",
+        "2,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":1,\"wait_after_ms\":0}]}"
       },
       "falling_actions": {
         "0,0": "{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":1,\"wait_after_ms\":0}]}",
-        "1,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":0,\"col\":0,\"value\":-1,\"wait_after_ms\":0}]}",
+        "1,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":-1,\"wait_after_ms\":0}]}",
         "2,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":-1,\"wait_after_ms\":0}]}"
       },
       "enabled": {
@@ -80,8 +80,8 @@
       },
       "hold_high_sec": {
         "0,0": 0.0,
-        "1,0": 0.0,
-        "2,0": 0.0,
+        "1,0": 0.5,
+        "2,0": 2.0,
         "3,0": 0.0,
         "4,0": 0.0,
         "5,0": 0.0,
@@ -132,7 +132,7 @@
       },
       "cooldown_sec": {
         "0,0": 0.0,
-        "1,0": 0.0,
+        "1,0": 0.5,
         "2,0": 0.0,
         "3,0": 0.0,
         "4,0": 0.0,

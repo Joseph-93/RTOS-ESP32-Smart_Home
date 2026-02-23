@@ -70,8 +70,15 @@ void WebServerComponent::onInitialize() {
         abort();
     }
     
-    // Create broadcast queue (3 items - minimal for memory constraints)
-    broadcast_queue = xQueueCreate(3, sizeof(BroadcastQueueItem));
+    // Create mutex for WebSocket send operations (prevents concurrent frame sends)
+    ws_send_mutex = xSemaphoreCreateMutex();
+    if (!ws_send_mutex) {
+        ESP_LOGE(TAG, "Failed to create ws_send_mutex - FATAL");
+        abort();
+    }
+    
+    // Create broadcast queue (16 items to handle burst updates during preset operations)
+    broadcast_queue = xQueueCreate(16, sizeof(BroadcastQueueItem));
     if (!broadcast_queue) {
         ESP_LOGE(TAG, "Failed to create broadcast queue - FATAL (heap: %lu)", esp_get_free_heap_size());
         abort();
@@ -363,7 +370,16 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
                 send_pkt.len = strlen(response_str);
                 send_pkt.type = HTTPD_WS_TYPE_TEXT;
                 send_pkt.final = true;  // Explicitly mark as final frame
-                ret = httpd_ws_send_frame(req, &send_pkt);
+                
+                // Take send mutex to prevent concurrent frame sends with broadcast task
+                if (xSemaphoreTake(self->ws_send_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+                    ret = httpd_ws_send_frame(req, &send_pkt);
+                    xSemaphoreGive(self->ws_send_mutex);
+                } else {
+                    ESP_LOGW("WebServer", "Send mutex timeout - dropping response");
+                    ret = ESP_ERR_TIMEOUT;
+                }
+                
                 if (ret != ESP_OK) {
                     ESP_LOGE("WebServer", "Failed to send WS frame: %d", ret);
                 }
@@ -599,7 +615,8 @@ void WebServerComponent::broadcastTask() {
                 ESP_LOGW(TAG, "Broadcast: mutex timeout — skipping update for param %u", item.param_id);
             }
             
-            // ── Send OUTSIDE the mutex — network I/O can block ──
+            // ── Send OUTSIDE the subscriptions mutex — network I/O can block ──
+            // But take ws_send_mutex to prevent concurrent frame sends
             std::vector<int> dead_sockets;
             for (int socket_fd : target_sockets) {
                 httpd_ws_frame_t ws_pkt;
@@ -608,10 +625,15 @@ void WebServerComponent::broadcastTask() {
                 ws_pkt.len = strlen(msg_str);
                 ws_pkt.type = HTTPD_WS_TYPE_TEXT;
                 
-                esp_err_t ret = httpd_ws_send_frame_async(http_server, socket_fd, &ws_pkt);
-                if (ret != ESP_OK) {
-                    ESP_LOGW(TAG, "Failed to send param update to socket %d: %d", socket_fd, ret);
-                    dead_sockets.push_back(socket_fd);
+                if (xSemaphoreTake(ws_send_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+                    esp_err_t ret = httpd_ws_send_frame_async(http_server, socket_fd, &ws_pkt);
+                    xSemaphoreGive(ws_send_mutex);
+                    if (ret != ESP_OK) {
+                        ESP_LOGW(TAG, "Failed to send param update to socket %d: %d", socket_fd, ret);
+                        dead_sockets.push_back(socket_fd);
+                    }
+                } else {
+                    ESP_LOGW(TAG, "Broadcast: send mutex timeout for socket %d", socket_fd);
                 }
             }
             
