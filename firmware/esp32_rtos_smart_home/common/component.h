@@ -72,6 +72,9 @@ public:
     virtual size_t getRows() const = 0;
     virtual size_t getCols() const = 0;
     
+    // Bounds checking
+    virtual bool checkBounds(size_t row, size_t col) const = 0;
+    
     // Access control
     bool isReadOnly() const { return read_only; }
     
@@ -173,18 +176,26 @@ public:
         return c;
     }
     
+    // Bounds checking
+    bool checkBounds(size_t row, size_t col) const override {
+        if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) return false;
+        bool valid = (row < rows && col < cols);
+        xSemaphoreGive(mutex);
+        return valid;
+    }
+    
     // Value access
     T getValue(size_t row, size_t col) const { 
         if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
             ESP_LOGE(TAG, "Parameter '%s': Failed to take mutex for getValue", name.c_str());
-            assert(false && "Mutex take failed");
+            return T();  // Return default instead of crashing
         }
         
         if (row >= rows || col >= cols) {
             xSemaphoreGive(mutex);
             ESP_LOGE(TAG, "Parameter '%s': Out of bounds access [%zu,%zu] (size: %zux%zu)", 
                      name.c_str(), row, col, rows, cols);
-            assert(false && "Parameter getValue out of bounds");
+            return T();  // Return default instead of crashing
         }
         
         T value = data[row * cols + col];
@@ -195,14 +206,14 @@ public:
     void setValue(size_t row, size_t col, T val) {
         if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
             ESP_LOGE(TAG, "Parameter '%s': Failed to take mutex for setValue", name.c_str());
-            assert(false && "Mutex take failed");
+            return;  // Return instead of crashing
         }
         
         if (row >= rows || col >= cols) {
             xSemaphoreGive(mutex);
             ESP_LOGE(TAG, "Parameter '%s': Out of bounds write [%zu,%zu] (size: %zux%zu)", 
                      name.c_str(), row, col, rows, cols);
-            assert(false && "Parameter setValue out of bounds");
+            return;  // Return instead of crashing
         }
         
         // Check if value actually changed
