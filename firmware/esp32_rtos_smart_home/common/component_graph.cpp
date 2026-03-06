@@ -3,6 +3,8 @@
 #include "esp_heap_caps.h"
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "esp_mac.h"
+#include "esp_system.h"
 
 // Persistence save interval in milliseconds (30 seconds)
 static constexpr uint32_t PERSISTENCE_INTERVAL_MS = 30000;
@@ -323,9 +325,36 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
     const char* msg_type = type_item->valuestring;
     
     // ========================================================================
+    // get_device_info - Return unique device identifier and metadata
+    // ========================================================================
+    if (strcmp(msg_type, "get_device_info") == 0) {
+        cJSON* response = cJSON_CreateObject();
+        
+        // Get MAC address as unique device ID
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_WIFI_STA);
+        char mac_str[18];
+        snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        
+        // Create a shorter device_id from last 3 bytes of MAC (unique enough)
+        char device_id[16];
+        snprintf(device_id, sizeof(device_id), "esp32_%02x%02x%02x", 
+                 mac[3], mac[4], mac[5]);
+        
+        cJSON_AddStringToObject(response, "device_id", device_id);
+        cJSON_AddStringToObject(response, "mac", mac_str);
+        cJSON_AddStringToObject(response, "hostname", device_name.c_str());
+        cJSON_AddStringToObject(response, "chip", CONFIG_IDF_TARGET);
+        cJSON_AddNumberToObject(response, "free_heap", esp_get_free_heap_size());
+        
+        return response;
+    }
+    
+    // ========================================================================
     // get_components - List all components with IDs
     // ========================================================================
-    if (strcmp(msg_type, "get_components") == 0) {
+    else if (strcmp(msg_type, "get_components") == 0) {
         const std::vector<std::string>& names = getComponentNames();
         cJSON* response = cJSON_CreateObject();
         cJSON* array = cJSON_CreateArray();
@@ -432,6 +461,15 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
             return error;
         }
         
+        // Validate bounds before accessing
+        if (!param->checkBounds(row, col)) {
+            ESP_LOGW(TAG, "Rejecting get on '%s': index [%d,%d] out of bounds (size: %zux%zu)",
+                     param->getName().c_str(), row, col, param->getRows(), param->getCols());
+            cJSON* error = cJSON_CreateObject();
+            cJSON_AddStringToObject(error, "error", "index out of bounds");
+            return error;
+        }
+        
         cJSON* response = cJSON_CreateObject();
         cJSON_AddStringToObject(response, "name", param->getName().c_str());
         cJSON_AddNumberToObject(response, "id", param->getParameterId());
@@ -489,6 +527,16 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
             cJSON* error = cJSON_CreateObject();
             cJSON_AddBoolToObject(error, "success", false);
             cJSON_AddStringToObject(error, "error", "parameter is read-only");
+            return error;
+        }
+        
+        // Validate bounds before setting
+        if (!param->checkBounds(row, col)) {
+            ESP_LOGW(TAG, "Rejecting set on '%s': index [%d,%d] out of bounds (size: %zux%zu)",
+                     param->getName().c_str(), row, col, param->getRows(), param->getCols());
+            cJSON* error = cJSON_CreateObject();
+            cJSON_AddBoolToObject(error, "success", false);
+            cJSON_AddStringToObject(error, "error", "index out of bounds");
             return error;
         }
         

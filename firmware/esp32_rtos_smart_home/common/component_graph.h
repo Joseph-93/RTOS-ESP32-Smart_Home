@@ -45,9 +45,16 @@ private:
     TimerHandle_t persistenceTimer;
     static void persistenceTimerCallback(TimerHandle_t timer);
     
+    // Device name/hostname for identification
+    std::string device_name;
+    
 public:
     ComponentGraph();
     ~ComponentGraph();
+    
+    // Set/get device name (hostname) for identification
+    void setDeviceName(const std::string& name) { device_name = name; }
+    const std::string& getDeviceName() const { return device_name; }
     
     // Register a component with the graph
     void registerComponent(Component* component);

@@ -422,6 +422,20 @@ cJSON* WebServerComponent::handle_ws_message(cJSON* request, const char* msg_typ
             return error;
         }
         
+        // Validate bounds before accessing
+        if (!param->checkBounds(row, col)) {
+            cJSON* error = cJSON_CreateObject();
+            cJSON_AddStringToObject(error, "error", "index out of bounds");
+            cJSON_AddNumberToObject(error, "param_id", param_id);
+            cJSON_AddNumberToObject(error, "requested_row", row);
+            cJSON_AddNumberToObject(error, "requested_col", col);
+            cJSON_AddNumberToObject(error, "max_rows", param->getRows());
+            cJSON_AddNumberToObject(error, "max_cols", param->getCols());
+            ESP_LOGW(TAG, "Client requested out-of-bounds index [%d,%d] for param %u (size: %zux%zu)",
+                     row, col, param_id, param->getRows(), param->getCols());
+            return error;
+        }
+        
         // Add to subscriptions
         SubscriptionKey key{param_id, row, col};
         subscribe_param(socket_fd, key);
