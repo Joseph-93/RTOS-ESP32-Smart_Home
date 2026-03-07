@@ -9,6 +9,7 @@ Edit this file to configure ESP32 device discovery.
 USE_MDNS_DISCOVERY = True
 MDNS_DISCOVERY_TIMEOUT = 5.0  # seconds to wait for mDNS responses
 MDNS_SERVICE_TYPE = "_ws._tcp.local."
+MDNS_REDISCOVERY_INTERVAL = 60  # seconds between periodic mDNS scans (to find returning devices)
 
 # List of ESP32 device IP addresses (used when USE_MDNS_DISCOVERY is False,
 # or as additional devices to connect to alongside discovered ones)
@@ -22,6 +23,7 @@ WS_SERVER_PORT = 80 # Port for the hub's WebSocket server (use 80 if running as 
 # WebSocket Client settings (for outgoing connections to ESP32s)
 WS_PING_INTERVAL = 20  # seconds
 WS_PING_TIMEOUT = 20   # seconds
+WS_CONNECT_TIMEOUT = 30  # seconds to wait for WebSocket handshake (ESP32s can be slow)
 RECONNECT_DELAY = 5    # seconds
 
 # Rate limiting (to avoid overwhelming ESP32)
