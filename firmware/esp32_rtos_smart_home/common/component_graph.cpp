@@ -658,7 +658,6 @@ void ComponentGraph::saveDirtyParameters() {
         bool handleOpened = false;
         
         const auto& params = component->getAllParams();
-        bool hasDirtyParams = false;
         for (const auto& [paramName, param] : params) {
             // Only save dirty, non-read-only parameters
             if (!param->isDirty() || param->isReadOnly()) {
@@ -684,7 +683,6 @@ void ComponentGraph::saveDirtyParameters() {
                 totalSaved++;
                 ESP_LOGD(TAG, "[%s] Saved param '%s' to NVS", name.c_str(), paramName.c_str());
             }
-            hasDirtyParams = true;
         }
         
         // Check if component has custom data to save

@@ -5,7 +5,8 @@
 #include "esp_heap_caps.h"
 #include "freertos/task.h"
 
-// Memory diagnostics helper
+#ifdef DEBUG
+// Memory diagnostics helper (debug builds only)
 static void print_memory_diagnostics(const char* tag) {
     // Heap summary
     ESP_LOGI(tag, "=== MEMORY DIAGNOSTICS ===");
@@ -18,6 +19,7 @@ static void print_memory_diagnostics(const char* tag) {
     ESP_LOGI(tag, "Free IRAM: %lu bytes", heap_caps_get_free_size(MALLOC_CAP_32BIT));
     ESP_LOGI(tag, "=========================");
 }
+#endif
 
 WebServerComponent::WebServerComponent() : Component("WebServer") {
 }

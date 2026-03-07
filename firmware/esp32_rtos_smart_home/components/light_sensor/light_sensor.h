@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
+#include "esp_adc/adc_oneshot.h"
 
 #ifdef __cplusplus
 
@@ -30,6 +31,7 @@ private:
 
     TaskHandle_t light_sensor_task_handle = nullptr;
     TimerHandle_t light_sensor_timer_handle = nullptr;
+    adc_oneshot_unit_handle_t adc_handle = nullptr;
     Component* gui_component = nullptr;
 };
 

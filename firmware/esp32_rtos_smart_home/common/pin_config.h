@@ -17,7 +17,6 @@
 #pragma once
 
 #include "driver/gpio.h"
-#include "driver/adc.h"
 
 // ============================================================================
 // RGB LED Component
@@ -41,8 +40,10 @@
 // Light Sensor Component (Photoresistor/LDR)
 // ============================================================================
 // ADC input for analog light level reading
-// Note: GPIO36 = ADC1_CHANNEL_0 (input-only pin, no pullup)
-#define PIN_LIGHT_SENSOR_ADC    ADC1_CHANNEL_0  // GPIO36
+// Note: GPIO36 = ADC1_CHANNEL_0 = enum value 0 (input-only pin, no pullup)
+// Raw integer used here to avoid pulling deprecated driver/adc.h into every component.
+// light_sensor.cpp includes driver/adc.h directly for the typed API.
+#define PIN_LIGHT_SENSOR_ADC    0  // ADC1_CHANNEL_0 = GPIO36
 
 // ============================================================================
 // Touch Sensor Component (TTP223B Capacitive Touch)

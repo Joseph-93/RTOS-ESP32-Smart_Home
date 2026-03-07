@@ -7,28 +7,14 @@ message(STATUS "ENABLE_HEARTBEAT = ${ENABLE_HEARTBEAT}")
 message(STATUS "ENABLE_RGB_LED = ${ENABLE_RGB_LED}")
 message(STATUS "ENABLE_GUI = ${ENABLE_GUI}")
 
-# For now, include ALL optional components unconditionally in REQUIRES
-# The #ifdef guards in main.cpp will exclude unused code from compilation
-# This avoids CMake cache issues with conditional component lists
-list(APPEND REQUIRED_COMPONENTS heartbeat rgb_led touch_sensor)
-
-# Only add these if they exist and are explicitly enabled
-if(ENABLE_GUI)
-    list(APPEND REQUIRED_COMPONENTS gui)
-endif()
-if(ENABLE_LIGHT_SENSOR)
-    list(APPEND REQUIRED_COMPONENTS light_sensor)
-endif()
-if(ENABLE_MOTION_SENSOR)
-    list(APPEND REQUIRED_COMPONENTS motion_sensor)
-endif()
-if(ENABLE_DOOR_SENSOR)
-    list(APPEND REQUIRED_COMPONENTS door_sensor)
-endif()
+# All optional components are always included in REQUIRES.
+# The #ifdef guards in main.cpp exclude unused code from compilation.
+# This avoids CMake cache issues with conditional component lists on fresh builds.
+# To enable/disable components, edit components_config.cmake.
+list(APPEND REQUIRED_COMPONENTS heartbeat rgb_led touch_sensor gui light_sensor motion_sensor door_sensor)
 
 message(STATUS "Enabled components: ${REQUIRED_COMPONENTS}")
 
 idf_component_register(SRCS "main.cpp"
                     INCLUDE_DIRS "."
                     REQUIRES ${REQUIRED_COMPONENTS})
-
