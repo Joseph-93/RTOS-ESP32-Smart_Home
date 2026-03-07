@@ -2,6 +2,7 @@
 #include "component_graph.h"
 #include "lcd/lcd.h"
 #include "touch/touch.h"
+#include "pin_config.h"
 #include "wifi_init.h"
 #include "lvgl.h"
 #include "esp_heap_caps.h"
@@ -13,8 +14,8 @@
 #include <math.h>
 #include <algorithm>
 
-// XPT2046 touch interrupt configuration
-#define TOUCH_IRQ_GPIO  GPIO_NUM_22
+// XPT2046 touch interrupt configuration - Pin configured in common/pin_config.h
+#define TOUCH_IRQ_GPIO  PIN_TOUCH_IRQ
 static volatile bool touch_irq_triggered = false;
 
 // Display dimensions

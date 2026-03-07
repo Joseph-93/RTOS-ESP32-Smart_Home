@@ -1,12 +1,14 @@
 #include "motion_sensor.h"
 #include "component_graph.h"
+#include "pin_config.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "rom/ets_sys.h"
 #include "driver/gpio.h"
 #include <cmath>
 
-#define MOTION_SENSOR_PIN 13 // GPIO13
+// Pin configured in common/pin_config.h
+#define MOTION_SENSOR_PIN PIN_MOTION_SENSOR
 
 MotionSensorComponent::MotionSensorComponent() 
     : Component("MotionSensor") {

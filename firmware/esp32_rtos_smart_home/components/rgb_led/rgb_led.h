@@ -10,6 +10,8 @@
 #include <map>
 #include <atomic>
 
+#include "pin_config.h"
+
 /**
  * RGB LED Component - Multi-Preset Animation Playback Engine
  * 
@@ -38,9 +40,9 @@
  * Frame size = (led_count * 3) + 2 bytes
  */
 
-// Hardware configuration
-#define RGB_LED_DEFAULT_PIN     GPIO_NUM_13  // Data pin for LED strip
-#define RGB_LED_COUNT           30           // Number of LEDs on the strip
+// Hardware configuration - Pin configured in common/pin_config.h
+#define RGB_LED_DEFAULT_PIN     PIN_RGB_LED_DATA  // Data pin for LED strip
+#define RGB_LED_COUNT           30                 // Number of LEDs on the strip
 
 // Animation memory limits
 // This is a dedicated lamp — animation playback is the primary workload.

@@ -1,13 +1,14 @@
 #include "touch_sensor.h"
+#include "pin_config.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "driver/gpio.h"
 
 // Default GPIO pins for touch sensors (can be changed at runtime)
-// Set to -1 to disable a sensor slot
+// Pins configured in common/pin_config.h - set to -1 to disable a sensor slot
 static const int32_t DEFAULT_TOUCH_PINS[TOUCH_SENSOR_COUNT] = {
-    25,  // Touch sensor 0 - GPIO25
-    26   // Touch sensor 1 - GPIO26
+    PIN_TOUCH_SENSOR_0,  // Touch sensor 0
+    PIN_TOUCH_SENSOR_1   // Touch sensor 1
 };
 
 TouchSensorComponent::TouchSensorComponent() 

@@ -1,21 +1,22 @@
 #pragma once
 
 #include "esp_lcd_panel_ops.h"
+#include "pin_config.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// LCD Display pins
-#define LCD_PIN_DC   2   // Data/Command
-#define LCD_PIN_RST  4   // Reset
-// Note: Backlight is on GPIO 33 (PWM), configured in lcd.cpp
+// LCD Display pins - configured in common/pin_config.h
+#define LCD_PIN_DC   PIN_LCD_DC    // Data/Command
+#define LCD_PIN_RST  PIN_LCD_RST   // Reset
+// Note: Backlight configured in pin_config.h as PIN_LCD_BACKLIGHT
 
-// VSPI pins
-#define PIN_NUM_MISO 19
-#define PIN_NUM_MOSI 23
-#define PIN_NUM_CLK  18
-#define PIN_NUM_CS   5
+// VSPI pins - configured in common/pin_config.h
+#define PIN_NUM_MISO PIN_LCD_MISO
+#define PIN_NUM_MOSI PIN_LCD_MOSI
+#define PIN_NUM_CLK  PIN_LCD_CLK
+#define PIN_NUM_CS   PIN_LCD_CS
 
 // Display dimensions
 #define LCD_H_RES    320

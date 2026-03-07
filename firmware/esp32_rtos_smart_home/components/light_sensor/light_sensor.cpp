@@ -1,10 +1,12 @@
 #include "light_sensor.h"
 #include "component_graph.h"
+#include "pin_config.h"
 #include "esp_log.h"
 #include "driver/adc.h"
 #include <cmath>
 
-#define LIGHT_SENSOR_PIN ADC1_CHANNEL_0 // GPIO36
+// Pin configured in common/pin_config.h
+#define LIGHT_SENSOR_PIN PIN_LIGHT_SENSOR_ADC
 #define LIGHT_SENSOR_PERIOD_MS 500      // Sampling period in milliseconds
 
 LightSensorComponent::LightSensorComponent() 

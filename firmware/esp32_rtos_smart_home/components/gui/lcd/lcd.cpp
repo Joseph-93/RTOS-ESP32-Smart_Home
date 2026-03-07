@@ -11,8 +11,8 @@ static const char *TAG = "LCD";
 static uint8_t current_brightness = 100; // Default 100%
 static bool lcd_initialized = false;     // Track if LCD hardware is available
 
-// LCD backlight PWM configuration
-#define LCD_BACKLIGHT_GPIO  GPIO_NUM_33
+// LCD backlight PWM configuration - Pin configured in common/pin_config.h
+#define LCD_BACKLIGHT_GPIO  PIN_LCD_BACKLIGHT
 #define LCD_PWM_FREQ_HZ     10000
 #define LCD_PWM_RESOLUTION  LEDC_TIMER_8_BIT
 #define LCD_PWM_SPEED_MODE  LEDC_LOW_SPEED_MODE

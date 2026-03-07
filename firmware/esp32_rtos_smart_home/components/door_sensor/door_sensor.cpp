@@ -1,9 +1,11 @@
 #include "door_sensor.h"
+#include "pin_config.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "driver/gpio.h"
 
-#define DOOR_SENSOR_PIN 32 // GPIO32
+// Pin configured in common/pin_config.h
+#define DOOR_SENSOR_PIN PIN_DOOR_SENSOR
 
 DoorSensorComponent::DoorSensorComponent() 
     : Component("DoorSensor")
