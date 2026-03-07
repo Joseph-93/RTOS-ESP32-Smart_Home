@@ -41,6 +41,13 @@ bool wifi_is_connected(void);
  */
 bool wifi_get_ip_string(char* ip_str, size_t max_len);
 
+/**
+ * @brief Get the mDNS hostname for this device
+ * 
+ * @return The hostname string (without .local suffix)
+ */
+const char* wifi_get_hostname(void);
+
 #ifdef __cplusplus
 }
 #endif

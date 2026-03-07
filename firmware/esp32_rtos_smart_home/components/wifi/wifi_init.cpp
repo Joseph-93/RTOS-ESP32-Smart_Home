@@ -232,3 +232,7 @@ bool wifi_get_ip_string(char* ip_str, size_t max_len) {
     ip_str[max_len - 1] = '\0';
     return false;
 }
+
+const char* wifi_get_hostname(void) {
+    return s_mdns_hostname;
+}

@@ -102,6 +102,9 @@ extern "C" void app_main(void)
     // Create ComponentGraph
     ComponentGraph* component_graph = new ComponentGraph();
     
+    // Set device name from mDNS hostname for identification
+    component_graph->setDeviceName(wifi_get_hostname());
+    
     // Register all components with graph (conditionally compiled)
     
 #ifdef ENABLE_GUI
