@@ -3,12 +3,18 @@
 #include "component.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <cstdint>
 
 #ifdef __cplusplus
 
 // Number of touch sensors to support (compile-time constant)
 // The TTP223B is a simple digital touch sensor - one GPIO per sensor
 #define TOUCH_SENSOR_COUNT 2
+
+// Health check configuration
+#define TOUCH_HEALTH_CHECK_INTERVAL_MS 30000   // Check health every 30 seconds
+#define TOUCH_STUCK_THRESHOLD_MS       60000   // Consider sensor stuck if no activity for 60 seconds
+#define TOUCH_MAX_REINIT_ATTEMPTS      3       // Max consecutive reinit attempts before backing off
 
 /**
  * TouchSensorComponent - TTP223B Capacitive Touch Sensor Array
@@ -43,6 +49,12 @@ private:
     // Track configured pins for ISR management
     int32_t configured_pins[TOUCH_SENSOR_COUNT] = {-1};
     
+    // Health monitoring state
+    int64_t last_activity_time[TOUCH_SENSOR_COUNT] = {0};     // Last ISR/state change timestamp (us)
+    int64_t last_health_check_time = 0;                        // Last health check timestamp (us)
+    uint8_t reinit_attempts[TOUCH_SENSOR_COUNT] = {0};         // Consecutive reinit attempts per sensor
+    bool sensor_stuck_state[TOUCH_SENSOR_COUNT] = {false};     // Track if sensor was in stuck state
+    
     // Task functions
     static void touchSensorTaskWrapper(void* pvParameters);
     void touchSensorTask();
@@ -55,6 +67,11 @@ private:
     
     // Unconfigure a sensor's GPIO (remove ISR, reset config)
     void unconfigureGpio(size_t index);
+    
+    // Health monitoring functions
+    void runHealthCheck();
+    void reinitializeSensor(size_t index);
+    void recordSensorActivity(size_t index);
 };
 
 #endif
