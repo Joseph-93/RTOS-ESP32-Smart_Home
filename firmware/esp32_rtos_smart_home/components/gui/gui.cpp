@@ -38,9 +38,10 @@ static GUIComponent* g_gui_component = NULL;
 typedef struct {
     lv_obj_t *obj;
     uint32_t created_time;
+    uint8_t *buf;  // canvas pixel buffer - must be freed with lv_mem_free on cleanup
 } feedback_tracker_t;
 
-static feedback_tracker_t feedback_list[MAX_FEEDBACK_OBJS] = {0};
+static feedback_tracker_t feedback_list[MAX_FEEDBACK_OBJS] = {};
 static int feedback_count = 0;
 
 // Gaussian touch feedback lookup table
@@ -125,7 +126,48 @@ void GUIComponent::onInitialize() {
 
     // Add string parameter for button names (6 rows, 1 column) and store pointer
     buttonNames = addStringParam("button_names", NUM_BUTTONS, 1, "Button");
+
+    // Background color [R, G, B] — default black (0, 0, 0)
+    bgColor = addIntParam("bg_color", 1, 3, 0, 255, 0);
+    if (bgColor) {
+        bgColor->setOnChange([this](size_t, size_t, int32_t) {
+            color_update_pending = true;
+        });
+    }
+
+    // Button colors [R, G, B] per button — default colors matching the hardcoded originals
+    // Layout: row=button index (0-5), col=channel (0=R, 1=G, 2=B)
+    buttonColors = addIntParam("button_colors", NUM_BUTTONS, 3, 0, 255, 0);
+    if (buttonColors) {
+        buttonColors->setOnChange([this](size_t, size_t, int32_t) {
+            color_update_pending = true;
+        });
+    }
+    // Set default colors: Blue, Orange, Teal, Purple, Red, Green
+    if (buttonColors) {
+        // Button 0: Blue (0, 100, 200)
+        buttonColors->setValue(0, 0, 0);   buttonColors->setValue(0, 1, 100);  buttonColors->setValue(0, 2, 200);
+        // Button 1: Orange (200, 100, 0)
+        buttonColors->setValue(1, 0, 200); buttonColors->setValue(1, 1, 100);  buttonColors->setValue(1, 2, 0);
+        // Button 2: Teal (0, 150, 100)
+        buttonColors->setValue(2, 0, 0);   buttonColors->setValue(2, 1, 150);  buttonColors->setValue(2, 2, 100);
+        // Button 3: Purple (150, 0, 150)
+        buttonColors->setValue(3, 0, 150); buttonColors->setValue(3, 1, 0);    buttonColors->setValue(3, 2, 150);
+        // Button 4: Red (200, 0, 0)
+        buttonColors->setValue(4, 0, 200); buttonColors->setValue(4, 1, 0);    buttonColors->setValue(4, 2, 0);
+        // Button 5: Green (0, 200, 0)
+        buttonColors->setValue(5, 0, 0);   buttonColors->setValue(5, 1, 200);  buttonColors->setValue(5, 2, 0);
+    }
     
+    // Button text colors [R, G, B] per button — default white (255, 255, 255)
+    buttonTextColors = addIntParam("button_text_colors", NUM_BUTTONS, 3, 0, 255, 255);
+    if (buttonTextColors) {
+        buttonTextColors->setOnChange([this](size_t, size_t, int32_t) {
+            color_update_pending = true;
+        });
+        // Defaults are 255 from addIntParam, no need to set individually
+    }
+
     // Initialize each button name
     if (buttonNames) {
         for (int i = 0; i < NUM_BUTTONS; i++) {
@@ -187,9 +229,10 @@ void GUIComponent::onInitialize() {
         pdTRUE,              // Auto-reload
         this,                // Pass 'this' as timer ID so we can access it in callback
         [](TimerHandle_t timer) {
-            // Get the GUIComponent pointer from timer ID
             GUIComponent* gui = static_cast<GUIComponent*>(pvTimerGetTimerID(timer));
-            xTaskNotifyGive(gui->gui_status_task_handle);
+            if (gui->gui_status_task_handle) {
+                xTaskNotifyGive(gui->gui_status_task_handle);
+            }
         }
     );
 
@@ -253,6 +296,16 @@ void GUIComponent::onInitialize() {
     size_t buffer_size = LCD_H_RES * 50; // 50 lines buffer
     lv_color_t *buf1 = (lv_color_t *)heap_caps_malloc(buffer_size * sizeof(lv_color_t), MALLOC_CAP_DMA);
     lv_color_t *buf2 = (lv_color_t *)heap_caps_malloc(buffer_size * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    if (!buf1 || !buf2) {
+        ESP_LOGE(TAG, "Failed to allocate LVGL DMA buffers (need %u bytes DMA-capable RAM)",
+                 (unsigned)(buffer_size * sizeof(lv_color_t) * 2));
+        free(buf1);
+        free(buf2);
+        hardware_available = false;
+        initialized = true;
+        g_gui_component = this;
+        return;
+    }
     lv_disp_draw_buf_init(&lvgl_disp_buf, buf1, buf2, buffer_size);
     
     // Initialize gaussian lookup table
@@ -277,11 +330,12 @@ void GUIComponent::onInitialize() {
     lvgl_indev_drv.user_data = this; // Store GUIComponent instance for callback
     lv_indev_drv_register(&lvgl_indev_drv);
     
+    // Store the component instance BEFORE creating the LVGL task,
+    // so the task doesn't see a null g_gui_component on startup.
+    g_gui_component = this;
+
     // Create LVGL timer task with larger stack
     xTaskCreate(GUIComponent::lvgl_timer_task, "lvgl_timer", 6144, NULL, 5, NULL);
-
-    // Store the component instance for the LVGL task
-    g_gui_component = this;
 
     initialized = true;
 #ifdef DEBUG
@@ -301,15 +355,18 @@ void GUIComponent::notificationTask() {
     ESP_LOGI(TAG, "Notification task started");
 #endif
     
-    if (!component_graph) {
-        ESP_LOGE(TAG, "ComponentGraph not available - notification task exiting");
-        return;
+    // Wait for component_graph and queue to be available (handles startup race)
+    while (!component_graph) {
+        ESP_LOGW(TAG, "Waiting for ComponentGraph...");
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
-    
-    QueueHandle_t queue = component_graph->getGuiNotificationQueue();
-    if (!queue) {
-        ESP_LOGE(TAG, "GUI notification queue not available - task exiting");
-        return;
+    QueueHandle_t queue = nullptr;
+    while (!queue) {
+        queue = component_graph->getGuiNotificationQueue();
+        if (!queue) {
+            ESP_LOGW(TAG, "Waiting for GUI notification queue...");
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
     }
     
     while (true) {
@@ -548,12 +605,6 @@ void GUIComponent::guiStatusTask() {
             currentLcdBrightness->setValue(0, 0, current_brightness);
         }
 
-        // Clean up expired notification
-        if (notification_overlay && xTaskGetTickCount() >= notification_expire_tick) {
-            lv_obj_del(notification_overlay);
-            notification_overlay = nullptr;
-            current_notification_priority = -1;
-        }
     }
 }
 
@@ -580,7 +631,12 @@ void GUIComponent::createSimpleButtonGrid() {
                  esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
         return;
     }
-    lv_obj_set_style_bg_color(main_screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(main_screen,
+        lv_color_make(
+            bgColor ? bgColor->getValue(0, 0) : 0,
+            bgColor ? bgColor->getValue(0, 1) : 0,
+            bgColor ? bgColor->getValue(0, 2) : 0
+        ), 0);
     
     // Title
     lv_obj_t* title = lv_label_create(main_screen);
@@ -608,16 +664,18 @@ void GUIComponent::createSimpleButtonGrid() {
         int y = start_y + row * (btn_height + v_spacing);
         lv_obj_set_pos(btn, x, y);
         
-        // Set button color (different colors for visual distinction)
-        lv_color_t colors[NUM_BUTTONS] = {
-            lv_color_make(0, 100, 200),   // Blue
-            lv_color_make(200, 100, 0),   // Orange
-            lv_color_make(0, 150, 100),   // Teal
-            lv_color_make(150, 0, 150),   // Purple
-            lv_color_make(200, 0, 0),     // Red
-            lv_color_make(0, 200, 0)      // Green
-        };
-        lv_obj_set_style_bg_color(btn, colors[i], 0);
+        // Set button color from parameter (falls back to a neutral grey if param unavailable)
+        lv_color_t btn_color;
+        if (buttonColors) {
+            btn_color = lv_color_make(
+                buttonColors->getValue(i, 0),
+                buttonColors->getValue(i, 1),
+                buttonColors->getValue(i, 2)
+            );
+        } else {
+            btn_color = lv_color_make(80, 80, 80);
+        }
+        lv_obj_set_style_bg_color(btn, btn_color, 0);
         
         // Button label - get text from parameter using member pointer (row i, column 0)
         lv_obj_t* label = lv_label_create(btn);
@@ -626,6 +684,16 @@ void GUIComponent::createSimpleButtonGrid() {
         } else {
             lv_label_set_text(label, ("Button " + std::to_string(i + 1)).c_str());
         }
+
+        // Apply text color from parameter (default white)
+        if (buttonTextColors) {
+            lv_obj_set_style_text_color(label,
+                lv_color_make(
+                    buttonTextColors->getValue(i, 0),
+                    buttonTextColors->getValue(i, 1),
+                    buttonTextColors->getValue(i, 2)
+                ), 0);
+        }
         lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);          // Enable text wrapping
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0); // Center-align text
         lv_obj_set_width(label, btn_width - 10);                     // Wrap within button (with 5px padding each side)
@@ -633,6 +701,7 @@ void GUIComponent::createSimpleButtonGrid() {
         
         // Store label reference for dynamic updates
         button_labels[i] = label;
+        button_objs[i] = btn;
         
         // Add click event with button index as user data
         lv_obj_add_event_cb(btn, simple_button_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i);
@@ -659,6 +728,15 @@ void GUIComponent::createSimpleButtonGrid() {
 #endif
 }
 
+// Self-deleting task that resets a button parameter to false after a short delay.
+// Used instead of vTaskDelay inside the LVGL event callback to avoid stalling rendering.
+static void button_reset_task(void* arg) {
+    BoolParameter* btn = static_cast<BoolParameter*>(arg);
+    vTaskDelay(pdMS_TO_TICKS(150));
+    btn->setValue(0, 0, false);
+    vTaskDelete(NULL);
+}
+
 void GUIComponent::simple_button_event_cb(lv_event_t* e) {
 #ifdef DEBUG
     ESP_LOGI(TAG, "[ENTER] simple_button_event_cb");
@@ -679,13 +757,9 @@ void GUIComponent::simple_button_event_cb(lv_event_t* e) {
     if (g_gui_component && g_gui_component->buttonPressed[button_index]) {
         BoolParameter* btn = g_gui_component->buttonPressed[button_index];
         btn->setValue(0, 0, true);  // Triggers onChange which broadcasts to subscribers
-        
-        // Hold true briefly so it's visible in UI before resetting
-        vTaskDelay(pdMS_TO_TICKS(150));
-        
-        // Reset back to false (pulse behavior)
-        // Subscribers will see the true→false transition
-        btn->setValue(0, 0, false);
+
+        // Reset asynchronously so we don't stall the LVGL task for 150ms
+        xTaskCreate(button_reset_task, "btn_reset", 1024, btn, 1, NULL);
     }
     
 #ifdef DEBUG
@@ -711,7 +785,13 @@ void GUIComponent::create_touch_feedback(int16_t x, int16_t y) {
     lv_obj_t *canvas = lv_canvas_create(lv_scr_act());
     
     // Allocate buffer for canvas (TRUE_COLOR_ALPHA = RGB565 + 8bit alpha = 3 bytes per pixel)
-    static uint8_t cbuf[GAUSSIAN_SIZE * GAUSSIAN_SIZE * 3];
+    // Each feedback canvas gets its own buffer so concurrent touches don't corrupt each other.
+    uint8_t *cbuf = (uint8_t *)lv_mem_alloc(GAUSSIAN_SIZE * GAUSSIAN_SIZE * 3);
+    if (!cbuf) {
+        ESP_LOGE(TAG, "Failed to allocate touch feedback canvas buffer");
+        lv_obj_del(canvas);
+        return;
+    }
     lv_canvas_set_buffer(canvas, cbuf, GAUSSIAN_SIZE, GAUSSIAN_SIZE, LV_IMG_CF_TRUE_COLOR_ALPHA);
     
     // Fill canvas with gaussian pattern using direct buffer access
@@ -733,13 +813,18 @@ void GUIComponent::create_touch_feedback(int16_t x, int16_t y) {
     lv_obj_clear_flag(canvas, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_clear_flag(canvas, LV_OBJ_FLAG_SCROLLABLE);
     
-    // Add to tracking list
+    // Add to tracking list, or discard immediately if full (never leak)
     if (feedback_count < MAX_FEEDBACK_OBJS) {
         feedback_list[feedback_count].obj = canvas;
         feedback_list[feedback_count].created_time = lv_tick_get();
+        feedback_list[feedback_count].buf = cbuf;
         feedback_count++;
+    } else {
+        lv_mem_free(cbuf);
+        lv_obj_del(canvas);
+        return;
     }
-    
+
     // Animate overall opacity fade
     lv_anim_t anim;
     lv_anim_init(&anim);
@@ -918,6 +1003,54 @@ void GUIComponent::lvgl_timer_task(void *arg) {
             }
         }
 
+        // Check if colors need updating (thread-safe from LVGL task)
+        if (g_gui_component->color_update_pending) {
+            g_gui_component->color_update_pending = false;
+            // Update background color
+            if (g_gui_component->main_screen && g_gui_component->bgColor) {
+                lv_obj_set_style_bg_color(g_gui_component->main_screen,
+                    lv_color_make(
+                        g_gui_component->bgColor->getValue(0, 0),
+                        g_gui_component->bgColor->getValue(0, 1),
+                        g_gui_component->bgColor->getValue(0, 2)
+                    ), 0);
+            }
+            // Update button fill colors
+            if (g_gui_component->buttonColors) {
+                for (int i = 0; i < NUM_BUTTONS; i++) {
+                    if (g_gui_component->button_objs[i]) {
+                        lv_obj_set_style_bg_color(g_gui_component->button_objs[i],
+                            lv_color_make(
+                                g_gui_component->buttonColors->getValue(i, 0),
+                                g_gui_component->buttonColors->getValue(i, 1),
+                                g_gui_component->buttonColors->getValue(i, 2)
+                            ), 0);
+                    }
+                }
+            }
+            // Update button text colors
+            if (g_gui_component->buttonTextColors) {
+                for (int i = 0; i < NUM_BUTTONS; i++) {
+                    if (g_gui_component->button_labels[i]) {
+                        lv_obj_set_style_text_color(g_gui_component->button_labels[i],
+                            lv_color_make(
+                                g_gui_component->buttonTextColors->getValue(i, 0),
+                                g_gui_component->buttonTextColors->getValue(i, 1),
+                                g_gui_component->buttonTextColors->getValue(i, 2)
+                            ), 0);
+                    }
+                }
+            }
+        }
+
+        // Clean up expired notification overlay (must be done in LVGL task - not thread-safe)
+        if (g_gui_component->notification_overlay &&
+            xTaskGetTickCount() >= g_gui_component->notification_expire_tick) {
+            lv_obj_del(g_gui_component->notification_overlay);
+            g_gui_component->notification_overlay = nullptr;
+            g_gui_component->current_notification_priority = -1;
+        }
+
         // Increment LVGL tick by 10ms
         lv_tick_inc(10);
 
@@ -929,6 +1062,7 @@ void GUIComponent::lvgl_timer_task(void *arg) {
         for (int i = 0; i < feedback_count; i++) {
             uint32_t age = now - feedback_list[i].created_time;
             if (feedback_list[i].obj && age > 225) {  // 225ms (after 125ms animation)
+                lv_mem_free(feedback_list[i].buf);
                 lv_obj_del(feedback_list[i].obj);
                 // Shift remaining items down
                 for (int j = i; j < feedback_count - 1; j++) {

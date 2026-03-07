@@ -56,7 +56,7 @@ esp_lcd_panel_handle_t lcd_init(void) {
     
     esp_lcd_panel_dev_config_t panel_config = {};
     panel_config.reset_gpio_num = LCD_PIN_RST;
-    panel_config.rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB;
+    panel_config.rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR;
     panel_config.bits_per_pixel = 16;
 
     esp_lcd_panel_handle_t panel_handle = NULL;
@@ -81,32 +81,30 @@ esp_lcd_panel_handle_t lcd_init(void) {
     // Set to vanilla basics - no transforms
     esp_lcd_panel_swap_xy(panel_handle, true);
     esp_lcd_panel_mirror(panel_handle, false, false);
-    esp_lcd_panel_invert_color(panel_handle, true);  // Most ILI9341 panels need inversion enabled
+    esp_lcd_panel_invert_color(panel_handle, false);  // This panel does NOT need inversion (LV_COLOR_16_SWAP=y handles byte order)
     esp_lcd_panel_set_gap(panel_handle, 0, 0);
     esp_lcd_panel_disp_on_off(panel_handle, true);
     
     // Initialize PWM for backlight control on GPIO 33
-    ledc_timer_config_t ledc_timer = {
-        .speed_mode       = LCD_PWM_SPEED_MODE,
-        .duty_resolution  = LCD_PWM_RESOLUTION,
-        .timer_num        = LCD_PWM_TIMER,
-        .freq_hz          = LCD_PWM_FREQ_HZ,
-        .clk_cfg          = LEDC_AUTO_CLK
-    };
+    ledc_timer_config_t ledc_timer = {};
+    ledc_timer.speed_mode      = LCD_PWM_SPEED_MODE;
+    ledc_timer.duty_resolution = LCD_PWM_RESOLUTION;
+    ledc_timer.timer_num       = LCD_PWM_TIMER;
+    ledc_timer.freq_hz         = LCD_PWM_FREQ_HZ;
+    ledc_timer.clk_cfg         = LEDC_AUTO_CLK;
     ret = ledc_timer_config(&ledc_timer);
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "LEDC timer config failed: %s - backlight control disabled", esp_err_to_name(ret));
     }
     
-    ledc_channel_config_t ledc_channel = {
-        .gpio_num       = LCD_BACKLIGHT_GPIO,
-        .speed_mode     = LCD_PWM_SPEED_MODE,
-        .channel        = LCD_PWM_CHANNEL,
-        .intr_type      = LEDC_INTR_DISABLE,
-        .timer_sel      = LCD_PWM_TIMER,
-        .duty           = 0,
-        .hpoint         = 0
-    };
+    ledc_channel_config_t ledc_channel = {};
+    ledc_channel.gpio_num   = LCD_BACKLIGHT_GPIO;
+    ledc_channel.speed_mode = LCD_PWM_SPEED_MODE;
+    ledc_channel.channel    = LCD_PWM_CHANNEL;
+    ledc_channel.intr_type  = LEDC_INTR_DISABLE;
+    ledc_channel.timer_sel  = LCD_PWM_TIMER;
+    ledc_channel.duty       = 0;
+    ledc_channel.hpoint     = 0;
     ret = ledc_channel_config(&ledc_channel);
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "LEDC channel config failed: %s - backlight control disabled", esp_err_to_name(ret));

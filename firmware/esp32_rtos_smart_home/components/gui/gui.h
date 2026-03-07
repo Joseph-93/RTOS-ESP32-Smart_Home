@@ -46,6 +46,8 @@ public:
     
     // Pending button label update (set by parameter callback, consumed by LVGL task)
     volatile bool button_label_update_pending = false;
+    // Pending color update (set by parameter callback, consumed by LVGL task)
+    volatile bool color_update_pending = false;
     
     // Hardware availability flags
     bool hardware_available = false;  // True if LCD initialized successfully
@@ -65,6 +67,12 @@ private:
     BoolParameter* overrideAutoBrightness = nullptr;
     BoolParameter* overrideScreenTimeout = nullptr;
     BoolParameter* overrideMotionInactivityScreenTimeout = nullptr;
+    // bg_color: 3 values [R, G, B], range 0-255, default black
+    IntParameter* bgColor = nullptr;
+    // button_colors: NUM_BUTTONS rows x 3 cols [R, G, B per button]
+    IntParameter* buttonColors = nullptr;
+    // button_text_colors: NUM_BUTTONS rows x 3 cols [R, G, B per button], default white
+    IntParameter* buttonTextColors = nullptr;
 
     TaskHandle_t gui_status_task_handle = nullptr;
     TimerHandle_t gui_status_timer_handle = nullptr;
@@ -78,8 +86,9 @@ private:
     // Simple button grid screen
     lv_obj_t* main_screen = nullptr;
     
-    // Button label objects for dynamic updating (6 buttons)
+    // Button label and button objects for dynamic updating (6 buttons)
     lv_obj_t* button_labels[NUM_BUTTONS] = {nullptr};
+    lv_obj_t* button_objs[NUM_BUTTONS] = {nullptr};
     
     // Button event handler
     static void simple_button_event_cb(lv_event_t* e);
