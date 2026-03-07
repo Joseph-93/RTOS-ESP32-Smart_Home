@@ -58,13 +58,15 @@
     },
     "Watcher": {
       "variables": {
-        "0,0": "{\"ActionsOn\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0},\"enabled\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0},\"OnButton\":{\"device\":\"10.0.0.125\",\"component\":\"TouchSensor\",\"param\":\"touched\",\"row\":0,\"col\":0},\"OffButton\":{\"device\":\"10.0.0.125\",\"component\":\"TouchSensor\",\"param\":\"touched\",\"row\":0,\"col\":1}}"
+        "0,0": "{\"ActionsOn\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0},\"enabled\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0},\"OnButton\":{\"device\":\"10.0.0.125\",\"component\":\"TouchSensor\",\"param\":\"touched\",\"row\":0,\"col\":0},\"OffButton\":{\"device\":\"10.0.0.125\",\"component\":\"TouchSensor\",\"param\":\"touched\",\"row\":0,\"col\":1},\"dev219_current_light_level\":{\"device\":\"10.0.0.219\",\"component\":\"LightSensor\",\"param\":\"current_light_level\",\"row\":0,\"col\":0},\"dev219_button_0_pressed\":{\"device\":\"10.0.0.219\",\"component\":\"GUI\",\"param\":\"button_0_pressed\",\"row\":0,\"col\":0}}"
       },
       "expressions": {
+        "0,0": "dev219_button_0_pressed == true",
         "3,0": "ActionsOn == true and OnButton",
         "4,0": "OffButton == true"
       },
       "rising_actions": {
+        "0,0": "{\"cycle\":[{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":0,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":3,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":5,\"wait_after_ms\":0}]}]}",
         "3,0": "{\"cycle\":[{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":0,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":3,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":4,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":5,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":6,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":7,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":8,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":-1,\"wait_after_ms\":0}]}]}",
         "4,0": "{\"cycle\":[{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":0,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":1,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":4,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":16,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":50,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":100,\"wait_after_ms\":0}]}]}"
       },
@@ -178,13 +180,19 @@
     }
   },
   "known_devices": [
-    "10.0.0.125"
+    "10.0.0.125",
+    "10.0.0.219"
   ],
   "device_ids": {
     "esp32_72798c": {
       "ip": "10.0.0.125",
       "hostname": "esp32",
       "mac": "FC:B4:67:72:79:8C"
+    },
+    "esp32_73ff2c": {
+      "ip": "10.0.0.219",
+      "hostname": "esp32",
+      "mac": "FC:B4:67:73:FF:2C"
     }
   }
 }
