@@ -3,6 +3,9 @@
 #
 # Set each component to ON or OFF to include/exclude from build
 # Excluding unused components saves flash space and RAM
+#
+# IMPORTANT: Also edit common/pin_config.h to set GPIO assignments
+# and verify no conflicts between enabled components!
 
 # Core components (always required)
 # - common: Base component system
@@ -15,6 +18,7 @@ set(ENABLE_HEARTBEAT ON CACHE BOOL "Enable heartbeat LED indicator")
 set(ENABLE_LIGHT_SENSOR OFF CACHE BOOL "Enable ambient light sensor")
 set(ENABLE_MOTION_SENSOR OFF CACHE BOOL "Enable PIR motion sensor")
 set(ENABLE_DOOR_SENSOR OFF CACHE BOOL "Enable magnetic door sensor")
+set(ENABLE_TOUCH_SENSOR ON CACHE BOOL "Enable TTP223B capacitive touch sensor")
 set(ENABLE_RGB_LED ON CACHE BOOL "Enable WS2812 RGB LED strip")
 
 # Memory optimization for RGB LED animations
