@@ -825,9 +825,10 @@ class WebServerComponent(Component):
                     'variable_definitions': watcher._var_defs
                 }
             
-            # Get variable values and definitions
+            # Get variable values, definitions, and errors
             var_values = dict(watcher._var_values)
             var_defs = dict(watcher._var_defs)
+            var_errors = dict(getattr(watcher, '_var_errors', {}))
             
             # Try to evaluate the expression
             try:
@@ -845,7 +846,8 @@ class WebServerComponent(Component):
                     'hold_remaining_sec': round(max(0, hold_until - now), 1) if in_hold else 0,
                     'cooldown_remaining_sec': round(max(0, cooldown_until - now), 1) if in_cooldown else 0,
                     'variable_values': var_values,
-                    'variable_definitions': var_defs
+                    'variable_definitions': var_defs,
+                    'variable_errors': var_errors
                 }
             except Exception as e:
                 return {
@@ -858,7 +860,8 @@ class WebServerComponent(Component):
                     'in_hold': in_hold,
                     'in_cooldown': in_cooldown,
                     'variable_values': var_values,
-                    'variable_definitions': var_defs
+                    'variable_definitions': var_defs,
+                    'variable_errors': var_errors
                 }
         
         # ====================================================================
