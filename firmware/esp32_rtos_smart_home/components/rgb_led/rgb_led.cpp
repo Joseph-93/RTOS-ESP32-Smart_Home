@@ -134,6 +134,8 @@ static std::string base64_encode(const uint8_t* input, size_t len) {
 RgbLedComponent::RgbLedComponent() 
     : Component("RgbLed")
     , brightness(nullptr)
+    , actualBrightness(nullptr)
+    , brightnessRate(nullptr)
     , playing(nullptr)
     , loop(nullptr)
     , led_strip(nullptr)
@@ -250,7 +252,9 @@ void RgbLedComponent::onInitialize() {
     transition_to_buffer.resize(RGB_LED_COUNT * 3, 0);
     
     // Create parameters
-    brightness = addIntParam("brightness", 1, 1, 0, 100, 100);
+    brightness = addIntParam("brightness", 1, 1, 0, 100, 100);  // Target brightness (user sets this)
+    actualBrightness = addIntParam("actual_brightness", 1, 1, 0, 100, 100, true);  // Read-only: tracks brightness
+    brightnessRate = addIntParam("brightness_rate", 1, 1, 0, 1000, 50);  // Units per second (0 = instant)
     playing = addBoolParam("playing", 1, 1, false);  // false=off, true=play animation
     loop = addIntParam("loop", 1, 1, -1, 1000, -1, true);  // -1=infinite, 0=play once, N=loop N times
     transitionMs = addIntParam("transition_ms", 1, 1, 0, 5000, 200);  // Slick dick transition duration
@@ -474,9 +478,62 @@ void RgbLedComponent::onInitialize() {
 }
 
 uint8_t RgbLedComponent::applyBrightness(uint8_t color) {
-    if (!brightness) return color;
-    int bright = brightness->getValue(0, 0);
+    // Use the tracked actual brightness (smoothly interpolated)
+    int bright = (int)current_brightness_f;
+    if (bright <= 0) return 0;
+    if (bright >= 100) return color;
     return (uint8_t)((color * bright) / 100);
+}
+
+void RgbLedComponent::updateBrightnessTracking() {
+    if (!brightness || !brightnessRate) return;
+    
+    int target = brightness->getValue(0, 0);
+    int rate = brightnessRate->getValue(0, 0);
+    
+    // Rate 0 means instant tracking
+    if (rate == 0) {
+        current_brightness_f = (float)target;
+        if (actualBrightness) {
+            actualBrightness->setValue(0, 0, target);
+        }
+        return;
+    }
+    
+    // Calculate time delta
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    uint32_t delta_ms = now_ms - last_brightness_update_ms;
+    last_brightness_update_ms = now_ms;
+    
+    // Clamp delta to avoid jumps after pauses
+    if (delta_ms > 100) delta_ms = 100;
+    
+    // Calculate max change this tick: rate is units/second
+    float max_change = (float)rate * (float)delta_ms / 1000.0f;
+    
+    // Move toward target
+    float diff = (float)target - current_brightness_f;
+    if (std::fabs(diff) <= max_change) {
+        // Close enough - snap to target
+        current_brightness_f = (float)target;
+    } else if (diff > 0) {
+        current_brightness_f += max_change;
+    } else {
+        current_brightness_f -= max_change;
+    }
+    
+    // Clamp to valid range
+    if (current_brightness_f < 0.0f) current_brightness_f = 0.0f;
+    if (current_brightness_f > 100.0f) current_brightness_f = 100.0f;
+    
+    // Update the read-only param (rounded to int)
+    if (actualBrightness) {
+        int actual_int = (int)(current_brightness_f + 0.5f);
+        // Only update param if changed (avoid spamming dirty flags)
+        if (actualBrightness->getValue(0, 0) != actual_int) {
+            actualBrightness->setValue(0, 0, actual_int);
+        }
+    }
 }
 
 // ============================================================================
@@ -1117,11 +1174,17 @@ void RgbLedComponent::ledTask() {
     // Start with LEDs off
     ledsOff();
     
+    // Initialize brightness tracking timestamp
+    last_brightness_update_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    
     task_running.store(true);
     const uint32_t update_interval_ms = 1;  // ~1000 FPS max — core 1 is dedicated to this
     bool was_playing = false;
     
     while (!stop_requested.load()) {
+        // Always update brightness tracking (even when not playing)
+        updateBrightnessTracking();
+        
         // Check playback state
         bool is_playing = playing ? playing->getValue(0, 0) : false;
         

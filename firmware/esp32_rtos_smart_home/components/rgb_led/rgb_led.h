@@ -108,11 +108,17 @@ public:
 
 private:
     // Parameters (exposed to component system)
-    IntParameter* brightness;         // Global brightness (0-100)
-    BoolParameter* playing;           // true=play animation, false=off
-    IntParameter* loop;               // Loop count: -1=infinite, 1=play once, N=play N times
-    IntParameter* transitionMs;       // Transition duration in ms (0 = instant, slick dick mode)
-    IntParameter* transitionEasing;   // 0 = crossfade (merge colors), 1 = through black (dip to dark)
+    IntParameter* brightness;           // Target brightness (0-100) - user-facing
+    IntParameter* actualBrightness;     // Current brightness (0-100) - read-only, tracks brightness
+    IntParameter* brightnessRate;       // Tracking rate: units per second (0 = instant)
+    BoolParameter* playing;             // true=play animation, false=off
+    IntParameter* loop;                 // Loop count: -1=infinite, 1=play once, N=play N times
+    IntParameter* transitionMs;         // Transition duration in ms (0 = instant, slick dick mode)
+    IntParameter* transitionEasing;     // 0 = crossfade (merge colors), 1 = through black (dip to dark)
+    
+    // Internal brightness tracking (float for smooth interpolation)
+    float current_brightness_f{100.0f}; // Tracks toward brightness param
+    uint32_t last_brightness_update_ms{0};
     
     // ESP-IDF led_strip handle (RMT backend)
     led_strip_handle_t led_strip;
@@ -206,8 +212,11 @@ private:
     // Reconcile playback state after NVS load (called from loadCustomData)
     void reconcilePlaybackAfterLoad();
     
-    // Apply brightness to a color value
+    // Apply brightness to a color value (uses actual_brightness)
     uint8_t applyBrightness(uint8_t color);
+    
+    // Update brightness tracking (call from LED task)
+    void updateBrightnessTracking();
     
     // Play current animation frame, advance when duration expires
     void playFrame();
