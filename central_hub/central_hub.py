@@ -25,9 +25,10 @@ import websockets
 from websockets.client import WebSocketClientProtocol
 
 from config import (
-    ESP32_DEVICES, WS_PING_INTERVAL, WS_PING_TIMEOUT, 
+    ESP32_DEVICES, WS_PING_INTERVAL, WS_PING_TIMEOUT, WS_CONNECT_TIMEOUT,
     RECONNECT_DELAY, DISCOVERY_DELAY, SUBSCRIBE_DELAY, LOG_LEVEL,
-    WS_SERVER_PORT, USE_MDNS_DISCOVERY, MDNS_DISCOVERY_TIMEOUT, MDNS_SERVICE_TYPE
+    WS_SERVER_PORT, USE_MDNS_DISCOVERY, MDNS_DISCOVERY_TIMEOUT, MDNS_SERVICE_TYPE,
+    MDNS_REDISCOVERY_INTERVAL
 )
 from components import (
     Component as BaseComponent,
@@ -93,6 +94,9 @@ class ESP32Device:
     """Represents a connected ESP32 device."""
     ip: str
     name: str = ""
+    device_id: str = ""  # Unique device identifier (MAC-based, persists across IP changes)
+    hostname: str = ""   # mDNS hostname
+    mac: str = ""        # Full MAC address
     components: Dict[str, Component] = field(default_factory=dict)
     connected: bool = False
     websocket: Optional[WebSocketClientProtocol] = None
@@ -123,7 +127,11 @@ class CentralHub:
         self.esp32_ips = esp32_ips
         self.ws_port = ws_port
         self.devices: Dict[str, ESP32Device] = {}  # ip -> device
+        self.devices_by_id: Dict[str, ESP32Device] = {}  # device_id -> device (same objects as above)
         self.running = False
+        
+        # Track active device management tasks to prevent duplicates
+        self._device_tasks: Dict[str, asyncio.Task] = {}  # ip -> task
         
         # Store our own IP so we don't accidentally try to connect to ourselves
         self.local_ip = self._get_local_ip()
@@ -134,6 +142,10 @@ class CentralHub:
         # Cache for remote parameter values (used by Watcher)
         # Format: { "ip": { "Component.param[row,col]": value } }
         self.remote_state_cache: Dict[str, Dict[str, Any]] = {}
+        
+        # Callbacks for device connection events
+        self._on_device_connected_callbacks: List = []
+        self._on_device_disconnected_callbacks: List = []
         
         # Initialize local components
         self._init_local_components()
@@ -160,6 +172,10 @@ class CentralHub:
         # When ActionManager updates nicknames, Watcher should see them too
         self.watcher.set_nickname_map(self.action_manager._nickname_map)
         
+        # Register Watcher to be notified when devices reconnect
+        # This clears stale variable tracking so it gets fresh values immediately
+        self.on_device_connected(self.watcher.on_device_reconnected)
+        
         # Initialize persistence manager
         self.persistence = PersistenceManager(self)
     
@@ -173,6 +189,42 @@ class CentralHub:
             return ip
         except Exception:
             return "127.0.0.1"
+    
+    def on_device_connected(self, callback):
+        """Register a callback to be called when a device connects/reconnects.
+        
+        Callback signature: callback(ip: str)
+        """
+        self._on_device_connected_callbacks.append(callback)
+    
+    def on_device_disconnected(self, callback):
+        """Register a callback to be called when a device disconnects.
+        
+        Callback signature: callback(ip: str)
+        """
+        self._on_device_disconnected_callbacks.append(callback)
+    
+    async def _notify_device_connected(self, ip: str):
+        """Notify all registered callbacks that a device connected."""
+        for callback in self._on_device_connected_callbacks:
+            try:
+                if asyncio.iscoroutinefunction(callback):
+                    await callback(ip)
+                else:
+                    callback(ip)
+            except Exception as e:
+                logger.error(f"Error in device connected callback: {e}")
+    
+    async def _notify_device_disconnected(self, ip: str):
+        """Notify all registered callbacks that a device disconnected."""
+        for callback in self._on_device_disconnected_callbacks:
+            try:
+                if asyncio.iscoroutinefunction(callback):
+                    await callback(ip)
+                else:
+                    callback(ip)
+            except Exception as e:
+                logger.error(f"Error in device disconnected callback: {e}")
         
     async def start(self):
         """Start the central hub - connect to all devices."""
@@ -185,7 +237,14 @@ class CentralHub:
             await comp.initialize()
         
         # Load saved state AFTER components are initialized
-        self.persistence.load()
+        # Also restores previously known device IPs
+        persisted_devices = self.persistence.load()
+        
+        # Add any persisted devices that aren't already in the list
+        for ip in persisted_devices:
+            if ip not in self.esp32_ips and ip != self.local_ip:
+                self.esp32_ips.append(ip)
+                logger.info(f"📡 Restored persisted device: {ip}")
         
         # Start local component background tasks
         await self.action_manager.start()
@@ -206,6 +265,9 @@ class CentralHub:
                 await asyncio.sleep(1)
         
         tasks.append(keep_alive())
+        
+        # Start periodic mDNS rediscovery task (to find devices that come back online)
+        tasks.append(self._periodic_mdns_discovery())
         
         await asyncio.gather(*tasks, return_exceptions=True)
     
@@ -229,21 +291,40 @@ class CentralHub:
     
     async def _manage_device(self, ip: str):
         """Manage connection to a single ESP32 device with auto-reconnect."""
-        device = ESP32Device(ip=ip)
-        self.devices[ip] = device
+        # Check if a task is already managing this device
+        if ip in self._device_tasks:
+            existing_task = self._device_tasks[ip]
+            if not existing_task.done():
+                logger.warning(f"[{ip}] Device already being managed, skipping duplicate task")
+                return
         
-        while self.running:
-            try:
-                await self._connect_and_subscribe(device)
-            except Exception as e:
-                import traceback
-                logger.error(f"[{ip}] Connection error: {type(e).__name__}: {e}")
-                logger.debug(traceback.format_exc())
-                device.connected = False
-                
-            if self.running:
-                logger.info(f"[{ip}] Reconnecting in {RECONNECT_DELAY} seconds...")
-                await asyncio.sleep(RECONNECT_DELAY)
+        # Register this task
+        self._device_tasks[ip] = asyncio.current_task()
+        
+        # Reuse existing device object if present, otherwise create new
+        if ip not in self.devices:
+            device = ESP32Device(ip=ip)
+            self.devices[ip] = device
+        else:
+            device = self.devices[ip]
+        
+        try:
+            while self.running:
+                try:
+                    await self._connect_and_subscribe(device)
+                except Exception as e:
+                    import traceback
+                    logger.error(f"[{ip}] Connection error: {type(e).__name__}: {e}")
+                    logger.debug(traceback.format_exc())
+                    device.connected = False
+                    
+                if self.running:
+                    logger.info(f"[{ip}] Reconnecting in {RECONNECT_DELAY} seconds...")
+                    await asyncio.sleep(RECONNECT_DELAY)
+        finally:
+            # Clean up task tracking
+            if ip in self._device_tasks and self._device_tasks[ip] == asyncio.current_task():
+                del self._device_tasks[ip]
     
     async def _connect_and_subscribe(self, device: ESP32Device):
         """Connect to device and discover components/params (no automatic subscriptions)."""
@@ -252,7 +333,7 @@ class CentralHub:
         
         logger.info(f"[{ip}] Connecting to {uri}...")
         
-        async with websockets.connect(uri, ping_interval=WS_PING_INTERVAL, ping_timeout=WS_PING_TIMEOUT) as ws:
+        async with websockets.connect(uri, open_timeout=WS_CONNECT_TIMEOUT, ping_interval=WS_PING_INTERVAL, ping_timeout=WS_PING_TIMEOUT) as ws:
             device.websocket = ws
             device.connected = True
             device.active_subscriptions = set()  # Reset subscriptions on reconnect
@@ -262,8 +343,15 @@ class CentralHub:
             listener_task = asyncio.create_task(self._listen_for_updates(device))
             
             try:
-                # Discover all components and parameters
+                # Query device identity (for IP change detection)
+                await self._query_device_info(device)
+                
+                # Discover all components and parameters FIRST
                 await self._discover_device(device)
+                
+                # NOW notify listeners that device connected/reconnected
+                # (after discovery so components are available)
+                await self._notify_device_connected(ip)
                 
                 # Subscribe to needed parameters (based on Watcher variables)
                 await self._subscribe_needed(device)
@@ -273,6 +361,10 @@ class CentralHub:
             except Exception as e:
                 listener_task.cancel()
                 raise
+            finally:
+                # Notify listeners that device disconnected
+                device.connected = False
+                await self._notify_device_disconnected(ip)
     
     async def _send_request(self, device: ESP32Device, message: dict, timeout: float = 10.0) -> dict:
         """Send a request and wait for response."""
@@ -300,6 +392,83 @@ class CentralHub:
             raise
         finally:
             device.pending_requests.pop(msg_id, None)
+    
+    async def _query_device_info(self, device: ESP32Device):
+        """Query device identity info for IP change detection."""
+        ip = device.ip
+        try:
+            response = await self._send_request(device, {'type': 'get_device_info'})
+            
+            device_id = response.get('device_id', '')
+            hostname = response.get('hostname', '')
+            mac = response.get('mac', '')
+            
+            if device_id:
+                old_device = self.devices_by_id.get(device_id)
+                
+                if old_device and old_device.ip != ip:
+                    # This device was known at a different IP!
+                    logger.info(f"🔄 Device {device_id} IP changed: {old_device.ip} -> {ip}")
+                    
+                    # Remove old IP entry
+                    if old_device.ip in self.devices:
+                        del self.devices[old_device.ip]
+                    if old_device.ip in self.esp32_ips:
+                        self.esp32_ips.remove(old_device.ip)
+                    
+                    # Update remote_state_cache keys from old IP to new IP
+                    if old_device.ip in self.remote_state_cache:
+                        self.remote_state_cache[ip] = self.remote_state_cache.pop(old_device.ip)
+                    
+                    # Notify components about the IP change
+                    await self._notify_device_ip_changed(device_id, old_device.ip, ip)
+                
+                # Update device info
+                device.device_id = device_id
+                device.hostname = hostname
+                device.mac = mac
+                device.name = hostname or device_id
+                
+                # Register in device_id map
+                self.devices_by_id[device_id] = device
+                
+                logger.info(f"[{ip}] Device identity: {device_id} (hostname: {hostname})")
+            else:
+                logger.warning(f"[{ip}] Device did not provide device_id (older firmware?)")
+                
+        except Exception as e:
+            # Older firmware may not support get_device_info - that's OK
+            logger.debug(f"[{ip}] Could not query device_info: {e}")
+    
+    async def _notify_device_ip_changed(self, device_id: str, old_ip: str, new_ip: str):
+        """Notify components when a device's IP address changes."""
+        # Update ActionManager nicknames that reference the old IP
+        if hasattr(self, 'action_manager'):
+            for nickname, mapped_ip in list(self.action_manager._nickname_map.items()):
+                if mapped_ip == old_ip:
+                    self.action_manager._nickname_map[nickname] = new_ip
+                    logger.info(f"📝 Updated nickname '{nickname}': {old_ip} -> {new_ip}")
+            # Persist the updated nicknames
+            import json
+            self.action_manager.device_nicknames.set_value(
+                0, 0, json.dumps(self.action_manager._nickname_map), notify=False
+            )
+        
+        # Update Watcher variable definitions that reference the old IP
+        if hasattr(self, 'watcher'):
+            import json
+            updated = False
+            for var_name, var_def in self.watcher._var_defs.items():
+                if var_def.get('device') == old_ip:
+                    var_def['device'] = new_ip
+                    updated = True
+                    logger.info(f"📝 Updated Watcher variable '{var_name}': {old_ip} -> {new_ip}")
+            
+            if updated:
+                # Persist the updated variables
+                self.watcher.variables.set_value(
+                    0, 0, json.dumps(self.watcher._var_defs), notify=False
+                )
     
     async def _discover_device(self, device: ESP32Device):
         """Discover all components and parameters on a device."""
@@ -519,6 +688,12 @@ class CentralHub:
                 device.active_subscriptions.add(sub_key)
                 logger.info(f"[{ip}] Subscribed to {component_name}.{param_name}[{row}][{col}] = {value}")
                 return value
+            elif 'error' in response:
+                # Device returned an error (e.g., "index out of bounds")
+                error_msg = response.get('error', 'unknown error')
+                logger.warning(f"[{ip}] Subscribe failed for {component_name}.{param_name}[{row}][{col}]: {error_msg}")
+                # Return the error as a dict so callers can distinguish from None
+                return {'_subscription_error': error_msg, 'response': response}
             else:
                 logger.warning(f"[{ip}] Subscribe response had no value: {response}")
                 return None
@@ -635,12 +810,12 @@ class CentralHub:
         if ip == self.local_ip or ip == '127.0.0.1' or ip == 'localhost':
             return {'success': False, 'error': f'Cannot add self ({ip}) as remote device'}
         
-        # Check if already exists
-        if ip in self.devices:
-            if self.devices[ip].connected:
+        # Check if a task is already managing this device
+        if ip in self._device_tasks and not self._device_tasks[ip].done():
+            if ip in self.devices and self.devices[ip].connected:
                 return {'success': True, 'message': f'Device {ip} already connected'}
             else:
-                return {'success': True, 'message': f'Device {ip} exists, reconnecting...'}
+                return {'success': True, 'message': f'Device {ip} already being managed'}
         
         # Add to IP list and start managing it
         if ip not in self.esp32_ips:
@@ -651,6 +826,52 @@ class CentralHub:
         
         logger.info(f"Added new device: {ip}")
         return {'success': True, 'message': f'Connecting to {ip}...'}
+
+    async def _periodic_mdns_discovery(self):
+        """
+        Periodically run mDNS discovery to find devices that came back online.
+        This allows the hub to automatically reconnect to ESP32s that rebooted.
+        """
+        if not USE_MDNS_DISCOVERY:
+            logger.info("Periodic mDNS discovery disabled (USE_MDNS_DISCOVERY=False)")
+            return
+        
+        logger.info(f"🔍 Starting periodic mDNS discovery (every {MDNS_REDISCOVERY_INTERVAL}s)")
+        
+        while self.running:
+            try:
+                await asyncio.sleep(MDNS_REDISCOVERY_INTERVAL)
+                
+                if not self.running:
+                    break
+                
+                # Run mDNS discovery in a thread to avoid blocking
+                loop = asyncio.get_event_loop()
+                discovered = await loop.run_in_executor(
+                    None, 
+                    lambda: discover_esp32_devices(
+                        timeout=MDNS_DISCOVERY_TIMEOUT,
+                        service_type=MDNS_SERVICE_TYPE
+                    )
+                )
+                
+                # Check for newly discovered devices
+                for name, ip in discovered.items():
+                    if ip == self.local_ip:
+                        continue
+                    
+                    if ip not in self.devices:
+                        # Brand new device - add it
+                        logger.info(f"🔍 mDNS discovered new device: {name} ({ip})")
+                        await self.add_device_dynamically(ip)
+                    elif not self.devices[ip].connected:
+                        # Known device that's offline - it will auto-reconnect via _manage_device
+                        logger.debug(f"🔍 mDNS found returning device: {name} ({ip}) - will reconnect automatically")
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in periodic mDNS discovery: {e}")
 
     def get_state_snapshot(self) -> dict:
         """Get a complete snapshot of all device states."""

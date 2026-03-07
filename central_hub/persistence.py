@@ -2,6 +2,7 @@
 Simple JSON-based persistence for Central Hub parameters.
 
 Saves all local component parameter values to a JSON file.
+Also persists the list of known ESP32 device IPs for resilience.
 Loads them on startup, saves periodically in the background.
 """
 
@@ -9,7 +10,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Dict, Any, List
 
 if TYPE_CHECKING:
     from .central_hub import CentralHub
@@ -33,17 +34,28 @@ class PersistenceManager:
         self._save_task: asyncio.Task = None
         self._running = False
     
-    def load(self):
-        """Load saved state from disk and apply to components."""
+    def load(self) -> List[str]:
+        """Load saved state from disk and apply to components.
+        
+        Returns:
+            List of persisted device IPs that should be reconnected.
+        """
+        persisted_devices = []
+        
         if not self.db_file.exists():
             logger.info(f"No saved state found at {self.db_file}")
-            return
+            return persisted_devices
         
         try:
             with open(self.db_file, 'r') as f:
                 data = json.load(f)
             
             loaded_count = 0
+            
+            # Load persisted device IPs
+            persisted_devices = data.get('known_devices', [])
+            if persisted_devices:
+                logger.info(f"📡 Found {len(persisted_devices)} persisted device IPs")
             
             # Apply saved values to local components
             for comp_name, params in data.get('components', {}).items():
@@ -73,15 +85,31 @@ class PersistenceManager:
             
             logger.info(f"📂 Loaded {loaded_count} parameter values from {self.db_file.name}")
             self._last_state = data
+            return persisted_devices
             
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in state file: {e}")
         except Exception as e:
             logger.error(f"Failed to load state: {e}")
+        
+        return persisted_devices
     
     def _get_current_state(self) -> Dict[str, Any]:
-        """Get current state of all local component parameters."""
-        state = {'components': {}}
+        """Get current state of all local component parameters and known devices."""
+        state = {
+            'components': {},
+            'known_devices': list(self.hub.esp32_ips),  # Persist all known device IPs
+            'device_ids': {}  # Map device_id -> last known IP (for IP change detection)
+        }
+        
+        # Save device_id -> IP mapping for all known devices
+        for ip, device in self.hub.devices.items():
+            if device.device_id:
+                state['device_ids'][device.device_id] = {
+                    'ip': ip,
+                    'hostname': device.hostname,
+                    'mac': device.mac
+                }
         
         for comp_name, comp in self.hub.local_components.items():
             comp_state = {}
