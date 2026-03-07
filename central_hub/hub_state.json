@@ -58,31 +58,24 @@
     },
     "Watcher": {
       "variables": {
-        "0,0": "{\"Button1\":{\"device\":\"10.0.0.46\",\"component\":\"GUI\",\"param\":\"button_0_pressed\",\"row\":0,\"col\":0},\"ActionsOn\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0},\"lamp_touch0\":{\"device\":\"10.0.0.157\",\"component\":\"TouchSensor\",\"param\":\"touched\",\"row\":0,\"col\":0},\"enabled\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0},\"lamp_touch1\":{\"device\":\"10.0.0.157\",\"component\":\"TouchSensor\",\"param\":\"touched\",\"row\":0,\"col\":1}}"
+        "0,0": "{\"ActionsOn\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0},\"enabled\":{\"device\":\"self\",\"component\":\"ActionManager\",\"param\":\"enabled\",\"row\":0,\"col\":0},\"OnButton\":{\"device\":\"10.0.0.125\",\"component\":\"TouchSensor\",\"param\":\"touched\",\"row\":0,\"col\":0},\"OffButton\":{\"device\":\"10.0.0.125\",\"component\":\"TouchSensor\",\"param\":\"touched\",\"row\":0,\"col\":1}}"
       },
       "expressions": {
-        "0,0": "Button1 and ActionsOn",
-        "1,0": "lamp_touch0 == true and enabled == true",
-        "2,0": "lamp_touch1 == true and ActionsOn == true"
+        "3,0": "ActionsOn == true and OnButton",
+        "4,0": "OffButton == true"
       },
       "rising_actions": {
-        "0,0": "{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":0,\"wait_after_ms\":0}]}",
-        "1,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":0,\"wait_after_ms\":0}]}",
-        "2,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":1,\"wait_after_ms\":0}]}"
-      },
-      "falling_actions": {
-        "0,0": "{\"actions\":[{\"device\":\"self\",\"component\":\"NetworkActions\",\"param\":\"trigger\",\"row\":0,\"col\":0,\"value\":1,\"wait_after_ms\":0}]}",
-        "1,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":-1,\"wait_after_ms\":0}]}",
-        "2,0": "{\"actions\":[{\"device\":\"10.0.0.157\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":-1,\"wait_after_ms\":0}]}"
+        "3,0": "{\"cycle\":[{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":0,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":3,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":4,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":5,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":6,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":7,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":8,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"preset_priority\",\"row\":1,\"col\":0,\"value\":-1,\"wait_after_ms\":0}]}]}",
+        "4,0": "{\"cycle\":[{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":0,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":1,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":4,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":16,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":50,\"wait_after_ms\":0}]},{\"actions\":[{\"device\":\"10.0.0.125\",\"component\":\"RgbLed\",\"param\":\"brightness\",\"row\":0,\"col\":0,\"value\":100,\"wait_after_ms\":0}]}]}"
       },
       "enabled": {
         "0,0": true
       },
       "hold_high_sec": {
         "0,0": 0.0,
-        "1,0": 0.5,
-        "2,0": 2.0,
-        "3,0": 0.0,
+        "1,0": 0.0,
+        "2,0": 0.0,
+        "3,0": 1.0,
         "4,0": 0.0,
         "5,0": 0.0,
         "6,0": 0.0,
@@ -132,7 +125,7 @@
       },
       "cooldown_sec": {
         "0,0": 0.0,
-        "1,0": 0.5,
+        "1,0": 0.0,
         "2,0": 0.0,
         "3,0": 0.0,
         "4,0": 0.0,
@@ -182,6 +175,16 @@
         "48,0": 0.0,
         "49,0": 0.0
       }
+    }
+  },
+  "known_devices": [
+    "10.0.0.125"
+  ],
+  "device_ids": {
+    "esp32_72798c": {
+      "ip": "10.0.0.125",
+      "hostname": "esp32",
+      "mac": "FC:B4:67:72:79:8C"
     }
   }
 }
