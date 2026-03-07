@@ -158,14 +158,14 @@ class ActionManagerComponent(Component):
                 return
             
             # Log actions being queued
-            logger.info(f"⚡ ActionManager received {len(actions)} action(s):")
+            logger.debug(f"⚡ ActionManager received {len(actions)} action(s):")
             for i, action in enumerate(actions):
                 device = action.get('device', 'self')
                 comp = action.get('component') or action.get('comp', '?')
                 param_name = action.get('param', '?')
                 value = action.get('value', '?')
                 wait = action.get('wait_after_ms') or action.get('delay_ms', 0)
-                logger.info(f"   {i+1}. {device}:{comp}.{param_name} = {value} (wait {wait}ms)")
+                logger.debug(f"   {i+1}. {device}:{comp}.{param_name} = {value} (wait {wait}ms)")
             
             self._queue_actions(actions)
             
@@ -184,7 +184,7 @@ class ActionManagerComponent(Component):
         current_time = time.time()
         cumulative_delay = 0.0
         
-        logger.info(f"⏱️ QUEUEING {len(actions)} actions at base time {current_time}")
+        logger.debug(f"⏱️ QUEUEING {len(actions)} actions at base time {current_time}")
         
         for i, action in enumerate(actions):
             # delay_ms means "wait before THIS action"
@@ -198,7 +198,7 @@ class ActionManagerComponent(Component):
             queued = QueuedAction(execute_at=execute_at, action=action)
             heapq.heappush(self._action_queue, queued)
             
-            logger.info(f"   Action {i+1}: execute_at={execute_at} (in {cumulative_delay:.3f}s)")
+            logger.debug(f"   Action {i+1}: execute_at={execute_at} (in {cumulative_delay:.3f}s)")
             
             # wait_after_ms means "wait after THIS action, before next"
             wait_after = action.get('wait_after_ms', 0) or 0
@@ -206,7 +206,7 @@ class ActionManagerComponent(Component):
         
         # Update queue length
         self.queue_length.set_value(0, 0, len(self._action_queue))
-        logger.info(f"Queued {len(actions)} actions, queue size: {len(self._action_queue)}")
+        logger.debug(f"Queued {len(actions)} actions, queue size: {len(self._action_queue)}")
     
     async def _process_queue(self):
         """Main loop for processing queued actions."""
@@ -229,7 +229,7 @@ class ActionManagerComponent(Component):
                     heapq.heappop(self._action_queue)
                     self.queue_length.set_value(0, 0, len(self._action_queue))
                     
-                    logger.info(f"⏰ EXECUTING action now={now}, was scheduled for={next_action.execute_at}")
+                    logger.debug(f"⏰ EXECUTING action now={now}, was scheduled for={next_action.execute_at}")
                     await self._execute_action(next_action.action)
                 else:
                     # Wait until next action time or 100ms, whichever is shorter
@@ -262,14 +262,27 @@ class ActionManagerComponent(Component):
             await self._execute_remote_action(target_device, action, row, col, value)
     
     def _resolve_device(self, device: str) -> str:
-        """Resolve device identifier - could be IP, nickname, or 'self'."""
+        """Resolve device identifier - could be IP, nickname, device_id, or 'self'.
+        
+        Resolution order:
+        1. 'self' -> 'self'
+        2. nickname -> IP (from nickname map)
+        3. device_id -> IP (from hub's devices_by_id)
+        4. IP -> IP (passthrough)
+        """
         if device.lower() == 'self':
             return 'self'
         
-        # Check nickname map
+        # Check nickname map first
         if device in self._nickname_map:
             return self._nickname_map[device]
         
+        # Check if it's a device_id (hub tracks these)
+        if self.hub and hasattr(self.hub, 'devices_by_id'):
+            if device in self.hub.devices_by_id:
+                return self.hub.devices_by_id[device].ip
+        
+        # Assume it's an IP address
         return device
     
     async def _execute_local_action(self, action: Dict[str, Any], 
@@ -356,9 +369,9 @@ class ActionManagerComponent(Component):
         
         try:
             request_json = json.dumps(request)
-            logger.info(f"📤 SENDING TO {device_ip}: {request_json}")
+            logger.debug(f"📤 SENDING TO {device_ip}: {request_json}")
             await ws.send(request_json)
-            logger.info(f"✅ SENT SUCCESSFULLY")
+            logger.debug(f"✅ Sent to {device_ip}")
         except Exception as e:
             logger.error(f"❌ FAILED to send action to {device_ip}: {e}")
     
@@ -395,4 +408,4 @@ class ActionManagerComponent(Component):
         """Clear all pending actions."""
         self._action_queue.clear()
         self.queue_length.set_value(0, 0, 0)
-        logger.info("Action queue cleared")
+        logger.debug("Action queue cleared")

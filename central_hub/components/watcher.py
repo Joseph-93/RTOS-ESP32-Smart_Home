@@ -61,12 +61,24 @@ class WatcherComponent(Component):
     
     Supported operators: and, or, not, ==, !=, <, >, <=, >=, +, -, *, /, (, )
     
-    Actions format (JSON):
+    Actions format - Simple mode (JSON):
     {
         "actions": [
             {"device": "self", "param_id": 5, "row": 0, "col": 0, "value": 1, "wait_after_ms": 0}
         ]
     }
+    
+    Actions format - Cycle mode (JSON):
+    {
+        "cycle": [
+            {"actions": [...]},  # Executed on 1st trigger
+            {"actions": [...]},  # Executed on 2nd trigger
+            {"actions": [...]}   # Executed on 3rd trigger, then wraps to 1st
+        ]
+    }
+    
+    Cycle mode enables toggle (2 sets) or multi-state (N sets) behavior with a single button.
+    The rising_cycle_index/falling_cycle_index params track which set fires next.
     """
     
     def __init__(self):
@@ -132,6 +144,25 @@ class WatcherComponent(Component):
             default_val=0.0
         )
         
+        # Cycle index for rising actions (tracks which action set to run next)
+        # Read-only: managed internally, but visible for debugging
+        self.rising_cycle_index = self.add_int_param(
+            "rising_cycle_index",
+            rows=NUM_WATCH_SLOTS, cols=1,
+            min_val=0, max_val=999,
+            default_val=0,
+            read_only=True
+        )
+        
+        # Cycle index for falling actions
+        self.falling_cycle_index = self.add_int_param(
+            "falling_cycle_index",
+            rows=NUM_WATCH_SLOTS, cols=1,
+            min_val=0, max_val=999,
+            default_val=0,
+            read_only=True
+        )
+        
         # Parsed variable definitions
         self._var_defs: Dict[str, Dict[str, Any]] = {}
         
@@ -156,6 +187,13 @@ class WatcherComponent(Component):
         # var_name -> {'last_seen': timestamp, 'recovery_attempts': count, 'last_recovery': timestamp}
         self._var_health: Dict[str, Dict[str, Any]] = {}
         
+        # Track subscription errors (e.g., "index out of bounds")
+        # var_name -> error message string
+        self._var_errors: Dict[str, str] = {}
+        
+        # Track logged slot errors to avoid spam (slot -> last_error_message)
+        self._logged_slot_errors: Dict[int, str] = {}
+        
         # Recovery settings
         self._STALE_THRESHOLD_SEC = 10.0  # Consider variable stale after 10 seconds without value
         self._RECOVERY_COOLDOWN_SEC = 30.0  # Don't spam recovery attempts
@@ -166,7 +204,7 @@ class WatcherComponent(Component):
     
     async def initialize(self):
         """Initialize the component."""
-        logger.info("🚀 WATCHER INITIALIZING...")
+        logger.debug("🚀 WATCHER INITIALIZING...")
         self._parse_variables()
         
         # Log current expressions
@@ -177,9 +215,9 @@ class WatcherComponent(Component):
                 active_count += 1
                 rising = self.rising_actions.get_value(slot, 0)
                 falling = self.falling_actions.get_value(slot, 0)
-                logger.info(f"   📝 Slot {slot}: expr='{expr}' rising={bool(rising)} falling={bool(falling)}")
+                logger.debug(f"   📝 Slot {slot}: expr='{expr}' rising={bool(rising)} falling={bool(falling)}")
         
-        logger.info(f"🚀 WATCHER INITIALIZED: {len(self._var_defs)} variables, {active_count} expressions")
+        logger.debug(f"🚀 WATCHER INITIALIZED: {len(self._var_defs)} variables, {active_count} expressions")
     
     async def start(self):
         """Start the evaluation loop."""
@@ -188,7 +226,7 @@ class WatcherComponent(Component):
         
         self._running = True
         self._eval_task = asyncio.create_task(self._evaluation_loop())
-        logger.info(f"✅ WATCHER STARTED - evaluating every {EVAL_INTERVAL_SEC*1000:.0f}ms")
+        logger.debug(f"✅ WATCHER STARTED - evaluating every {EVAL_INTERVAL_SEC*1000:.0f}ms")
     
     async def stop(self):
         """Stop the evaluation loop."""
@@ -205,25 +243,48 @@ class WatcherComponent(Component):
         """Set the device nickname map (usually shared from ActionManager)."""
         self._nickname_map = nickname_map
     
+    def on_device_reconnected(self, device_ip: str):
+        """Called when a remote device reconnects - clears stale tracking for its variables.
+        
+        This allows the Watcher to immediately start receiving fresh values
+        instead of waiting for recovery timeouts.
+        """
+        cleared_count = 0
+        for var_name, var_def in self._var_defs.items():
+            device = self._resolve_device(var_def.get('device', 'self'))
+            if device == device_ip:
+                # Clear health tracking - variable is fresh again
+                if var_name in self._var_health:
+                    del self._var_health[var_name]
+                    cleared_count += 1
+                # Clear any subscription errors - give it a fresh chance
+                self._var_errors.pop(var_name, None)
+        
+        # Clear logged slot errors so new issues get logged fresh
+        self._logged_slot_errors.clear()
+        
+        if cleared_count > 0:
+            logger.info(f"🔄 Device {device_ip} reconnected - cleared stale tracking for {cleared_count} variables")
+    
     def _parse_variables(self):
         """Parse the variables JSON into the definitions dict."""
         try:
             raw = self.variables.get_value(0, 0)
             if raw:
                 self._var_defs = json.loads(raw)
-                logger.info(f"📋 WATCHER PARSED VARIABLES: {len(self._var_defs)} variables defined")
+                logger.debug(f"📋 WATCHER PARSED VARIABLES: {len(self._var_defs)} variables defined")
                 for var_name, var_def in self._var_defs.items():
-                    logger.info(f"   📌 {var_name} => {var_def.get('device')}/{var_def.get('component')}.{var_def.get('param')}[{var_def.get('row',0)}][{var_def.get('col',0)}]")
+                    logger.debug(f"   📌 {var_name} => {var_def.get('device')}/{var_def.get('component')}.{var_def.get('param')}[{var_def.get('row',0)}][{var_def.get('col',0)}]")
             else:
                 self._var_defs = {}
-                logger.info("📋 WATCHER PARSED VARIABLES: empty (no variables defined)")
+                logger.debug("📋 WATCHER PARSED VARIABLES: empty (no variables defined)")
         except json.JSONDecodeError as e:
             logger.error(f"❌ WATCHER FAILED TO PARSE VARIABLES: {e}")
             self._var_defs = {}
     
     def _on_variables_change(self, param, row, col, new_value, old_value):
         """Update variable definitions when changed and trigger subscriptions for new variables."""
-        logger.info(f"🔄 WATCHER VARIABLES CHANGED - re-parsing...")
+        logger.debug(f"🔄 WATCHER VARIABLES CHANGED - re-parsing...")
         old_vars = set(self._var_defs.keys())
         self._parse_variables()
         new_vars = set(self._var_defs.keys())
@@ -231,7 +292,7 @@ class WatcherComponent(Component):
         # Find newly added variables and trigger subscriptions
         added_vars = new_vars - old_vars
         if added_vars and self.hub:
-            logger.info(f"📡 New variables added, requesting subscriptions: {added_vars}")
+            logger.debug(f"📡 New variables added, requesting subscriptions: {added_vars}")
             asyncio.create_task(self._subscribe_to_new_variables(added_vars))
     
     async def _subscribe_to_new_variables(self, var_names: set):
@@ -251,18 +312,37 @@ class WatcherComponent(Component):
             col = var_def.get('col', 0)
             
             if comp and param:
-                logger.info(f"📡 Subscribing to {device}/{comp}.{param}[{row}][{col}] for variable '{var_name}'")
-                value = await self.hub.subscribe_to_param(device, comp, param, row, col)
-                if value is not None:
-                    self._var_values[var_name] = value
-                    logger.info(f"✅ {var_name} = {value}")
+                logger.debug(f"📡 Subscribing to {device}/{comp}.{param}[{row}][{col}] for variable '{var_name}'")
+                result = await self.hub.subscribe_to_param(device, comp, param, row, col)
+                
+                # Check if subscription returned an error dict
+                if isinstance(result, dict) and '_subscription_error' in result:
+                    error_msg = result['_subscription_error']
+                    self._var_errors[var_name] = error_msg
+                    logger.warning(f"❌ {var_name}: subscription error - {error_msg}")
+                elif result is not None:
+                    self._var_values[var_name] = result
+                    # Clear any previous error
+                    self._var_errors.pop(var_name, None)
+                    logger.debug(f"✅ {var_name} = {result}")
     
     def _resolve_device(self, device: str) -> str:
-        """Resolve device identifier."""
+        """Resolve device identifier - could be IP, nickname, device_id, or 'self'.
+        
+        Resolution order:
+        1. 'self' -> 'self'
+        2. nickname -> IP (from nickname map, shared with ActionManager)
+        3. device_id -> IP (from hub's devices_by_id)
+        4. IP -> IP (passthrough)
+        """
         if device.lower() == 'self':
             return 'self'
         if device in self._nickname_map:
             return self._nickname_map[device]
+        # Check if it's a device_id (hub tracks these)
+        if self.hub and hasattr(self.hub, 'devices_by_id'):
+            if device in self.hub.devices_by_id:
+                return self.hub.devices_by_id[device].ip
         return device
     
     def _apply_timing_logic(self, slot: int, raw_result: bool, now: float) -> bool:
@@ -329,17 +409,17 @@ class WatcherComponent(Component):
                 loop_count += 1
                 if loop_count % 50 == 1:
                     if self._var_defs:
-                        logger.info(f"👁️ WATCHER MONITORING {len(self._var_defs)} variables:")
+                        logger.debug(f"👁️ WATCHER MONITORING {len(self._var_defs)} variables:")
                         for var_name, var_def in self._var_defs.items():
                             if var_name in self._var_values:
-                                logger.info(f"   📊 {var_name} = {self._var_values[var_name]}")
+                                logger.debug(f"   📊 {var_name} = {self._var_values[var_name]}")
                             else:
                                 device = var_def.get('device', '?')
                                 comp = var_def.get('component', '?')
                                 param = var_def.get('param', '?')
-                                logger.warning(f"   ❌ {var_name} = NO VALUE (source: {device}/{comp}.{param} - subscription failed or device offline)")
+                                logger.debug(f"   ❌ {var_name} = NO VALUE (source: {device}/{comp}.{param})")
                     else:
-                        logger.info(f"👁️ WATCHER MONITORING: no variables defined")
+                        logger.debug(f"👁️ WATCHER MONITORING: no variables defined")
                 
                 # Evaluate all expressions
                 active_expressions = 0
@@ -369,29 +449,35 @@ class WatcherComponent(Component):
                             if hold_sec > 0 or cool_sec > 0:
                                 timing_info = f" [hold={hold_sec}s, cool={cool_sec}s]"
                             if raw_result != result:
-                                logger.info(f"   🧮 Slot {slot}: '{expr}' => raw={raw_result}, effective={result} (prev={prev_result}){timing_info}")
+                                logger.debug(f"   🧮 Slot {slot}: '{expr}' => raw={raw_result}, effective={result} (prev={prev_result}){timing_info}")
                             else:
-                                logger.info(f"   🧮 Slot {slot}: '{expr}' => {result} (prev={prev_result}){timing_info}")
+                                logger.debug(f"   🧮 Slot {slot}: '{expr}' => {result} (prev={prev_result}){timing_info}")
                         
                         # Check for edge transitions
                         if prev_result is not None:
                             if not prev_result and result:
                                 # Rising edge: False -> True
-                                logger.info(f"🔺 WATCHER RISING EDGE on slot {slot}: '{expr}' changed False->True")
+                                logger.debug(f"🔺 RISING EDGE slot {slot}: '{expr}'")
                                 await self._trigger_actions(slot, rising=True)
                             elif prev_result and not result:
                                 # Falling edge: True -> False
-                                logger.info(f"🔻 WATCHER FALLING EDGE on slot {slot}: '{expr}' changed True->False")
+                                logger.debug(f"🔻 FALLING EDGE slot {slot}: '{expr}'")
                                 await self._trigger_actions(slot, rising=False)
                         
                         self._prev_results[slot] = result
                         
+                        # Clear any logged error since this slot is working now
+                        self._logged_slot_errors.pop(slot, None)
+                        
                     except Exception as e:
-                        if loop_count % 50 == 1:
+                        # Only log if this is a NEW error or different from last logged
+                        error_msg = str(e)
+                        if self._logged_slot_errors.get(slot) != error_msg:
                             logger.warning(f"   ⚠️ Slot {slot}: '{expr}' => ERROR: {e}")
+                            self._logged_slot_errors[slot] = error_msg
                 
                 if loop_count % 50 == 1 and active_expressions == 0:
-                    logger.info(f"   ⚠️ No active expressions configured")
+                    logger.debug(f"   ⚠️ No active expressions configured")
                 
                 # Update eval count
                 count = self.eval_count.get_value(0, 0)
@@ -445,6 +531,14 @@ class WatcherComponent(Component):
             logger.warning(f"⚠️ Local variable {var_name} has no value: {component_name}.{param_name}")
             return
         
+        # If this variable has a known config error (like "out of bounds"), don't retry
+        # The user needs to fix the variable configuration
+        if var_name in self._var_errors:
+            error = self._var_errors[var_name]
+            if 'out of bounds' in error.lower() or 'not found' in error.lower():
+                # Config error - don't keep spamming retry attempts
+                return
+        
         # Initialize health tracking if needed
         if var_name not in self._var_health:
             self._var_health[var_name] = {'last_seen': 0, 'recovery_attempts': 0, 'last_recovery': 0}
@@ -474,15 +568,24 @@ class WatcherComponent(Component):
             return
         
         # Device is connected but param has no value - try to re-subscribe
-        logger.info(f"🔄 {var_name}: attempting to re-subscribe to {device}/{component_name}.{param_name}[{row}][{col}]")
+        logger.debug(f"🔄 {var_name}: attempting to re-subscribe to {device}/{component_name}.{param_name}[{row}][{col}]")
         
-        value = await self.hub.subscribe_param_by_name(device, component_name, param_name, row, col)
+        result = await self.hub.subscribe_param_by_name(device, component_name, param_name, row, col)
         health['last_recovery'] = now
         health['recovery_attempts'] += 1
         
-        if value is not None:
-            logger.info(f"✅ {var_name}: recovered! value = {value}")
-            self._var_values[var_name] = value
+        # Check if subscription returned an error dict
+        if isinstance(result, dict) and '_subscription_error' in result:
+            error_msg = result['_subscription_error']
+            self._var_errors[var_name] = error_msg
+            logger.warning(f"❌ {var_name}: re-subscribe error - {error_msg}")
+            # Don't keep retrying if it's a config error like "index out of bounds"
+            if 'out of bounds' in error_msg.lower():
+                health['recovery_attempts'] = 0  # Stop retrying - it's a config issue
+        elif result is not None:
+            logger.debug(f"✅ {var_name}: recovered! value = {result}")
+            self._var_values[var_name] = result
+            self._var_errors.pop(var_name, None)  # Clear error
             health['recovery_attempts'] = 0
             health['last_seen'] = now
         else:
@@ -559,10 +662,17 @@ class WatcherComponent(Component):
                     device = var_def.get('device', 'unknown')
                     comp = var_def.get('component', 'unknown')
                     param = var_def.get('param', 'unknown')
-                    if device == 'self':
+                    row = var_def.get('row', 0)
+                    col = var_def.get('col', 0)
+                    
+                    # Check if there's a specific subscription error
+                    sub_error = self._var_errors.get(var_name)
+                    if sub_error:
+                        missing_vars.append(f"'{var_name}' ({device}/{comp}.{param}[{row}][{col}] - {sub_error})")
+                    elif device == 'self':
                         missing_vars.append(f"'{var_name}' (local: {comp}.{param} - component may not exist)")
                     else:
-                        missing_vars.append(f"'{var_name}' (remote: {device}/{comp}.{param} - device may be disconnected or subscription failed)")
+                        missing_vars.append(f"'{var_name}' (remote: {device}/{comp}.{param}[{row}][{col}] - device may be disconnected)")
         
         if missing_vars:
             raise ValueError(f"Variables have no value: {', '.join(missing_vars)}")
@@ -660,38 +770,77 @@ class WatcherComponent(Component):
         return result
     
     async def _trigger_actions(self, slot: int, rising: bool):
-        """Trigger rising or falling edge actions for a slot."""
+        """Trigger rising or falling edge actions for a slot.
+        
+        Supports two action formats:
+        1. Simple (original): {"actions": [...]}
+           - Executes all actions every trigger
+        
+        2. Cycle mode: {"cycle": [{"actions": [...]}, {"actions": [...]}]}
+           - Each trigger executes the NEXT set in the cycle
+           - Wraps around after the last set
+           - Enables toggle (2 sets) or multi-state (N sets) behavior
+        """
         if rising:
             action_json = self.rising_actions.get_value(slot, 0)
+            cycle_param = self.rising_cycle_index
             edge_type = "RISING"
         else:
             action_json = self.falling_actions.get_value(slot, 0)
+            cycle_param = self.falling_cycle_index
             edge_type = "FALLING"
         
         if not action_json:
-            logger.info(f"⚠️ WATCHER {edge_type} EDGE on slot {slot} but no actions configured")
+            logger.debug(f"⚠️ {edge_type} edge slot {slot}: no actions configured")
             return
         
         try:
             data = json.loads(action_json)
-            actions = data.get('actions', [])
+            
+            # Check for cycle mode vs simple mode
+            if 'cycle' in data:
+                # Cycle mode: get current index and select that action set
+                cycle_list = data['cycle']
+                if not cycle_list:
+                    logger.debug(f"⚠️ {edge_type} edge slot {slot}: cycle list is empty")
+                    return
+                
+                current_index = cycle_param.get_value(slot, 0) if cycle_param else 0
+                
+                # Clamp index in case cycle was shortened
+                if current_index >= len(cycle_list):
+                    current_index = 0
+                
+                # Get the action set for this cycle position
+                action_set = cycle_list[current_index]
+                actions = action_set.get('actions', [])
+                
+                # Advance to next index (wrap around)
+                next_index = (current_index + 1) % len(cycle_list)
+                if cycle_param:
+                    cycle_param.set_value(slot, 0, next_index)
+                
+                logger.debug(f"🔄 {edge_type} edge slot {slot}: CYCLE mode, index {current_index}/{len(cycle_list)-1} → {next_index}")
+            else:
+                # Simple mode: just get the actions list
+                actions = data.get('actions', [])
             
             if not actions:
-                logger.info(f"⚠️ WATCHER {edge_type} EDGE on slot {slot} but actions list is empty")
+                logger.debug(f"⚠️ {edge_type} edge slot {slot}: actions list is empty")
                 return
             
-            logger.info(f"🎯 WATCHER TRIGGERING {edge_type} EDGE for slot {slot}: {len(actions)} actions")
+            logger.debug(f"🎯 Triggering {edge_type} edge slot {slot}: {len(actions)} actions")
             for i, action in enumerate(actions):
-                logger.info(f"   📤 Action {i}: {json.dumps(action)}")
+                logger.debug(f"   📤 Action {i}: {json.dumps(action)}")
             
             # Queue actions via ActionManager if available
             if self.hub:
                 action_manager = self.hub.local_components.get('ActionManager')
                 if action_manager:
-                    logger.info(f"   ➡️ Queuing to ActionManager")
+                    logger.debug(f"   ➡️ Queuing to ActionManager")
                     action_manager._queue_actions(actions)
                 else:
-                    logger.info(f"   ➡️ No ActionManager, executing directly")
+                    logger.debug(f"   ➡️ No ActionManager, executing directly")
                     # Execute directly if no ActionManager
                     await self._execute_actions_directly(actions)
                     
@@ -773,7 +922,7 @@ class WatcherComponent(Component):
         
         try:
             request_json = json.dumps(request)
-            logger.info(f"📤 WATCHER SENDING TO {device_ip}: {request_json}")
+            logger.debug(f"📤 WATCHER SENDING TO {device_ip}: {request_json}")
             await ws.send(request_json)
         except Exception as e:
             logger.error(f"❌ Failed to send action to {device_ip}: {e}")
