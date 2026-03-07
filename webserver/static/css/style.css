@@ -862,6 +862,81 @@ code {
     max-width: 1200px;
 }
 
+/* Variable Manager Table */
+.var-manager-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+.var-manager-table th,
+.var-manager-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.var-manager-table th {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-size: 0.85em;
+    text-transform: uppercase;
+}
+
+.var-manager-table tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.var-manager-table code {
+    background: var(--bg-tertiary);
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+.var-manager-table .var-actions {
+    white-space: nowrap;
+}
+
+.var-manager-table .var-actions .btn-icon {
+    margin-right: 0.25rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"] {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.form-group small {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--text-secondary);
+    font-size: 0.85em;
+}
+
 .config-modal-header {
     display: flex;
     justify-content: space-between;
@@ -1515,6 +1590,195 @@ code {
 .var-value-badge.value-missing {
     background: rgba(248, 81, 73, 0.2);
     color: var(--danger);
+}
+
+.var-value-badge.value-error {
+    background: rgba(255, 166, 0, 0.2);
+    color: #ffa600;
+    font-size: 0.85em;
+}
+
+.var-row-error {
+    background: rgba(255, 166, 0, 0.1);
+    border-left: 3px solid #ffa600;
+    padding-left: 0.5rem;
+    margin-left: -0.5rem;
+}
+
+/* Cycle Mode Styles for Watch Slot Editor */
+.mode-toggle {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.mode-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.mode-option:hover {
+    background: var(--bg-hover);
+}
+
+.mode-option input[type="radio"] {
+    accent-color: var(--accent-primary);
+}
+
+.cycle-steps-container {
+    margin-top: 1rem;
+}
+
+.cycle-step {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+
+.cycle-step-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: rgba(88, 166, 255, 0.1);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.cycle-step-header span {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.step-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.step-controls button {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.85em;
+}
+
+.cycle-step-body {
+    padding: 0.75rem 1rem;
+}
+
+.cycle-badge {
+    display: inline-block;
+    font-size: 0.75em;
+    padding: 0.2rem 0.5rem;
+    background: rgba(88, 166, 255, 0.2);
+    color: var(--accent-primary);
+    border-radius: 4px;
+    margin-left: 0.5rem;
+}
+
+.cycle-info {
+    font-size: 0.9em;
+    color: var(--text-secondary);
+    padding: 0.5rem;
+    background: rgba(88, 166, 255, 0.05);
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.add-step-btn {
+    margin-top: 0.5rem;
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px dashed var(--border-color);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.add-step-btn:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    background: rgba(88, 166, 255, 0.1);
+}
+
+.mode-option.active {
+    background: rgba(88, 166, 255, 0.15);
+    border: 1px solid var(--accent-primary);
+}
+
+.mode-option small {
+    font-size: 0.75em;
+    color: var(--text-secondary);
+    display: block;
+    margin-top: 2px;
+}
+
+.step-number {
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+
+.step-action-count {
+    font-size: 0.85em;
+    color: var(--text-secondary);
+}
+
+.step-actions-preview {
+    padding: 0.5rem 1rem;
+    font-size: 0.9em;
+}
+
+.step-actions-preview .action-summary-item {
+    padding: 0.25rem 0;
+    font-family: monospace;
+    font-size: 0.85em;
+}
+
+.cycle-index-display {
+    margin-left: 1rem;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+}
+
+.btn-icon {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem;
+    font-size: 1rem;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.btn-icon:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.simple-mode-content .actions-summary {
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    min-height: 40px;
+}
+
+.empty-hint {
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 0.9em;
+}
+
+.action-summary-item {
+    padding: 0.25rem 0;
+    font-family: monospace;
+    font-size: 0.85em;
+    color: var(--text-secondary);
 }
 
 .expr-monitor-errors {

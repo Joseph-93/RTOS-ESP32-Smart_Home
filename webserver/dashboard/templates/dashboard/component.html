@@ -41,6 +41,9 @@
                     <button class="btn-primary" onclick="openWatchSlotEditor()">
                         ➕ Configure Watch Slot
                     </button>
+                    <button class="btn-secondary" onclick="openVariableManager()">
+                        📝 Manage Variables
+                    </button>
                     <button class="btn-secondary" onclick="loadActiveExpressions()">
                         🔄 Refresh Active Slots
                     </button>
@@ -237,6 +240,18 @@
             expressionMonitor.show(slot);
         }
         
+        async function openVariableManager() {
+            // Make sure WebSocket is connected
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            
+            // Create global variable manager instance
+            variableManager = new VariableManager(esp32ws);
+            variableManager.show();
+        }
+        
         async function openWatchSlotEditor(slotIndex = null) {
             // Make sure WebSocket is connected
             if (!esp32ws || !esp32ws.connected) {
@@ -296,18 +311,47 @@
                         ]);
                         
                         const expr = exprResp.value || '';
-                        // Parse actions and normalize: backend uses 'component', frontend uses 'comp'
-                        const risingActionsRaw = risingResp.value ? JSON.parse(risingResp.value).actions || [] : [];
-                        const fallingActionsRaw = fallingResp.value ? JSON.parse(fallingResp.value).actions || [] : [];
-                        const risingActions = risingActionsRaw.map(a => ({...a, comp: a.component || a.comp}));
-                        const fallingActions = fallingActionsRaw.map(a => ({...a, comp: a.component || a.comp}));
+                        // Parse actions - handle both simple {"actions": [...]} and cycle {"cycle": [...]} formats
+                        const risingData = risingResp.value ? JSON.parse(risingResp.value) : {};
+                        const fallingData = fallingResp.value ? JSON.parse(fallingResp.value) : {};
+                        
+                        // Normalize actions: backend uses 'component', frontend uses 'comp'
+                        const normalizeActions = (actions) => (actions || []).map(a => ({...a, comp: a.component || a.comp}));
+                        
+                        // Parse rising actions - detect cycle vs simple mode
+                        let risingActions = [], risingCycle = null;
+                        if (risingData.cycle) {
+                            // Cycle mode
+                            risingCycle = risingData.cycle.map(step => normalizeActions(step.actions));
+                        } else {
+                            // Simple mode
+                            risingActions = normalizeActions(risingData.actions);
+                        }
+                        
+                        // Parse falling actions
+                        let fallingActions = [], fallingCycle = null;
+                        if (fallingData.cycle) {
+                            fallingCycle = fallingData.cycle.map(step => normalizeActions(step.actions));
+                        } else {
+                            fallingActions = normalizeActions(fallingData.actions);
+                        }
+                        
                         const variables = varsResp.value ? JSON.parse(varsResp.value) : {};
                         const holdHighSec = holdResp.value || 0;
                         const cooldownSec = coolResp.value || 0;
                         
-                        currentSlotData = { expression: expr, risingActions, fallingActions, variables, holdHighSec, cooldownSec };
+                        currentSlotData = { 
+                            expression: expr, 
+                            risingActions, 
+                            risingCycle,
+                            fallingActions, 
+                            fallingCycle,
+                            variables, 
+                            holdHighSec, 
+                            cooldownSec 
+                        };
                         
-                        const hasConfig = expr || risingActions.length > 0 || fallingActions.length > 0;
+                        const hasConfig = expr || risingActions.length > 0 || fallingActions.length > 0 || risingCycle || fallingCycle;
                         
                         if (hasConfig) {
                             const timingInfo = (holdHighSec > 0 || cooldownSec > 0) 
@@ -472,30 +516,54 @@
                 });
                 console.log(`Set Watcher expression slot ${slotIndex}:`, config.expression);
                 
-                // Transform and set rising actions
-                const risingActionsForBackend = transformActionsForBackend(config.risingActions || [], true);
+                // Transform and set rising actions (handle both simple and cycle modes)
+                let risingValue = '';
+                if (config.risingMode === 'cycle' && config.risingCycle) {
+                    // Cycle mode - format as {"cycle": [{"actions": [...]}, ...]}
+                    const cycleSteps = config.risingCycle.map(stepActions => ({
+                        actions: transformActionsForBackend(stepActions || [], true)
+                    }));
+                    if (cycleSteps.length > 0) {
+                        risingValue = JSON.stringify({ cycle: cycleSteps });
+                    }
+                } else {
+                    // Simple mode - format as {"actions": [...]}
+                    const risingActionsForBackend = transformActionsForBackend(config.risingActions || [], true);
+                    if (risingActionsForBackend.length > 0) {
+                        risingValue = JSON.stringify({ actions: risingActionsForBackend });
+                    }
+                }
                 await esp32ws.send({
                     type: 'set_param',
                     comp: 'Watcher',
                     param: 'rising_actions',
                     row: slotIndex,
                     col: 0,
-                    value: risingActionsForBackend.length > 0 
-                        ? JSON.stringify({ actions: risingActionsForBackend }) 
-                        : ''
+                    value: risingValue
                 });
                 
-                // Transform and set falling actions
-                const fallingActionsForBackend = transformActionsForBackend(config.fallingActions || [], true);
+                // Transform and set falling actions (handle both simple and cycle modes)
+                let fallingValue = '';
+                if (config.fallingMode === 'cycle' && config.fallingCycle) {
+                    const cycleSteps = config.fallingCycle.map(stepActions => ({
+                        actions: transformActionsForBackend(stepActions || [], true)
+                    }));
+                    if (cycleSteps.length > 0) {
+                        fallingValue = JSON.stringify({ cycle: cycleSteps });
+                    }
+                } else {
+                    const fallingActionsForBackend = transformActionsForBackend(config.fallingActions || [], true);
+                    if (fallingActionsForBackend.length > 0) {
+                        fallingValue = JSON.stringify({ actions: fallingActionsForBackend });
+                    }
+                }
                 await esp32ws.send({
                     type: 'set_param',
                     comp: 'Watcher',
                     param: 'falling_actions',
                     row: slotIndex,
                     col: 0,
-                    value: fallingActionsForBackend.length > 0 
-                        ? JSON.stringify({ actions: fallingActionsForBackend }) 
-                        : ''
+                    value: fallingValue
                 });
                 
                 // Set timing parameters

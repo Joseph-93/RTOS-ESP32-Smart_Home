@@ -921,15 +921,38 @@ class WatchSlotEditor {
 
     async show(slotIndex = 0, currentData = {}) {
         this.slotIndex = slotIndex;
+        
+        // Parse rising/falling actions - detect cycle mode
+        const risingParsed = this._parseActionData(currentData.risingActions, currentData.risingCycle);
+        const fallingParsed = this._parseActionData(currentData.fallingActions, currentData.fallingCycle);
+        
         this.data = {
             expression: currentData.expression || '',
             variables: currentData.variables || {},
-            risingActions: currentData.risingActions || [],
-            fallingActions: currentData.fallingActions || [],
+            // Rising actions
+            risingMode: risingParsed.mode,  // 'simple' or 'cycle'
+            risingActions: risingParsed.actions,  // For simple mode
+            risingCycle: risingParsed.cycle,  // For cycle mode: array of action arrays
+            risingCycleIndex: currentData.risingCycleIndex || 0,
+            // Falling actions
+            fallingMode: fallingParsed.mode,
+            fallingActions: fallingParsed.actions,
+            fallingCycle: fallingParsed.cycle,
+            fallingCycleIndex: currentData.fallingCycleIndex || 0,
+            // Timing
             holdHighSec: currentData.holdHighSec || 0,
             cooldownSec: currentData.cooldownSec || 0
         };
         this._createModal();
+    }
+    
+    _parseActionData(actions, cycle) {
+        // If cycle array is provided, use cycle mode
+        if (cycle && Array.isArray(cycle) && cycle.length > 0) {
+            return { mode: 'cycle', actions: [], cycle: cycle };
+        }
+        // Otherwise simple mode with actions array
+        return { mode: 'simple', actions: actions || [], cycle: [[]] };
     }
 
     hide() {
@@ -970,19 +993,13 @@ class WatchSlotEditor {
                     <div class="watch-section">
                         <h3>📈 Rising Edge Actions <span class="edge-hint">(false → true)</span></h3>
                         <p class="helper-text">These actions run when the expression becomes true.</p>
-                        <div class="actions-summary" id="rising-actions-summary">
-                            ${this._summarizeActions(this.data.risingActions)}
-                        </div>
-                        <button class="btn btn-secondary" id="edit-rising-btn">✏️ Edit Rising Actions</button>
+                        ${this._renderActionSection('rising')}
                     </div>
                     
                     <div class="watch-section">
                         <h3>📉 Falling Edge Actions <span class="edge-hint">(true → false)</span></h3>
                         <p class="helper-text">These actions run when the expression becomes false.</p>
-                        <div class="actions-summary" id="falling-actions-summary">
-                            ${this._summarizeActions(this.data.fallingActions)}
-                        </div>
-                        <button class="btn btn-secondary" id="edit-falling-btn">✏️ Edit Falling Actions</button>
+                        ${this._renderActionSection('falling')}
                     </div>
                     
                     <div class="watch-section">
@@ -1025,15 +1042,18 @@ class WatchSlotEditor {
         
         this.container.appendChild(this.modal);
         
+        // Event handlers
         this.modal.querySelector('#slot-index-input').onchange = (e) => {
             this.slotIndex = parseInt(e.target.value) || 0;
             this.modal.querySelector('h2').textContent = `👁️ Watch Slot ${this.slotIndex} Configuration`;
         };
         this.modal.querySelector('#edit-expression-btn').onclick = () => this._editExpression();
-        this.modal.querySelector('#edit-rising-btn').onclick = () => this._editRisingActions();
-        this.modal.querySelector('#edit-falling-btn').onclick = () => this._editFallingActions();
         this.modal.querySelector('#clear-slot-btn').onclick = () => this._clearSlot();
         this.modal.querySelector('#save-watch-btn').onclick = () => this._save();
+        
+        // Mode toggles
+        this._setupModeToggle('rising');
+        this._setupModeToggle('falling');
         
         // Timing input handlers
         this.modal.querySelector('#hold-high-input').onchange = (e) => {
@@ -1042,6 +1062,142 @@ class WatchSlotEditor {
         this.modal.querySelector('#cooldown-input').onchange = (e) => {
             this.data.cooldownSec = parseFloat(e.target.value) || 0;
         };
+    }
+    
+    _renderActionSection(edge) {
+        const mode = this.data[`${edge}Mode`];
+        const actions = this.data[`${edge}Actions`];
+        const cycle = this.data[`${edge}Cycle`];
+        const cycleIndex = this.data[`${edge}CycleIndex`];
+        
+        return `
+            <div class="action-mode-section" id="${edge}-action-section">
+                <div class="mode-toggle">
+                    <label class="mode-option ${mode === 'simple' ? 'active' : ''}">
+                        <input type="radio" name="${edge}-mode" value="simple" ${mode === 'simple' ? 'checked' : ''}>
+                        <span>Simple</span>
+                        <small>Same actions every trigger</small>
+                    </label>
+                    <label class="mode-option ${mode === 'cycle' ? 'active' : ''}">
+                        <input type="radio" name="${edge}-mode" value="cycle" ${mode === 'cycle' ? 'checked' : ''}>
+                        <span>🔄 Cycle</span>
+                        <small>Toggle/rotate through steps</small>
+                    </label>
+                </div>
+                
+                <div class="simple-mode-content" style="display: ${mode === 'simple' ? 'block' : 'none'}">
+                    <div class="actions-summary" id="${edge}-actions-summary">
+                        ${this._summarizeActions(actions)}
+                    </div>
+                    <button class="btn btn-secondary edit-${edge}-simple-btn">✏️ Edit Actions</button>
+                </div>
+                
+                <div class="cycle-mode-content" style="display: ${mode === 'cycle' ? 'block' : 'none'}">
+                    <div class="cycle-info">
+                        <span class="cycle-badge">🔄 ${cycle.length} step${cycle.length !== 1 ? 's' : ''}</span>
+                        <span class="cycle-index-display">Next: Step ${cycleIndex + 1}</span>
+                    </div>
+                    <div class="cycle-steps" id="${edge}-cycle-steps">
+                        ${this._renderCycleSteps(edge, cycle)}
+                    </div>
+                    <button class="btn btn-secondary add-${edge}-step-btn">➕ Add Step</button>
+                </div>
+            </div>
+        `;
+    }
+    
+    _renderCycleSteps(edge, cycle) {
+        if (!cycle || cycle.length === 0) {
+            return '<div class="empty-hint">No steps defined. Add one below.</div>';
+        }
+        
+        return cycle.map((stepActions, idx) => `
+            <div class="cycle-step" data-step="${idx}">
+                <div class="cycle-step-header">
+                    <span class="step-number">Step ${idx + 1}</span>
+                    <span class="step-action-count">${stepActions.length} action${stepActions.length !== 1 ? 's' : ''}</span>
+                    <div class="step-controls">
+                        <button class="btn-icon edit-step-btn" title="Edit Step" data-edge="${edge}" data-step="${idx}">✏️</button>
+                        ${cycle.length > 1 ? `<button class="btn-icon delete-step-btn" title="Remove Step" data-edge="${edge}" data-step="${idx}">🗑️</button>` : ''}
+                    </div>
+                </div>
+                <div class="step-actions-preview">
+                    ${this._summarizeActions(stepActions) || '<span class="empty-hint">No actions</span>'}
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    _setupModeToggle(edge) {
+        const section = this.modal.querySelector(`#${edge}-action-section`);
+        if (!section) return;
+        
+        // Mode radio buttons
+        section.querySelectorAll(`input[name="${edge}-mode"]`).forEach(radio => {
+            radio.onchange = () => {
+                this.data[`${edge}Mode`] = radio.value;
+                
+                // Update active state on labels
+                section.querySelectorAll('.mode-option').forEach(label => {
+                    label.classList.toggle('active', label.querySelector('input').checked);
+                });
+                
+                // Show/hide content
+                section.querySelector('.simple-mode-content').style.display = radio.value === 'simple' ? 'block' : 'none';
+                section.querySelector('.cycle-mode-content').style.display = radio.value === 'cycle' ? 'block' : 'none';
+                
+                // Initialize cycle with current simple actions if switching to cycle mode and empty
+                if (radio.value === 'cycle' && this.data[`${edge}Cycle`].length === 0) {
+                    this.data[`${edge}Cycle`] = [this.data[`${edge}Actions`].slice()];
+                    this._refreshCycleSteps(edge);
+                }
+            };
+        });
+        
+        // Simple mode edit button
+        section.querySelector(`.edit-${edge}-simple-btn`).onclick = () => this._editActions(edge, 'simple');
+        
+        // Add step button
+        section.querySelector(`.add-${edge}-step-btn`).onclick = () => {
+            this.data[`${edge}Cycle`].push([]);
+            this._refreshCycleSteps(edge);
+        };
+        
+        // Cycle step buttons (use event delegation)
+        section.querySelector(`#${edge}-cycle-steps`).onclick = (e) => {
+            const editBtn = e.target.closest('.edit-step-btn');
+            const deleteBtn = e.target.closest('.delete-step-btn');
+            
+            if (editBtn) {
+                const stepIdx = parseInt(editBtn.dataset.step);
+                this._editCycleStep(edge, stepIdx);
+            }
+            
+            if (deleteBtn) {
+                const stepIdx = parseInt(deleteBtn.dataset.step);
+                this.data[`${edge}Cycle`].splice(stepIdx, 1);
+                // Adjust cycle index if needed
+                if (this.data[`${edge}CycleIndex`] >= this.data[`${edge}Cycle`].length) {
+                    this.data[`${edge}CycleIndex`] = 0;
+                }
+                this._refreshCycleSteps(edge);
+            }
+        };
+    }
+    
+    _refreshCycleSteps(edge) {
+        const stepsContainer = this.modal.querySelector(`#${edge}-cycle-steps`);
+        const cycle = this.data[`${edge}Cycle`];
+        stepsContainer.innerHTML = this._renderCycleSteps(edge, cycle);
+        
+        // Update cycle info
+        const cycleInfo = this.modal.querySelector(`#${edge}-action-section .cycle-info`);
+        if (cycleInfo) {
+            cycleInfo.innerHTML = `
+                <span class="cycle-badge">🔄 ${cycle.length} step${cycle.length !== 1 ? 's' : ''}</span>
+                <span class="cycle-index-display">Next: Step ${this.data[`${edge}CycleIndex`] + 1}</span>
+            `;
+        }
     }
 
     _summarizeVariables() {
@@ -1061,8 +1217,8 @@ class WatchSlotEditor {
         }
         
         return actions.map((a, i) => {
-            if (a.type === 'SET') {
-                return `<div class="action-summary-item">${i + 1}. SET ${a.comp}.${a.param}[${a.row}][${a.col}] = ${a.value}</div>`;
+            if (a.type === 'SET' || !a.type) {
+                return `<div class="action-summary-item">${i + 1}. SET ${a.comp || a.component}.${a.param}[${a.row}][${a.col}] = ${a.value}</div>`;
             } else if (a.type === 'NETWORK') {
                 return `<div class="action-summary-item">${i + 1}. NETWORK message #${a.index}</div>`;
             }
@@ -1071,10 +1227,8 @@ class WatchSlotEditor {
     }
 
     async _editExpression() {
-        // Pass existing variables to the expression builder
         const result = await this.expressionBuilder.show(this.data.expression, this.data.variables);
         if (result !== undefined && result !== null) {
-            // Result now contains both expression and variables
             this.data.expression = result.expression;
             this.data.variables = result.variables;
             this.modal.querySelector('#current-expression').textContent = result.expression || '(not configured)';
@@ -1082,24 +1236,26 @@ class WatchSlotEditor {
         }
     }
 
-    async _editRisingActions() {
-        const result = await this.actionBuilder.show(this.data.risingActions);
-        if (result) {
-            this.data.risingActions = result;
-            this.modal.querySelector('#rising-actions-summary').innerHTML = this._summarizeActions(result);
+    async _editActions(edge, mode) {
+        if (mode === 'simple') {
+            const result = await this.actionBuilder.show(this.data[`${edge}Actions`]);
+            if (result) {
+                this.data[`${edge}Actions`] = result;
+                this.modal.querySelector(`#${edge}-actions-summary`).innerHTML = this._summarizeActions(result);
+            }
         }
     }
-
-    async _editFallingActions() {
-        const result = await this.actionBuilder.show(this.data.fallingActions);
+    
+    async _editCycleStep(edge, stepIdx) {
+        const currentActions = this.data[`${edge}Cycle`][stepIdx] || [];
+        const result = await this.actionBuilder.show(currentActions);
         if (result) {
-            this.data.fallingActions = result;
-            this.modal.querySelector('#falling-actions-summary').innerHTML = this._summarizeActions(result);
+            this.data[`${edge}Cycle`][stepIdx] = result;
+            this._refreshCycleSteps(edge);
         }
     }
 
     _clearSlot() {
-        // Show inline confirmation instead of ugly confirm()
         const confirmDiv = document.createElement('div');
         confirmDiv.className = 'config-modal-overlay';
         confirmDiv.innerHTML = `
@@ -1121,7 +1277,18 @@ class WatchSlotEditor {
         confirmDiv.querySelector('#clear-cancel').onclick = () => confirmDiv.remove();
         confirmDiv.querySelector('#clear-confirm').onclick = () => {
             confirmDiv.remove();
-            this.data = { expression: '', variables: {}, risingActions: [], fallingActions: [] };
+            this.data = { 
+                expression: '', 
+                variables: {}, 
+                risingMode: 'simple',
+                risingActions: [], 
+                risingCycle: [[]],
+                fallingMode: 'simple',
+                fallingActions: [],
+                fallingCycle: [[]],
+                holdHighSec: 0,
+                cooldownSec: 0
+            };
             this._save();
         };
     }
@@ -1129,15 +1296,37 @@ class WatchSlotEditor {
     _save() {
         this.hide();
         if (this.onSave) {
-            this.onSave({
+            // Build output in correct format based on mode
+            const result = {
                 slotIndex: this.slotIndex,
                 expression: this.data.expression,
                 variables: this.data.variables,
-                risingActions: this.data.risingActions,
-                fallingActions: this.data.fallingActions,
                 holdHighSec: this.data.holdHighSec,
-                cooldownSec: this.data.cooldownSec
-            });
+                cooldownSec: this.data.cooldownSec,
+                // Include mode info for the save handler
+                risingMode: this.data.risingMode,
+                fallingMode: this.data.fallingMode
+            };
+            
+            // Rising actions
+            if (this.data.risingMode === 'cycle') {
+                result.risingCycle = this.data.risingCycle;
+                result.risingActions = [];  // Empty for cycle mode
+            } else {
+                result.risingActions = this.data.risingActions;
+                result.risingCycle = null;
+            }
+            
+            // Falling actions
+            if (this.data.fallingMode === 'cycle') {
+                result.fallingCycle = this.data.fallingCycle;
+                result.fallingActions = [];
+            } else {
+                result.fallingActions = this.data.fallingActions;
+                result.fallingCycle = null;
+            }
+            
+            this.onSave(result);
         }
     }
 }
@@ -1376,6 +1565,7 @@ class ExpressionMonitor {
             const varList = this.modal.querySelector('#var-list');
             const varValues = response.variable_values || {};
             const varDefs = response.variable_definitions || this.variables;
+            const varErrors = response.variable_errors || {};
             
             // Find which variables are used in this expression
             const usedVars = this._extractVariablesFromExpression(this.expression, Object.keys(varDefs));
@@ -1386,15 +1576,20 @@ class ExpressionMonitor {
                 varList.innerHTML = usedVars.map(varName => {
                     const def = varDefs[varName] || {};
                     const value = varValues[varName];
+                    const error = varErrors[varName];
                     const hasValue = value !== undefined && value !== null;
                     
                     const deviceLabel = def.device === 'self' ? '🏠 local' : `📡 ${def.device}`;
-                    const source = `${deviceLabel} / ${def.component || '?'}.${def.param || '?'}`;
+                    const source = `${deviceLabel} / ${def.component || '?'}.${def.param || '?'}[${def.row || 0}][${def.col || 0}]`;
                     
                     let valueClass = 'value-missing';
                     let valueText = '❌ NO VALUE';
                     
-                    if (hasValue) {
+                    if (error) {
+                        // Show subscription error with details
+                        valueClass = 'value-error';
+                        valueText = `⚠️ ${error}`;
+                    } else if (hasValue) {
                         if (typeof value === 'boolean') {
                             valueClass = 'type-bool';
                             valueText = value ? '✓ true' : '✗ false';
@@ -1408,7 +1603,7 @@ class ExpressionMonitor {
                     }
                     
                     return `
-                        <div class="var-row">
+                        <div class="var-row ${error ? 'var-row-error' : ''}">
                             <div>
                                 <span class="var-name">${varName}</span>
                                 <span class="var-source">${source}</span>
@@ -1443,7 +1638,267 @@ class ExpressionMonitor {
 
 // Global instance for easy access
 let expressionMonitor = null;
+let variableManager = null;
 let networkActionEditor = null;
+
+
+// ============================================================================
+// VARIABLE MANAGER - View, edit, and delete all Watcher variables
+// ============================================================================
+class VariableManager {
+    constructor(wsConnection) {
+        this.ws = wsConnection;
+        this.modal = null;
+        this.variables = {};
+    }
+
+    async show() {
+        await this._loadVariables();
+        this._createModal();
+    }
+
+    hide() {
+        if (this.modal) {
+            this.modal.remove();
+            this.modal = null;
+        }
+    }
+
+    async _loadVariables() {
+        try {
+            const resp = await this.ws.send({
+                type: 'get_param',
+                comp: 'Watcher',
+                param: 'variables',
+                row: 0,
+                col: 0
+            });
+            this.variables = resp.value ? JSON.parse(resp.value) : {};
+        } catch (e) {
+            console.error('Failed to load variables:', e);
+            this.variables = {};
+        }
+    }
+
+    async _saveVariables() {
+        try {
+            await this.ws.send({
+                type: 'set_param',
+                comp: 'Watcher',
+                param: 'variables',
+                row: 0,
+                col: 0,
+                value: JSON.stringify(this.variables)
+            });
+            return true;
+        } catch (e) {
+            console.error('Failed to save variables:', e);
+            return false;
+        }
+    }
+
+    _createModal() {
+        this.modal = document.createElement('div');
+        this.modal.className = 'config-modal-overlay';
+        this.modal.innerHTML = `
+            <div class="config-modal config-modal-wide">
+                <div class="config-modal-header">
+                    <h2>📝 Variable Manager</h2>
+                    <button class="close-btn" onclick="variableManager.hide()">✕</button>
+                </div>
+                <div class="config-modal-body">
+                    <p class="helper-text">Manage all Watcher variables. Variables are used in expressions to track device parameters.</p>
+                    
+                    <div class="var-manager-list" id="var-manager-list">
+                        ${this._renderVariablesList()}
+                    </div>
+                    
+                    <button class="btn btn-secondary" id="add-variable-btn" style="margin-top: 1rem;">➕ Add Variable</button>
+                </div>
+                <div class="config-modal-footer">
+                    <button class="btn btn-secondary" onclick="variableManager.hide()">Close</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(this.modal);
+        this.modal.querySelector('#add-variable-btn').onclick = () => this._addVariable();
+        this._attachRowHandlers();
+    }
+
+    _renderVariablesList() {
+        const vars = Object.entries(this.variables);
+        if (vars.length === 0) {
+            return '<div class="empty-hint">No variables defined. Click "Add Variable" to create one.</div>';
+        }
+        
+        return `
+            <table class="var-manager-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Device</th>
+                        <th>Component.Param</th>
+                        <th>Index [row][col]</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${vars.map(([name, def]) => `
+                        <tr data-var="${name}">
+                            <td><code>${name}</code></td>
+                            <td>${def.device === 'self' ? '🏠 local' : `📡 ${def.device}`}</td>
+                            <td><code>${def.component}.${def.param}</code></td>
+                            <td>[${def.row}][${def.col}]</td>
+                            <td class="var-actions">
+                                <button class="btn-icon edit-var-btn" title="Edit">✏️</button>
+                                <button class="btn-icon delete-var-btn" title="Delete">🗑️</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+
+    _refreshList() {
+        const listEl = this.modal.querySelector('#var-manager-list');
+        listEl.innerHTML = this._renderVariablesList();
+        this._attachRowHandlers();
+    }
+
+    _attachRowHandlers() {
+        if (!this.modal) return;
+        
+        this.modal.querySelectorAll('.edit-var-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                const row = e.target.closest('tr');
+                const varName = row.dataset.var;
+                this._editVariable(varName);
+            };
+        });
+        
+        this.modal.querySelectorAll('.delete-var-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                const row = e.target.closest('tr');
+                const varName = row.dataset.var;
+                this._deleteVariable(varName);
+            };
+        });
+    }
+
+    _addVariable() {
+        this._showEditDialog(null, {
+            device: '',
+            component: '',
+            param: '',
+            row: 0,
+            col: 0
+        });
+    }
+
+    _editVariable(varName) {
+        const def = this.variables[varName];
+        if (!def) return;
+        this._showEditDialog(varName, def);
+    }
+
+    async _deleteVariable(varName) {
+        if (!confirm(`Delete variable "${varName}"?`)) return;
+        
+        delete this.variables[varName];
+        if (await this._saveVariables()) {
+            this._refreshList();
+        }
+    }
+
+    _showEditDialog(existingName, def) {
+        const isNew = existingName === null;
+        const dialog = document.createElement('div');
+        dialog.className = 'config-modal-overlay';
+        dialog.style.zIndex = '1001';  // Above variable manager
+        dialog.innerHTML = `
+            <div class="config-modal" style="max-width: 500px;">
+                <div class="config-modal-header">
+                    <h2>${isNew ? '➕ Add Variable' : '✏️ Edit Variable'}</h2>
+                    <button class="close-btn" id="dialog-close">✕</button>
+                </div>
+                <div class="config-modal-body">
+                    <div class="form-group">
+                        <label>Variable Name:</label>
+                        <input type="text" id="var-name" value="${existingName || ''}" placeholder="e.g., button_pressed" ${isNew ? '' : 'readonly'}>
+                        ${isNew ? '' : '<small style="color: #888;">Name cannot be changed. Delete and recreate to rename.</small>'}
+                    </div>
+                    <div class="form-group">
+                        <label>Device:</label>
+                        <input type="text" id="var-device" value="${def.device}" placeholder="e.g., 10.0.0.125 or self">
+                        <small style="color: #888;">IP address or "self" for local hub</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Component:</label>
+                        <input type="text" id="var-component" value="${def.component}" placeholder="e.g., TouchSensor">
+                    </div>
+                    <div class="form-group">
+                        <label>Parameter:</label>
+                        <input type="text" id="var-param" value="${def.param}" placeholder="e.g., touched">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label>Row:</label>
+                            <input type="number" id="var-row" value="${def.row}" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Col:</label>
+                            <input type="number" id="var-col" value="${def.col}" min="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="config-modal-footer">
+                    <button class="btn btn-secondary" id="dialog-cancel">Cancel</button>
+                    <button class="btn btn-primary" id="dialog-save">💾 Save</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(dialog);
+        
+        dialog.querySelector('#dialog-close').onclick = () => dialog.remove();
+        dialog.querySelector('#dialog-cancel').onclick = () => dialog.remove();
+        dialog.querySelector('#dialog-save').onclick = async () => {
+            const name = dialog.querySelector('#var-name').value.trim();
+            const device = dialog.querySelector('#var-device').value.trim();
+            const component = dialog.querySelector('#var-component').value.trim();
+            const param = dialog.querySelector('#var-param').value.trim();
+            const row = parseInt(dialog.querySelector('#var-row').value) || 0;
+            const col = parseInt(dialog.querySelector('#var-col').value) || 0;
+            
+            // Validation
+            if (!name) { alert('Variable name is required'); return; }
+            if (!device) { alert('Device is required'); return; }
+            if (!component) { alert('Component is required'); return; }
+            if (!param) { alert('Parameter is required'); return; }
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+                alert('Variable name must start with a letter/underscore and contain only letters, numbers, and underscores');
+                return;
+            }
+            
+            // Check for duplicate name when adding
+            if (isNew && this.variables[name]) {
+                alert(`Variable "${name}" already exists`);
+                return;
+            }
+            
+            this.variables[name] = { device, component, param, row, col };
+            
+            if (await this._saveVariables()) {
+                dialog.remove();
+                this._refreshList();
+            } else {
+                alert('Failed to save variable');
+            }
+        };
+    }
+}
 
 
 // ============================================================================
@@ -1865,5 +2320,6 @@ window.ConfigBuilder = {
     WatchSlotEditor,
     ActionManagerEditor,
     ExpressionMonitor,
+    VariableManager,
     NetworkActionEditor
 };
