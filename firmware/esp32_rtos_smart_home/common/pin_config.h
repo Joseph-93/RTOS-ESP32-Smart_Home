@@ -71,6 +71,24 @@
 #define PIN_TOUCH_CS            GPIO_NUM_21
 
 // ============================================================================
+// Stepper Motor Component (4 motors, step/dir/enable)
+// ============================================================================
+// These are PLACEHOLDER pins - actual HAL implementation will define real pins
+// based on the specific hardware (A4988, DRV8825, TMC2209, etc.)
+// 
+// Suggested GPIO layout for floating candle (4 motors):
+// Motor 0: STEP=25, DIR=26
+// Motor 1: STEP=27, DIR=14
+// Motor 2: STEP=12, DIR=13
+// Motor 3: STEP=32, DIR=33
+// ENABLE (shared): 15
+// LIMIT_0-3: 34, 35, 36, 39 (input-only GPIOs for limit switches)
+//
+// NOTE: The HAL interface is abstract - pins are defined in the concrete HAL
+// implementation, not in this config file. See INTERFACE.md in floating_candle
+// repo for the recommended GPIO assignments.
+
+// ============================================================================
 // RESERVED / SYSTEM PINS (DO NOT USE)
 // ============================================================================
 // GPIO 0:  Boot button / strapping
@@ -87,16 +105,25 @@
  *  2    | LCD DC           | ENABLE_GUI
  *  4    | LCD RST          | ENABLE_GUI
  *  5    | LCD CS           | ENABLE_GUI
- * 13    | RGB LED          | ENABLE_RGB_LED
+ * 12    | Motor 2 STEP*    | ENABLE_STEPPER_MOTOR
+ * 13    | RGB LED / M2 DIR*| ENABLE_RGB_LED / ENABLE_STEPPER_MOTOR
+ * 14    | Motor 1 DIR*     | ENABLE_STEPPER_MOTOR
+ * 15    | Motor ENABLE*    | ENABLE_STEPPER_MOTOR
  * 18    | LCD CLK          | ENABLE_GUI
  * 19    | LCD MISO         | ENABLE_GUI
  * 21    | Touch CS (disp)  | ENABLE_GUI
  * 22    | Touch IRQ (disp) | ENABLE_GUI
  * 23    | LCD MOSI         | ENABLE_GUI
- * 25    | Touch Sensor 0   | ENABLE_TOUCH_SENSOR
- * 26    | Touch Sensor 1   | ENABLE_TOUCH_SENSOR
- * 27    | Motion Sensor    | ENABLE_MOTION_SENSOR
- * 32    | Door Sensor      | ENABLE_DOOR_SENSOR
- * 33    | LCD Backlight    | ENABLE_GUI
- * 36    | Light Sensor     | ENABLE_LIGHT_SENSOR
+ * 25    | Touch Sensor 0 / M0 STEP* | ENABLE_TOUCH_SENSOR / ENABLE_STEPPER_MOTOR
+ * 26    | Touch Sensor 1 / M0 DIR*  | ENABLE_TOUCH_SENSOR / ENABLE_STEPPER_MOTOR
+ * 27    | Motion Sensor / M1 STEP*  | ENABLE_MOTION_SENSOR / ENABLE_STEPPER_MOTOR
+ * 32    | Door Sensor / M3 STEP*    | ENABLE_DOOR_SENSOR / ENABLE_STEPPER_MOTOR
+ * 33    | LCD Backlight / M3 DIR*   | ENABLE_GUI / ENABLE_STEPPER_MOTOR
+ * 34    | Motor 0 LIMIT*   | ENABLE_STEPPER_MOTOR (input only)
+ * 35    | Motor 1 LIMIT*   | ENABLE_STEPPER_MOTOR (input only)
+ * 36    | Light Sensor / M2 LIMIT* | ENABLE_LIGHT_SENSOR / ENABLE_STEPPER_MOTOR
+ * 39    | Motor 3 LIMIT*   | ENABLE_STEPPER_MOTOR (input only)
+ *
+ * * = Stepper pins are defined in HAL implementation, not pin_config.h
+ *     Floating candle uses dedicated ESP32, no conflicts with other components.
  */
