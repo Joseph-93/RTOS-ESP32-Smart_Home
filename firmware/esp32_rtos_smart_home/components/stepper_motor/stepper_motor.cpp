@@ -6,7 +6,10 @@
 #include <cmath>
 #include <algorithm>
 
-// Base64 decoding table
+// ============================================================================
+// Base64 Decoding
+// ============================================================================
+
 static const uint8_t base64_decode_table[256] = {
     64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
     64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
@@ -33,8 +36,8 @@ static size_t base64_decode(const char* input, size_t input_len, uint8_t* output
     
     for (size_t i = 0; i < input_len; i++) {
         uint8_t c = base64_decode_table[(uint8_t)input[i]];
-        if (c == 64) continue;  // Skip invalid chars
-        if (c == 65) break;     // Padding '='
+        if (c == 64) continue;
+        if (c == 65) break;
         
         buf = (buf << 6) | c;
         bits_collected += 6;
@@ -48,7 +51,35 @@ static size_t base64_decode(const char* input, size_t input_len, uint8_t* output
 }
 
 // ============================================================================
-// Stub HAL (does nothing - placeholder until real HAL is implemented)
+// MotorTrajectory - Linear interpolation between precomputed waypoints
+// ============================================================================
+
+int32_t MotorTrajectory::getPosition(float t) {
+    if (waypoints.empty()) return 0;
+    if (waypoints.size() == 1) return waypoints[0].pos_steps;
+    
+    // Clamp to valid range
+    if (t <= waypoints.front().t) return waypoints.front().pos_steps;
+    if (t >= waypoints.back().t) return waypoints.back().pos_steps;
+    
+    // Advance index if needed (waypoints are sorted by time)
+    while (currentIndex < waypoints.size() - 2 && waypoints[currentIndex + 1].t <= t) {
+        currentIndex++;
+    }
+    
+    // Linear interpolation between currentIndex and currentIndex+1
+    const Waypoint& w0 = waypoints[currentIndex];
+    const Waypoint& w1 = waypoints[currentIndex + 1];
+    
+    float dt = w1.t - w0.t;
+    if (dt < 1e-9f) return w0.pos_steps;
+    
+    float alpha = (t - w0.t) / dt;
+    return w0.pos_steps + (int32_t)(alpha * (w1.pos_steps - w0.pos_steps));
+}
+
+// ============================================================================
+// Stub HAL
 // ============================================================================
 
 class StubStepperMotorHAL : public StepperMotorHAL {
@@ -68,10 +99,8 @@ public:
     uint8_t getMotorCount() const override { return 4; }
     uint32_t getMinPulseWidthUs() const override { return 2; }
     
-    // Microstepping (stub just stores the value)
     bool setMicrostepping(uint16_t divisor) override { 
         microstepping = divisor;
-        ESP_LOGI("StubHAL", "Microstepping set to 1/%d (stub)", divisor);
         return true; 
     }
     uint16_t getMicrostepping() const override { return microstepping; }
@@ -92,37 +121,45 @@ StepperMotorComponent::StepperMotorComponent()
       activeChoreographyIndex(-1),
       metadataModified(false),
       state(PlaybackState::IDLE),
-      playbackStartUs(0),
-      loopsRemaining(0),
+      motionTaskHandle(nullptr),
+      stepTimer(nullptr),
+      taskRunning(false),
+      stopRequested(false),
       uploadExpectedSize(0),
       uploadReceivedSize(0),
       uploadInProgress(false),
       homingTimeoutMs(10000),
-      homingStartMs(0),
-      evalTimer(nullptr),
-      stateMutex(nullptr),
-      stopRequested(false)
+      homingStartMs(0)
 {
-    // Initialize arrays
     for (int i = 0; i < NUM_MOTORS; i++) {
         currentPosition[i] = 0;
         targetPosition[i] = 0;
-        currentKnotIndex[i] = 0;
+        targetDirection[i] = false;
         homingInProgress[i] = false;
         homingDirection[i] = -1;
     }
+    playbackStartUs = 0;
+    loopsRemaining = 0;
 }
 
 StepperMotorComponent::~StepperMotorComponent() {
-    // Stop timer
-    if (evalTimer) {
-        esp_timer_stop(evalTimer);
-        esp_timer_delete(evalTimer);
+    // Stop playback first
+    stopPlayback();
+    
+    // Wait for task to finish
+    if (motionTaskHandle) {
+        taskRunning = false;
+        vTaskDelay(pdMS_TO_TICKS(100));
+        // Task should have exited, but just in case
+        vTaskDelete(motionTaskHandle);
+        motionTaskHandle = nullptr;
     }
     
-    // Cleanup mutex
-    if (stateMutex) {
-        vSemaphoreDelete(stateMutex);
+    // Stop and delete timer
+    if (stepTimer) {
+        esp_timer_stop(stepTimer);
+        esp_timer_delete(stepTimer);
+        stepTimer = nullptr;
     }
     
     // Cleanup HAL
@@ -147,14 +184,7 @@ void StepperMotorComponent::setHAL(StepperMotorHAL* newHal) {
 // ============================================================================
 
 void StepperMotorComponent::onInitialize() {
-    ESP_LOGI(TAG, "Initializing StepperMotorComponent");
-    
-    // Create state mutex
-    stateMutex = xSemaphoreCreateMutex();
-    if (!stateMutex) {
-        ESP_LOGE(TAG, "Failed to create state mutex");
-        return;
-    }
+    ESP_LOGI(TAG, "Initializing StepperMotorComponent (3-tier architecture)");
     
     // If no HAL provided, use stub
     if (!hal) {
@@ -169,7 +199,7 @@ void StepperMotorComponent::onInitialize() {
         return;
     }
     
-    // Initialize SPIFFS (may already be initialized by another component)
+    // Initialize SPIFFS
     esp_vfs_spiffs_conf_t conf = {
         .base_path = SPIFFS_BASE_PATH,
         .partition_label = NULL,
@@ -178,7 +208,6 @@ void StepperMotorComponent::onInitialize() {
     };
     err = esp_vfs_spiffs_register(&conf);
     if (err == ESP_ERR_INVALID_STATE) {
-        // Already mounted, that's fine
         ESP_LOGI(TAG, "SPIFFS already mounted");
     } else if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to mount SPIFFS: %d", err);
@@ -212,7 +241,7 @@ void StepperMotorComponent::onInitialize() {
         }
     });
     
-    stateParam = addIntParam("state", 1, 1, 0, 4, 0, true);  // Read-only
+    stateParam = addIntParam("state", 1, 1, 0, 5, 0, true);
     
     // Playback status (read-only)
     playbackProgressParam = addFloatParam("playbackProgress", 1, 1, 0.0f, 1.0f, 0.0f, true);
@@ -228,7 +257,7 @@ void StepperMotorComponent::onInitialize() {
     homeCommand->setOnChange([this](size_t, size_t, bool val) {
         if (val) {
             startHoming();
-            homeCommand->setValueQuiet(0, 0, false);  // Reset trigger
+            homeCommand->setValueQuiet(0, 0, false);
         }
     });
     isHomed = addBoolParam("isHomed", 1, 1, false, true);
@@ -264,7 +293,6 @@ void StepperMotorComponent::onInitialize() {
     uploadChunkData = addStringParam("uploadChunkData", 1, 1, "");
     uploadChunkData->setOnChange([this](size_t, size_t, const std::string& val) {
         if (!val.empty() && uploadInProgress) {
-            // Decode base64 and upload chunk
             std::vector<uint8_t> decoded(val.size());
             size_t decoded_len = base64_decode(val.c_str(), val.size(), decoded.data());
             uint16_t chunk_idx = uploadChunkIndex->getValue(0, 0);
@@ -280,7 +308,7 @@ void StepperMotorComponent::onInitialize() {
         }
     });
     
-    // Delete parameter
+    // Delete/Query parameters
     deleteChoreographyParam = addIntParam("deleteChoreography", 1, 1, -1, 1000, -1);
     deleteChoreographyParam->setOnChange([this](size_t, size_t, int32_t val) {
         if (val >= 0) {
@@ -289,7 +317,6 @@ void StepperMotorComponent::onInitialize() {
         }
     });
     
-    // Query parameters
     queryChoreographyIndex = addIntParam("queryChoreographyIndex", 1, 1, -1, 1000, -1);
     queryChoreographyIndex->setOnChange([this](size_t, size_t, int32_t val) {
         if (val >= 0 && choreographyMeta.count(val)) {
@@ -307,43 +334,529 @@ void StepperMotorComponent::onInitialize() {
     
     // Configuration
     chunkSizeParam = addIntParam("chunkSize", 1, 1, 0, 65536, UPLOAD_CHUNK_SIZE, true);
-    evalRateHz = addFloatParam("evalRateHz", 1, 1, 100, 10000, DEFAULT_EVAL_RATE_HZ);
     
-    // Microstepping configuration (default 1/16)
+    isrRateHz = addIntParam("isrRateHz", 1, 1, 1000, MAX_ISR_RATE_HZ, DEFAULT_ISR_RATE_HZ);
+    
+    maxRpmParam = addIntParam("maxRpm", 1, 1, 1, 3000, 1200);
+    maxRpmParam->setOnChange([this](size_t, size_t, int32_t val) {
+        // Recalculate ISR rate based on max RPM
+        uint32_t newRate = calculateRequiredIsrRate();
+        isrRateHz->setValueQuiet(0, 0, newRate);
+        ESP_LOGI(TAG, "Max RPM set to %ld, ISR rate now %lu Hz", val, newRate);
+    });
+    
     microsteppingParam = addIntParam("microstepping", 1, 1, 1, 256, 16);
     microsteppingParam->setOnChange([this](size_t, size_t, int32_t val) {
         if (hal) {
             if (!hal->setMicrostepping(val)) {
-                ESP_LOGW(TAG, "HAL rejected microstepping value %ld", val);
-                // Revert to current HAL value
                 microsteppingParam->setValueQuiet(0, 0, hal->getMicrostepping());
+            } else {
+                // Recalculate ISR rate
+                uint32_t newRate = calculateRequiredIsrRate();
+                isrRateHz->setValueQuiet(0, 0, newRate);
             }
         }
     });
     
     microsteppingConfigurable = addBoolParam("microsteppingConfigurable", 1, 1, false, true);
     
-    // Set initial microstepping and update configurable flag
+    // Set initial microstepping
     if (hal) {
-        hal->setMicrostepping(16);  // Default to 1/16
+        hal->setMicrostepping(16);
         microsteppingConfigurable->setValueQuiet(0, 0, hal->isMicrosteppingSoftwareConfigurable());
     }
     
-    // Create high-precision timer for ISR
+    // Create step timer (ISR dispatch)
     esp_timer_create_args_t timer_args = {
-        .callback = evalTimerCallback,
+        .callback = stepTimerCallback,
         .arg = this,
         .dispatch_method = ESP_TIMER_ISR,
-        .name = "stepper_eval",
+        .name = "stepper_step",
         .skip_unhandled_events = true
     };
     
-    err = esp_timer_create(&timer_args, &evalTimer);
+    err = esp_timer_create(&timer_args, &stepTimer);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create eval timer: %d", err);
+        ESP_LOGE(TAG, "Failed to create step timer: %d", err);
     }
     
+    // Calculate initial ISR rate
+    uint32_t rate = calculateRequiredIsrRate();
+    isrRateHz->setValueQuiet(0, 0, rate);
+    
     ESP_LOGI(TAG, "StepperMotorComponent initialized");
+    ESP_LOGI(TAG, "  Waypoint interval: %.3f sec (%d Hz)", WAYPOINT_INTERVAL_SEC, (int)(1.0f/WAYPOINT_INTERVAL_SEC));
+    ESP_LOGI(TAG, "  Task rate: %lu Hz", TASK_RATE_HZ);
+    ESP_LOGI(TAG, "  ISR rate: %lu Hz", rate);
+}
+
+// ============================================================================
+// ISR Rate Calculation
+// ============================================================================
+
+uint32_t StepperMotorComponent::calculateRequiredIsrRate() const {
+    // Calculate required step rate for max RPM
+    // steps/sec = (RPM / 60) * steps_per_rev * microstepping
+    
+    uint32_t rpm = maxRpmParam ? maxRpmParam->getValue(0, 0) : 1200;
+    uint32_t microstepping = microsteppingParam ? microsteppingParam->getValue(0, 0) : 16;
+    uint32_t steps_per_rev = 200;  // Standard NEMA 17
+    
+    uint32_t steps_per_sec = (rpm * steps_per_rev * microstepping) / 60;
+    
+    // Add 25% headroom
+    uint32_t rate = (steps_per_sec * 125) / 100;
+    
+    // Clamp to valid range
+    if (rate < 1000) rate = 1000;
+    if (rate > MAX_ISR_RATE_HZ) rate = MAX_ISR_RATE_HZ;
+    
+    return rate;
+}
+
+// ============================================================================
+// Trajectory Precomputation
+// ============================================================================
+
+float StepperMotorComponent::hermiteEval(float t, const SplineKnot& k0, const SplineKnot& k1) {
+    float dt = k1.t - k0.t;
+    if (dt < 1e-9f) return (float)k0.pos_steps;
+    
+    float s = (t - k0.t) / dt;
+    float s2 = s * s;
+    float s3 = s2 * s;
+    
+    float h00 = 2.0f * s3 - 3.0f * s2 + 1.0f;
+    float h10 = s3 - 2.0f * s2 + s;
+    float h01 = -2.0f * s3 + 3.0f * s2;
+    float h11 = s3 - s2;
+    
+    return h00 * k0.pos_steps + h10 * (k0.vel_sps * dt) + 
+           h01 * k1.pos_steps + h11 * (k1.vel_sps * dt);
+}
+
+int32_t StepperMotorComponent::evaluateSplineAt(const std::vector<SplineKnot>& knots, float t) {
+    if (knots.empty()) return 0;
+    if (knots.size() == 1) return knots[0].pos_steps;
+    
+    // Find the knot interval containing t
+    size_t idx = 0;
+    while (idx < knots.size() - 2 && knots[idx + 1].t <= t) {
+        idx++;
+    }
+    
+    // Clamp
+    if (idx >= knots.size() - 1) {
+        idx = knots.size() - 2;
+    }
+    
+    return (int32_t)roundf(hermiteEval(t, knots[idx], knots[idx + 1]));
+}
+
+esp_err_t StepperMotorComponent::precomputeTrajectory() {
+    if (!activeChoreography.valid) {
+        ESP_LOGE(TAG, "Cannot precompute: no valid choreography");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    ESP_LOGI(TAG, "Precomputing trajectory (duration: %.2fs, interval: %.3fs)",
+             activeChoreography.duration_sec, WAYPOINT_INTERVAL_SEC);
+    
+    transitionTo(PlaybackState::PRECOMPUTING);
+    
+    float duration = activeChoreography.duration_sec;
+    size_t numWaypoints = (size_t)(duration / WAYPOINT_INTERVAL_SEC) + 2;
+    
+    // Estimate memory usage
+    size_t memBytes = numWaypoints * NUM_MOTORS * sizeof(Waypoint);
+    ESP_LOGI(TAG, "  Waypoints: %zu per motor, %zu KB total", numWaypoints, memBytes / 1024);
+    
+    // Clear and reserve
+    trajectory.valid = false;
+    trajectory.duration_sec = duration;
+    trajectory.waypointInterval_sec = WAYPOINT_INTERVAL_SEC;
+    
+    for (int m = 0; m < NUM_MOTORS; m++) {
+        trajectory.motors[m].waypoints.clear();
+        trajectory.motors[m].waypoints.reserve(numWaypoints);
+        trajectory.motors[m].currentIndex = 0;
+        
+        const auto& knots = activeChoreography.knots[m];
+        
+        // Sample the spline at regular intervals
+        for (size_t i = 0; i < numWaypoints; i++) {
+            float t = i * WAYPOINT_INTERVAL_SEC;
+            if (t > duration) t = duration;
+            
+            Waypoint wp;
+            wp.t = t;
+            wp.pos_steps = evaluateSplineAt(knots, t);
+            trajectory.motors[m].waypoints.push_back(wp);
+        }
+        
+        ESP_LOGD(TAG, "  Motor %d: %zu waypoints", m, trajectory.motors[m].waypoints.size());
+    }
+    
+    trajectory.valid = true;
+    transitionTo(PlaybackState::ARMED);
+    
+    ESP_LOGI(TAG, "Trajectory precomputation complete");
+    return ESP_OK;
+}
+
+// ============================================================================
+// Motion Planning Task (Tier 2)
+// ============================================================================
+
+void StepperMotorComponent::motionTaskWrapper(void* arg) {
+    StepperMotorComponent* self = static_cast<StepperMotorComponent*>(arg);
+    self->motionTask();
+}
+
+void StepperMotorComponent::motionTask() {
+    ESP_LOGI(TAG, "Motion task started on core %d", xPortGetCoreID());
+    
+    const TickType_t taskPeriod = pdMS_TO_TICKS(1000 / TASK_RATE_HZ);
+    TickType_t lastWakeTime = xTaskGetTickCount();
+    
+    while (taskRunning.load()) {
+        PlaybackState currentState = state.load();
+        
+        if (currentState == PlaybackState::PLAYING && trajectory.valid) {
+            // Calculate current playback time
+            int64_t now_us = esp_timer_get_time();
+            int64_t start_us = playbackStartUs.load();
+            float t = (float)(now_us - start_us) * 1e-6f;
+            
+            // Check for end of choreography
+            if (t >= trajectory.duration_sec) {
+                int16_t loops = loopsRemaining.load();
+                if (loops > 0) {
+                    loops--;
+                    loopsRemaining.store(loops);
+                }
+                
+                if (loops == 0) {
+                    stopRequested.store(true);
+                    continue;
+                }
+                
+                // Loop: reset time
+                playbackStartUs.store(now_us);
+                t = 0;
+                trajectory.reset();
+            }
+            
+            // Update target positions from precomputed trajectory
+            for (int m = 0; m < NUM_MOTORS; m++) {
+                int32_t target = trajectory.motors[m].getPosition(t);
+                int32_t current = currentPosition[m].load();
+                
+                targetPosition[m].store(target);
+                targetDirection[m].store(target > current);
+                
+                // Update read-only params (not every tick - would be too much)
+                // We'll do this less frequently
+            }
+            
+            // Update playback progress (less frequently to avoid overhead)
+            static uint32_t updateCounter = 0;
+            if (++updateCounter >= TASK_RATE_HZ / 10) {  // 10 Hz update
+                updateCounter = 0;
+                playbackProgressParam->setValueQuiet(0, 0, t / trajectory.duration_sec);
+                playbackTimeParam->setValueQuiet(0, 0, t);
+                
+                for (int m = 0; m < NUM_MOTORS; m++) {
+                    motorPositions->setValueQuiet(m, 0, currentPosition[m].load());
+                    motorTargets->setValueQuiet(m, 0, targetPosition[m].load());
+                }
+            }
+        }
+        
+        // Check for stop request
+        if (stopRequested.load()) {
+            stopRequested.store(false);
+            stopPlayback();
+        }
+        
+        vTaskDelayUntil(&lastWakeTime, taskPeriod);
+    }
+    
+    ESP_LOGI(TAG, "Motion task exiting");
+    vTaskDelete(NULL);
+}
+
+// ============================================================================
+// Step Generation ISR (Tier 3)
+// ============================================================================
+
+void IRAM_ATTR StepperMotorComponent::stepTimerCallback(void* arg) {
+    StepperMotorComponent* self = static_cast<StepperMotorComponent*>(arg);
+    self->stepTimerISR();
+}
+
+void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
+    PlaybackState currentState = state.load();
+    
+    if (currentState == PlaybackState::HOMING) {
+        homingStepISR();
+        return;
+    }
+    
+    if (currentState != PlaybackState::PLAYING) {
+        return;
+    }
+    
+    // Step each motor toward its target
+    // This is the hottest path - keep it minimal
+    for (uint8_t m = 0; m < NUM_MOTORS; m++) {
+        int32_t current = currentPosition[m].load();
+        int32_t target = targetPosition[m].load();
+        
+        if (current != target) {
+            bool dir = (target > current);
+            hal->setDirection(m, dir);
+            hal->step(m);
+            currentPosition[m].store(current + (dir ? 1 : -1));
+        }
+    }
+}
+
+void IRAM_ATTR StepperMotorComponent::homingStepISR() {
+    bool all_done = true;
+    
+    for (uint8_t m = 0; m < NUM_MOTORS; m++) {
+        if (!homingInProgress[m]) continue;
+        
+        all_done = false;
+        
+        if (hal->isLimitTriggered(m)) {
+            // Hit limit - back off
+            hal->setDirection(m, true);
+            for (int s = 0; s < 50; s++) {
+                hal->step(m);
+            }
+            currentPosition[m].store(0);
+            homingInProgress[m] = false;
+        } else {
+            hal->setDirection(m, false);
+            hal->step(m);
+        }
+    }
+    
+    if (all_done) {
+        // Homing complete - will be handled by task
+        stopRequested.store(true);
+    }
+}
+
+// ============================================================================
+// Playback Control
+// ============================================================================
+
+esp_err_t StepperMotorComponent::startPlayback() {
+    if (!trajectory.valid) {
+        ESP_LOGE(TAG, "No valid trajectory - load a choreography first");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    PlaybackState currentState = state.load();
+    if (currentState == PlaybackState::E_STOP) {
+        ESP_LOGE(TAG, "Cannot start in E-STOP state");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    if (currentState == PlaybackState::PLAYING) {
+        ESP_LOGW(TAG, "Already playing");
+        return ESP_OK;
+    }
+    
+    ESP_LOGI(TAG, "Starting playback");
+    
+    // Reset trajectory indices
+    trajectory.reset();
+    
+    // Set initial targets
+    for (int m = 0; m < NUM_MOTORS; m++) {
+        if (!trajectory.motors[m].waypoints.empty()) {
+            targetPosition[m].store(trajectory.motors[m].waypoints[0].pos_steps);
+        }
+    }
+    
+    // Record start time
+    playbackStartUs.store(esp_timer_get_time());
+    loopsRemaining.store(activeChoreography.loop_count);
+    
+    // Enable drivers
+    if (hal) {
+        hal->setEnabled(0xFF, true);
+    }
+    
+    // Start motion task if not already running
+    if (!motionTaskHandle) {
+        taskRunning.store(true);
+        BaseType_t result = xTaskCreatePinnedToCore(
+            motionTaskWrapper,
+            "stepper_motion",
+            4096,
+            this,
+            tskIDLE_PRIORITY + 3,  // Higher than webserver
+            &motionTaskHandle,
+            1   // Core 1 (away from WiFi)
+        );
+        
+        if (result != pdPASS) {
+            ESP_LOGE(TAG, "Failed to create motion task");
+            return ESP_FAIL;
+        }
+    }
+    
+    // Start step timer
+    uint32_t rate = isrRateHz->getValue(0, 0);
+    uint64_t period_us = 1000000 / rate;
+    esp_timer_start_periodic(stepTimer, period_us);
+    
+    transitionTo(PlaybackState::PLAYING);
+    playing->setValueQuiet(0, 0, true);
+    enableDrivers->setValueQuiet(0, 0, true);
+    
+    ESP_LOGI(TAG, "Playback started (ISR period: %llu µs = %lu Hz)", period_us, rate);
+    return ESP_OK;
+}
+
+void StepperMotorComponent::stopPlayback() {
+    ESP_LOGI(TAG, "Stopping playback");
+    
+    // Stop timer first
+    if (stepTimer) {
+        esp_timer_stop(stepTimer);
+    }
+    
+    // Stop task
+    taskRunning.store(false);
+    if (motionTaskHandle) {
+        // Give task time to exit
+        vTaskDelay(pdMS_TO_TICKS(50));
+        motionTaskHandle = nullptr;
+    }
+    
+    transitionTo(PlaybackState::IDLE);
+    playing->setValueQuiet(0, 0, false);
+}
+
+void StepperMotorComponent::emergencyStop() {
+    ESP_LOGW(TAG, "EMERGENCY STOP");
+    
+    // Stop everything immediately
+    if (stepTimer) {
+        esp_timer_stop(stepTimer);
+    }
+    
+    taskRunning.store(false);
+    
+    // Disable drivers
+    if (hal) {
+        hal->setEnabled(0xFF, false);
+    }
+    
+    transitionTo(PlaybackState::E_STOP);
+    playing->setValueQuiet(0, 0, false);
+    enableDrivers->setValueQuiet(0, 0, false);
+}
+
+void StepperMotorComponent::clearEmergencyStop() {
+    if (state.load() != PlaybackState::E_STOP) {
+        return;
+    }
+    
+    transitionTo(PlaybackState::IDLE);
+    ESP_LOGI(TAG, "E-STOP cleared");
+}
+
+esp_err_t StepperMotorComponent::startHoming() {
+    PlaybackState currentState = state.load();
+    if (currentState == PlaybackState::PLAYING || currentState == PlaybackState::E_STOP) {
+        ESP_LOGE(TAG, "Cannot home in current state");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    for (int i = 0; i < NUM_MOTORS; i++) {
+        homingInProgress[i] = true;
+        homingDirection[i] = -1;
+    }
+    homingStartMs = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    
+    if (hal) {
+        hal->setEnabled(0xFF, true);
+    }
+    
+    transitionTo(PlaybackState::HOMING);
+    isHomed->setValueQuiet(0, 0, false);
+    
+    // Start timer for homing (slower rate)
+    esp_timer_start_periodic(stepTimer, 1000);  // 1 kHz
+    
+    ESP_LOGI(TAG, "Homing started");
+    return ESP_OK;
+}
+
+// ============================================================================
+// Choreography Loading
+// ============================================================================
+
+esp_err_t StepperMotorComponent::loadChoreography(int16_t index) {
+    auto it = choreographyMeta.find(index);
+    if (it == choreographyMeta.end()) {
+        ESP_LOGE(TAG, "Choreography %d not found", index);
+        return ESP_ERR_NOT_FOUND;
+    }
+    
+    // Stop any current playback
+    if (state.load() == PlaybackState::PLAYING) {
+        stopPlayback();
+    }
+    
+    esp_err_t err = loadChoreographyFromSpiffs(it->second.filename, activeChoreography);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to load from SPIFFS");
+        return err;
+    }
+    
+    activeChoreography.name = it->second.name;
+    activeChoreographyIndex = index;
+    
+    ESP_LOGI(TAG, "Loaded choreography '%s' (ID %d)", activeChoreography.name.c_str(), index);
+    
+    // Precompute trajectory
+    err = precomputeTrajectory();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Trajectory precomputation failed");
+        return err;
+    }
+    
+    activeChoreographyParam->setValueQuiet(0, 0, index);
+    
+    return ESP_OK;
+}
+
+// ============================================================================
+// State Management
+// ============================================================================
+
+void StepperMotorComponent::transitionTo(PlaybackState newState) {
+    state.store(newState);
+    stateParam->setValueQuiet(0, 0, static_cast<int>(newState));
+}
+
+float StepperMotorComponent::getPlaybackProgress() const {
+    if (state.load() != PlaybackState::PLAYING || trajectory.duration_sec <= 0) {
+        return 0.0f;
+    }
+    
+    int64_t now_us = esp_timer_get_time();
+    int64_t start_us = playbackStartUs.load();
+    float t = (float)(now_us - start_us) * 1e-6f;
+    return std::min(1.0f, t / trajectory.duration_sec);
 }
 
 // ============================================================================
@@ -353,11 +866,9 @@ void StepperMotorComponent::onInitialize() {
 void StepperMotorComponent::saveCustomData(nvs_handle_t handle) {
     ESP_LOGI(TAG, "Saving choreography metadata to NVS");
     
-    // Save count
     uint16_t count = choreographyMeta.size();
     nvs_set_u16(handle, "choreo_count", count);
     
-    // Save each entry
     int idx = 0;
     for (const auto& [id, meta] : choreographyMeta) {
         char key[32];
@@ -380,9 +891,7 @@ void StepperMotorComponent::saveCustomData(nvs_handle_t handle) {
         idx++;
     }
     
-    // Save active choreography index
     nvs_set_i16(handle, "active_choreo", activeChoreographyIndex);
-    
     metadataModified = false;
 }
 
@@ -429,7 +938,6 @@ void StepperMotorComponent::loadCustomData(nvs_handle_t handle) {
         choreographyMeta[id] = meta;
     }
     
-    // Load active choreography
     int16_t active = -1;
     nvs_get_i16(handle, "active_choreo", &active);
     activeChoreographyIndex = active;
@@ -441,7 +949,6 @@ void StepperMotorComponent::loadCustomData(nvs_handle_t handle) {
 }
 
 void StepperMotorComponent::onPostLoadReconcile() {
-    // If we have an active choreography, try to load it
     if (activeChoreographyIndex >= 0 && choreographyMeta.count(activeChoreographyIndex)) {
         loadChoreography(activeChoreographyIndex);
     }
@@ -457,7 +964,6 @@ esp_err_t StepperMotorComponent::uploadBegin(const std::string& name, size_t tot
         return ESP_ERR_NO_MEM;
     }
     
-    // Allocate buffer
     uploadBuffer.clear();
     uploadBuffer.reserve(total_bytes);
     uploadExpectedSize = total_bytes;
@@ -471,20 +977,13 @@ esp_err_t StepperMotorComponent::uploadBegin(const std::string& name, size_t tot
 
 esp_err_t StepperMotorComponent::uploadChunk(uint16_t chunk_index, const uint8_t* data, size_t len) {
     if (!uploadInProgress) {
-        ESP_LOGE(TAG, "No upload in progress");
         return ESP_ERR_INVALID_STATE;
-    }
-    
-    size_t expected_offset = chunk_index * UPLOAD_CHUNK_SIZE;
-    if (expected_offset != uploadReceivedSize) {
-        ESP_LOGW(TAG, "Chunk %d: expected offset %zu, got %zu", chunk_index, uploadReceivedSize, expected_offset);
-        // Allow out-of-order for now, just append
     }
     
     uploadBuffer.insert(uploadBuffer.end(), data, data + len);
     uploadReceivedSize += len;
     
-    ESP_LOGD(TAG, "Chunk %d: received %zu bytes (total: %zu/%zu)", 
+    ESP_LOGD(TAG, "Chunk %d: %zu bytes (total: %zu/%zu)", 
              chunk_index, len, uploadReceivedSize, uploadExpectedSize);
     
     return ESP_OK;
@@ -492,43 +991,32 @@ esp_err_t StepperMotorComponent::uploadChunk(uint16_t chunk_index, const uint8_t
 
 esp_err_t StepperMotorComponent::uploadCommit() {
     if (!uploadInProgress) {
-        ESP_LOGE(TAG, "No upload in progress");
         return ESP_ERR_INVALID_STATE;
     }
     
     uploadInProgress = false;
     
-    ESP_LOGI(TAG, "Upload complete: %zu bytes received", uploadReceivedSize);
-    
-    // Parse JSON to validate and extract metadata
     Choreography choreo;
     esp_err_t err = parseChoreographyJson((const char*)uploadBuffer.data(), uploadBuffer.size(), choreo);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to parse choreography JSON");
         uploadBuffer.clear();
         return err;
     }
     
-    // Assign name
     choreo.name = uploadPendingName;
     
-    // Find next available ID
     int16_t newId = findNextChoreographyId();
     
-    // Generate filename
     char filename[32];
     snprintf(filename, sizeof(filename), "%s%03d.json", CHOREO_FILE_PREFIX, newId);
     choreo.filename = filename;
     
-    // Save to SPIFFS
     err = saveChoreographyToSpiffs(choreo.filename, uploadBuffer.data(), uploadBuffer.size());
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to save choreography to SPIFFS");
         uploadBuffer.clear();
         return err;
     }
     
-    // Add to metadata
     ChoreographyMeta meta;
     meta.name = choreo.name;
     meta.filename = choreo.filename;
@@ -537,10 +1025,9 @@ esp_err_t StepperMotorComponent::uploadCommit() {
     choreographyMeta[newId] = meta;
     metadataModified = true;
     
-    // Cleanup
     uploadBuffer.clear();
     
-    ESP_LOGI(TAG, "Choreography '%s' saved with ID %d (duration: %.2fs)", 
+    ESP_LOGI(TAG, "Choreography '%s' saved (ID %d, %.2fs)", 
              choreo.name.c_str(), newId, choreo.duration_sec);
     
     updateStatusParams();
@@ -552,63 +1039,23 @@ esp_err_t StepperMotorComponent::uploadCommit() {
 void StepperMotorComponent::deleteChoreography(int16_t index) {
     auto it = choreographyMeta.find(index);
     if (it == choreographyMeta.end()) {
-        ESP_LOGW(TAG, "Choreography %d not found", index);
         return;
     }
     
-    // Delete file from SPIFFS
     std::string filepath = std::string(SPIFFS_BASE_PATH) + "/" + it->second.filename;
     remove(filepath.c_str());
     
-    // Remove from metadata
     choreographyMeta.erase(it);
     metadataModified = true;
     
-    // If this was the active choreography, clear it
     if (activeChoreographyIndex == index) {
         activeChoreographyIndex = -1;
         activeChoreography = Choreography();
+        trajectory.valid = false;
     }
-    
-    ESP_LOGI(TAG, "Choreography %d deleted", index);
     
     updateStatusParams();
     updateChoreographyIdsParam();
-}
-
-// ============================================================================
-// Choreography Loading
-// ============================================================================
-
-esp_err_t StepperMotorComponent::loadChoreography(int16_t index) {
-    auto it = choreographyMeta.find(index);
-    if (it == choreographyMeta.end()) {
-        ESP_LOGE(TAG, "Choreography %d not found", index);
-        return ESP_ERR_NOT_FOUND;
-    }
-    
-    esp_err_t err = loadChoreographyFromSpiffs(it->second.filename, activeChoreography);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to load choreography from SPIFFS");
-        return err;
-    }
-    
-    activeChoreography.name = it->second.name;
-    activeChoreographyIndex = index;
-    
-    // Reset playback state
-    for (int i = 0; i < NUM_MOTORS; i++) {
-        currentKnotIndex[i] = 0;
-    }
-    
-    ESP_LOGI(TAG, "Loaded choreography '%s' (ID %d): %.2fs, %zu/%zu/%zu/%zu knots",
-             activeChoreography.name.c_str(), index, activeChoreography.duration_sec,
-             activeChoreography.knots[0].size(), activeChoreography.knots[1].size(),
-             activeChoreography.knots[2].size(), activeChoreography.knots[3].size());
-    
-    activeChoreographyParam->setValueQuiet(0, 0, index);
-    
-    return ESP_OK;
 }
 
 // ============================================================================
@@ -618,19 +1065,16 @@ esp_err_t StepperMotorComponent::loadChoreography(int16_t index) {
 esp_err_t StepperMotorComponent::parseChoreographyJson(const char* json, size_t len, Choreography& out) {
     cJSON* root = cJSON_ParseWithLength(json, len);
     if (!root) {
-        ESP_LOGE(TAG, "JSON parse error: %s", cJSON_GetErrorPtr() ? cJSON_GetErrorPtr() : "unknown");
+        ESP_LOGE(TAG, "JSON parse error");
         return ESP_ERR_INVALID_ARG;
     }
     
-    // Check format version
     cJSON* format_version = cJSON_GetObjectItem(root, "format_version");
     if (!format_version || format_version->valueint != 1) {
-        ESP_LOGE(TAG, "Invalid format_version (expected 1)");
         cJSON_Delete(root);
         return ESP_ERR_INVALID_ARG;
     }
     
-    // Parse motor parameters
     cJSON* motor = cJSON_GetObjectItem(root, "motor");
     if (motor) {
         cJSON* r_spool = cJSON_GetObjectItem(motor, "r_spool");
@@ -642,7 +1086,6 @@ esp_err_t StepperMotorComponent::parseChoreographyJson(const char* json, size_t 
         if (microstep_divisor) out.microstep_divisor = microstep_divisor->valueint;
     }
     
-    // Parse porch dimensions (optional, informational)
     cJSON* porch = cJSON_GetObjectItem(root, "porch");
     if (porch) {
         cJSON* lx = cJSON_GetObjectItem(porch, "Lx");
@@ -654,10 +1097,8 @@ esp_err_t StepperMotorComponent::parseChoreographyJson(const char* json, size_t 
         if (lz) out.porch_lz = (float)lz->valuedouble;
     }
     
-    // Parse spline knots per motor
     cJSON* spline_knots = cJSON_GetObjectItem(root, "spline_knots_per_motor");
     if (!spline_knots || !cJSON_IsArray(spline_knots)) {
-        ESP_LOGE(TAG, "Missing or invalid spline_knots_per_motor");
         cJSON_Delete(root);
         return ESP_ERR_INVALID_ARG;
     }
@@ -669,15 +1110,10 @@ esp_err_t StepperMotorComponent::parseChoreographyJson(const char* json, size_t 
         cJSON* motor_idx = cJSON_GetObjectItem(motor_knots, "motor");
         cJSON* knots_array = cJSON_GetObjectItem(motor_knots, "knots");
         
-        if (!motor_idx || !knots_array || !cJSON_IsArray(knots_array)) {
-            continue;
-        }
+        if (!motor_idx || !knots_array) continue;
         
         int idx = motor_idx->valueint;
-        if (idx < 0 || idx >= NUM_MOTORS) {
-            ESP_LOGW(TAG, "Skipping motor index %d (out of range)", idx);
-            continue;
-        }
+        if (idx < 0 || idx >= NUM_MOTORS) continue;
         
         out.knots[idx].clear();
         
@@ -697,20 +1133,16 @@ esp_err_t StepperMotorComponent::parseChoreographyJson(const char* json, size_t 
                 if (k.t > max_time) max_time = k.t;
             }
         }
-        
-        ESP_LOGD(TAG, "Motor %d: %zu knots", idx, out.knots[idx].size());
     }
     
     out.duration_sec = max_time;
-    out.loop_count = 1;  // Default: play once
+    out.loop_count = 1;
     out.valid = true;
     
     cJSON_Delete(root);
     
-    // Validate: each motor needs at least 2 knots
     for (int i = 0; i < NUM_MOTORS; i++) {
         if (out.knots[i].size() < 2) {
-            ESP_LOGE(TAG, "Motor %d has < 2 knots", i);
             out.valid = false;
             return ESP_ERR_INVALID_ARG;
         }
@@ -729,20 +1161,13 @@ esp_err_t StepperMotorComponent::saveChoreographyToSpiffs(const std::string& fil
     
     FILE* f = fopen(filepath.c_str(), "w");
     if (!f) {
-        ESP_LOGE(TAG, "Failed to open %s for writing", filepath.c_str());
         return ESP_FAIL;
     }
     
     size_t written = fwrite(data, 1, len, f);
     fclose(f);
     
-    if (written != len) {
-        ESP_LOGE(TAG, "Write failed: %zu/%zu bytes", written, len);
-        return ESP_FAIL;
-    }
-    
-    ESP_LOGI(TAG, "Saved %zu bytes to %s", len, filepath.c_str());
-    return ESP_OK;
+    return (written == len) ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t StepperMotorComponent::loadChoreographyFromSpiffs(const std::string& filename, 
@@ -751,302 +1176,29 @@ esp_err_t StepperMotorComponent::loadChoreographyFromSpiffs(const std::string& f
     
     FILE* f = fopen(filepath.c_str(), "r");
     if (!f) {
-        ESP_LOGE(TAG, "Failed to open %s for reading", filepath.c_str());
         return ESP_FAIL;
     }
     
-    // Get file size
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
     
     if (size <= 0 || size > (long)MAX_CHOREOGRAPHY_SIZE) {
-        ESP_LOGE(TAG, "Invalid file size: %ld", size);
         fclose(f);
         return ESP_FAIL;
     }
     
-    // Read file
     std::vector<char> buffer(size + 1);
     size_t read = fread(buffer.data(), 1, size, f);
     fclose(f);
     
     if (read != (size_t)size) {
-        ESP_LOGE(TAG, "Read failed: %zu/%ld bytes", read, size);
         return ESP_FAIL;
     }
     
     buffer[size] = '\0';
     
-    // Parse JSON
     return parseChoreographyJson(buffer.data(), size, out);
-}
-
-// ============================================================================
-// Playback Control
-// ============================================================================
-
-esp_err_t StepperMotorComponent::startPlayback() {
-    if (!activeChoreography.valid) {
-        ESP_LOGE(TAG, "No valid choreography loaded");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    if (state == PlaybackState::E_STOP) {
-        ESP_LOGE(TAG, "Cannot start playback in E-STOP state");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    // Reset playback state
-    playbackStartUs = esp_timer_get_time();
-    loopsRemaining = activeChoreography.loop_count;
-    
-    for (int i = 0; i < NUM_MOTORS; i++) {
-        currentKnotIndex[i] = 0;
-        targetPosition[i] = activeChoreography.knots[i][0].pos_steps;
-    }
-    
-    // Enable drivers
-    if (hal) {
-        hal->setEnabled(0xFF, true);
-    }
-    
-    // Start timer
-    uint64_t period_us = (uint64_t)(1000000.0f / evalRateHz->getValue(0, 0));
-    esp_timer_start_periodic(evalTimer, period_us);
-    
-    transitionTo(PlaybackState::PLAYING);
-    playing->setValueQuiet(0, 0, true);
-    
-    ESP_LOGI(TAG, "Playback started (period: %llu µs)", period_us);
-    return ESP_OK;
-}
-
-void StepperMotorComponent::stopPlayback() {
-    esp_timer_stop(evalTimer);
-    
-    transitionTo(PlaybackState::IDLE);
-    playing->setValueQuiet(0, 0, false);
-    
-    ESP_LOGI(TAG, "Playback stopped");
-}
-
-void StepperMotorComponent::emergencyStop() {
-    esp_timer_stop(evalTimer);
-    
-    // Disable all drivers immediately
-    if (hal) {
-        hal->setEnabled(0xFF, false);
-    }
-    
-    transitionTo(PlaybackState::E_STOP);
-    playing->setValueQuiet(0, 0, false);
-    enableDrivers->setValueQuiet(0, 0, false);
-    
-    ESP_LOGW(TAG, "EMERGENCY STOP");
-}
-
-void StepperMotorComponent::clearEmergencyStop() {
-    if (state != PlaybackState::E_STOP) {
-        return;
-    }
-    
-    transitionTo(PlaybackState::IDLE);
-    ESP_LOGI(TAG, "E-STOP cleared");
-}
-
-esp_err_t StepperMotorComponent::startHoming() {
-    if (state == PlaybackState::PLAYING || state == PlaybackState::E_STOP) {
-        ESP_LOGE(TAG, "Cannot home in current state");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    // Initialize homing state
-    for (int i = 0; i < NUM_MOTORS; i++) {
-        homingInProgress[i] = true;
-        homingDirection[i] = -1;  // Pay out (toward limit switch)
-    }
-    homingStartMs = xTaskGetTickCount() * portTICK_PERIOD_MS;
-    
-    // Enable drivers
-    if (hal) {
-        hal->setEnabled(0xFF, true);
-    }
-    
-    transitionTo(PlaybackState::HOMING);
-    isHomed->setValueQuiet(0, 0, false);
-    
-    // Start timer for homing steps
-    esp_timer_start_periodic(evalTimer, 1000);  // 1 kHz for homing
-    
-    ESP_LOGI(TAG, "Homing started");
-    return ESP_OK;
-}
-
-// ============================================================================
-// Spline Evaluation
-// ============================================================================
-
-float StepperMotorComponent::hermiteEval(float t, const SplineKnot& k0, const SplineKnot& k1) {
-    float dt = k1.t - k0.t;
-    if (dt < 1e-9f) return (float)k0.pos_steps;
-    
-    float s = (t - k0.t) / dt;
-    float s2 = s * s;
-    float s3 = s2 * s;
-    
-    float h00 = 2.0f * s3 - 3.0f * s2 + 1.0f;
-    float h10 = s3 - 2.0f * s2 + s;
-    float h01 = -2.0f * s3 + 3.0f * s2;
-    float h11 = s3 - s2;
-    
-    return h00 * k0.pos_steps + h10 * (k0.vel_sps * dt) + 
-           h01 * k1.pos_steps + h11 * (k1.vel_sps * dt);
-}
-
-int32_t StepperMotorComponent::evaluateMotorPosition(uint8_t motor_index, float t) {
-    const auto& knots = activeChoreography.knots[motor_index];
-    uint16_t& knot_idx = currentKnotIndex[motor_index];
-    
-    // Advance knot window if needed
-    while (knot_idx < knots.size() - 2 && knots[knot_idx + 1].t <= t) {
-        knot_idx++;
-    }
-    
-    // Clamp to valid range
-    if (knot_idx >= knots.size() - 1) {
-        knot_idx = knots.size() - 2;
-    }
-    
-    const SplineKnot& k0 = knots[knot_idx];
-    const SplineKnot& k1 = knots[knot_idx + 1];
-    
-    return (int32_t)roundf(hermiteEval(t, k0, k1));
-}
-
-// ============================================================================
-// ISR Callback
-// ============================================================================
-
-void IRAM_ATTR StepperMotorComponent::evalTimerCallback(void* arg) {
-    StepperMotorComponent* self = static_cast<StepperMotorComponent*>(arg);
-    self->evalTimerISR();
-}
-
-void IRAM_ATTR StepperMotorComponent::evalTimerISR() {
-    if (state == PlaybackState::HOMING) {
-        homingStep();
-        return;
-    }
-    
-    if (state != PlaybackState::PLAYING || !activeChoreography.valid) {
-        return;
-    }
-    
-    // Calculate current time
-    int64_t now_us = esp_timer_get_time();
-    float t = (float)(now_us - playbackStartUs) * 1e-6f;
-    
-    // Check for end of choreography
-    if (t >= activeChoreography.duration_sec) {
-        if (loopsRemaining > 0) {
-            loopsRemaining--;
-        }
-        
-        if (loopsRemaining == 0) {
-            // Stop playback (can't call stopPlayback from ISR, set flag)
-            stopRequested = true;
-            return;
-        }
-        
-        // Loop: reset time
-        playbackStartUs = now_us;
-        t = 0;
-        for (int i = 0; i < NUM_MOTORS; i++) {
-            currentKnotIndex[i] = 0;
-        }
-    }
-    
-    // Evaluate splines and step motors
-    for (uint8_t i = 0; i < NUM_MOTORS; i++) {
-        targetPosition[i] = evaluateMotorPosition(i, t);
-        int32_t delta = targetPosition[i] - currentPosition[i];
-        
-        if (delta != 0) {
-            hal->setDirection(i, delta > 0);
-            
-            // Step toward target
-            int32_t steps_to_take = (delta > 0) ? delta : -delta;
-            // In a real implementation, we'd limit steps per ISR tick
-            // For now, assume we can catch up
-            for (int32_t s = 0; s < steps_to_take && s < 10; s++) {
-                hal->step(i);
-            }
-            
-            currentPosition[i] += (delta > 0) ? std::min(steps_to_take, 10L) 
-                                              : -std::min(steps_to_take, 10L);
-        }
-    }
-}
-
-void StepperMotorComponent::homingStep() {
-    bool all_done = true;
-    
-    for (uint8_t i = 0; i < NUM_MOTORS; i++) {
-        if (!homingInProgress[i]) continue;
-        
-        all_done = false;
-        
-        if (hal->isLimitTriggered(i)) {
-            // Hit limit switch - back off a bit
-            hal->setDirection(i, true);  // Retract
-            for (int s = 0; s < 50; s++) {
-                hal->step(i);
-            }
-            currentPosition[i] = 0;
-            homingInProgress[i] = false;
-            ESP_LOGI(TAG, "Motor %d homed", i);
-        } else {
-            // Keep moving toward limit
-            hal->setDirection(i, false);  // Extend/pay out
-            hal->step(i);
-        }
-    }
-    
-    // Check timeout
-    uint32_t elapsed = (xTaskGetTickCount() * portTICK_PERIOD_MS) - homingStartMs;
-    if (elapsed > homingTimeoutMs) {
-        ESP_LOGE(TAG, "Homing timeout");
-        esp_timer_stop(evalTimer);
-        transitionTo(PlaybackState::IDLE);
-        return;
-    }
-    
-    if (all_done) {
-        esp_timer_stop(evalTimer);
-        isHomed->setValue(0, 0, true);
-        transitionTo(PlaybackState::IDLE);
-        ESP_LOGI(TAG, "Homing complete");
-    }
-}
-
-// ============================================================================
-// State Management
-// ============================================================================
-
-void StepperMotorComponent::transitionTo(PlaybackState newState) {
-    state = newState;
-    stateParam->setValueQuiet(0, 0, static_cast<int>(newState));
-}
-
-float StepperMotorComponent::getPlaybackProgress() const {
-    if (state != PlaybackState::PLAYING || activeChoreography.duration_sec <= 0) {
-        return 0.0f;
-    }
-    
-    int64_t now_us = esp_timer_get_time();
-    float t = (float)(now_us - playbackStartUs) * 1e-6f;
-    return std::min(1.0f, t / activeChoreography.duration_sec);
 }
 
 // ============================================================================

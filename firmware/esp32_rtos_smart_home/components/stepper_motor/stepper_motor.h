@@ -13,32 +13,67 @@
 /**
  * Stepper Motor Component - Multi-Choreography Cubic Hermite Spline Playback
  * 
- * Drives 4 stepper motors via a Hardware Abstraction Layer (HAL).
- * Stores MULTIPLE choreographies (deployment JSONs) and plays whichever one
- * is selected via the active_choreography parameter.
+ * ============================================================================
+ * ARCHITECTURE (Three-Tier Motion Control)
+ * ============================================================================
  * 
- * This component is designed for the Floating Candle project:
- * - 4 cable-driven motors controlling a suspended candle's XYZ position
- * - Each motor follows a cubic Hermite spline defined by knot points
- * - Coordinated playback at 2kHz evaluation rate via ISR
+ * This component uses a three-tier architecture to achieve high step rates
+ * (up to 64 kHz per motor for 1200 RPM at 1/16 microstepping) while keeping
+ * the real-time motion smooth:
  * 
- * Storage: Choreographies are stored on SPIFFS as JSON files.
- * The component stores only metadata (name, filename, duration) in NVS.
+ * TIER 1: Trajectory Precomputation (on choreography load)
+ * ---------------------------------------------------------
+ * When a choreography is loaded, the full spline is evaluated at fixed time
+ * intervals (e.g., every 10ms = 100 waypoints/sec). This produces a dense
+ * array of (time, position) waypoints per motor. The Hermite spline math
+ * happens ONCE at load time, not during playback.
  * 
- * States:
- * - IDLE (playing=false): Motors hold current position (or disabled)
+ * Memory: ~8 bytes per waypoint × 4 motors × (duration_sec × waypoints/sec)
+ * Example: 60s choreography @ 100 wp/s = 6000 waypoints × 4 motors × 8 bytes = 192 KB
+ * 
+ * TIER 2: Motion Planning Task (FreeRTOS, 100-500 Hz)
+ * ----------------------------------------------------
+ * A high-priority FreeRTOS task runs at 100-500 Hz. Each tick:
+ * - Looks up current playback time
+ * - Finds the surrounding waypoints in the precomputed array
+ * - Linearly interpolates to get smooth target positions
+ * - Writes to shared atomic target variables
+ * 
+ * This task does NOT touch GPIO. It just updates target positions.
+ * Priority: Higher than webserver (tskIDLE_PRIORITY + 3)
+ * Core: Pinned to core 1 (away from WiFi on core 0)
+ * 
+ * TIER 3: Step Generation ISR (esp_timer, up to 80 kHz)
+ * ------------------------------------------------------
+ * A minimal ISR fires at the required step rate. Each tick:
+ * - Reads current position and target position (atomics)
+ * - If delta != 0: set direction, pulse step pin, update position
+ * - No math, no memory allocation, no FreeRTOS API
+ * 
+ * The ISR is IRAM-resident and runs at whatever frequency is needed to
+ * achieve the target RPM. At 1200 RPM with 1/16 microstepping:
+ * - Steps/rev = 200 × 16 = 3200
+ * - Steps/sec = 1200/60 × 3200 = 64,000
+ * - ISR period = 15.6 µs
+ * 
+ * ============================================================================
+ * STORAGE
+ * ============================================================================
+ * 
+ * Choreographies are stored on SPIFFS as JSON files. Only metadata (name,
+ * filename, duration) is stored in NVS. On load, the JSON is parsed and
+ * the trajectory is precomputed into RAM.
+ * 
+ * ============================================================================
+ * STATES
+ * ============================================================================
+ * 
+ * - IDLE: Motors hold position (or disabled)
+ * - PRECOMPUTING: Loading choreography, evaluating splines (may take 1-2s)
  * - HOMING: Running homing sequence
- * - ARMED: Ready for playback, waiting for sync start
- * - PLAYING: Evaluating splines and stepping motors
+ * - ARMED: Ready for playback, waiting for start
+ * - PLAYING: Active playback (Task + ISR running)
  * - E_STOP: Emergency stop, drivers disabled
- * 
- * Choreography upload protocol (chunked):
- * 1. Set uploadName to start upload (names the new choreography)
- * 2. Set uploadTotalBytes to expected file size
- * 3. Set uploadChunkIndex, then uploadChunkData (base64) for each chunk
- * 4. Set uploadCommit=true to finalize — parses JSON, stores to SPIFFS
- * 5. Set activeChoreography to the desired index to load it
- * 6. Set playing=true to start playback
  */
 
 // ============================================================================
@@ -48,18 +83,6 @@
 /**
  * Motor Driver HAL - Abstract interface for stepper motor hardware.
  * 
- * Implement this interface for your specific hardware:
- * - A4988/DRV8825 step/dir drivers
- * - TMC2209 with UART
- * - Custom servo/stepper combinations
- * - etc.
- * 
- * The HAL handles:
- * - GPIO initialization for step/dir/enable pins
- * - Pulse generation (step timing, direction setting)
- * - Enable/disable driver outputs
- * - Limit switch reading (for homing)
- * 
  * Thread safety: All HAL methods may be called from the ISR context.
  * Implementations MUST be safe for ISR use (no blocking, no FreeRTOS API).
  */
@@ -67,15 +90,9 @@ class StepperMotorHAL {
 public:
     virtual ~StepperMotorHAL() = default;
     
-    // ========================================================================
-    // Initialization
-    // ========================================================================
-    
     /**
      * Initialize all motor driver hardware.
-     * Called once during component initialization.
-     * 
-     * @return ESP_OK on success, error code on failure
+     * @return ESP_OK on success
      */
     virtual esp_err_t init() = 0;
     
@@ -84,145 +101,99 @@ public:
      */
     virtual void deinit() = 0;
     
-    // ========================================================================
-    // Motor Control - ISR Safe
-    // ========================================================================
-    
     /**
-     * Set the direction for a motor.
-     * MUST be called before step() if direction changed.
-     * 
+     * Set the direction for a motor. MUST be called before step().
      * @param motor_index Motor index (0-3)
-     * @param direction true=retract (positive steps), false=extend (negative steps)
+     * @param direction true=positive, false=negative
      */
     virtual void setDirection(uint8_t motor_index, bool direction) = 0;
     
     /**
-     * Generate a step pulse on the specified motor.
-     * Single pulse, minimum 1µs width typical.
-     * 
+     * Generate a step pulse. Single pulse, minimum 1-2µs width.
      * @param motor_index Motor index (0-3)
      */
     virtual void step(uint8_t motor_index) = 0;
     
     /**
-     * Step multiple motors simultaneously (for synchronized motion).
-     * Generates step pulses on all motors in the bitmask.
-     * 
-     * @param motor_mask Bitmask of motors to step (bit 0 = motor 0, etc.)
+     * Step multiple motors simultaneously.
+     * @param motor_mask Bitmask of motors to step
      */
     virtual void stepMultiple(uint8_t motor_mask) = 0;
     
     /**
      * Enable or disable motor driver outputs.
-     * When disabled, motors can freewheel (no holding torque).
-     * 
-     * @param motor_index Motor index (0-3), or 0xFF for all motors
-     * @param enabled true=enabled (holding torque), false=disabled
+     * @param motor_index Motor index (0-3), or 0xFF for all
+     * @param enabled true=holding torque, false=freewheel
      */
     virtual void setEnabled(uint8_t motor_index, bool enabled) = 0;
     
-    // ========================================================================
-    // Limit Switches (for homing)
-    // ========================================================================
-    
     /**
-     * Check if a motor's limit switch is triggered.
-     * 
+     * Check if limit switch is triggered.
      * @param motor_index Motor index (0-3)
-     * @return true if limit switch is active (motor at home position)
+     * @return true if at home/limit
      */
     virtual bool isLimitTriggered(uint8_t motor_index) = 0;
     
-    // ========================================================================
-    // Configuration
-    // ========================================================================
-    
-    /**
-     * Get the number of motors supported by this HAL.
-     * @return Number of motors (typically 4)
-     */
+    /** Get number of motors supported */
     virtual uint8_t getMotorCount() const = 0;
     
-    /**
-     * Get the minimum step pulse width in microseconds.
-     * The ISR will ensure at least this delay between direction change and step.
-     * @return Minimum pulse width in µs
-     */
+    /** Get minimum step pulse width in microseconds */
     virtual uint32_t getMinPulseWidthUs() const = 0;
     
-    // ========================================================================
-    // Microstepping Configuration
-    // ========================================================================
-    
-    /**
-     * Set microstepping divisor.
-     * Common values: 1 (full), 2 (half), 4 (quarter), 8, 16, 32, 64, 128, 256
-     * 
-     * For drivers with hardware MS pins (A4988, DRV8825):
-     *   Implementation should set MS1/MS2/MS3 pins accordingly.
-     *   If MS pins are hardwired, this may be a no-op (returns false).
-     * 
-     * For drivers with software config (TMC2209 UART):
-     *   Implementation sends the config command.
-     * 
-     * @param divisor Microstepping divisor (1, 2, 4, 8, 16, 32, etc.)
-     * @return true if successfully set, false if not supported or invalid
-     */
+    /** Set microstepping divisor (1, 2, 4, 8, 16, 32, etc.) */
     virtual bool setMicrostepping(uint16_t divisor) = 0;
     
-    /**
-     * Get current microstepping divisor.
-     * @return Current divisor (1, 2, 4, 8, 16, etc.)
-     */
+    /** Get current microstepping divisor */
     virtual uint16_t getMicrostepping() const = 0;
     
-    /**
-     * Check if microstepping is software-configurable.
-     * @return true if setMicrostepping() can change the setting
-     */
+    /** Check if microstepping is software-configurable */
     virtual bool isMicrosteppingSoftwareConfigurable() const = 0;
 };
 
 // ============================================================================
-// Spline Data Structures
+// Data Structures
 // ============================================================================
 
 /**
- * A single knot point in the cubic Hermite spline.
+ * A single knot point in the cubic Hermite spline (from JSON).
  */
 struct SplineKnot {
-    float t;           // Time in seconds from choreography start
-    int32_t pos_steps; // Position in microsteps (absolute from home)
-    float vel_sps;     // Velocity in steps per second at this knot
+    float t;           // Time in seconds
+    int32_t pos_steps; // Position in microsteps
+    float vel_sps;     // Velocity in steps per second
 };
 
 /**
- * Parsed choreography data, ready for playback.
+ * A precomputed waypoint (dense trajectory sample).
+ */
+struct Waypoint {
+    float t;           // Time in seconds
+    int32_t pos_steps; // Position in microsteps
+};
+
+/**
+ * Parsed choreography data.
  */
 struct Choreography {
-    std::string name;                      // User-assigned name
-    std::string filename;                  // SPIFFS filename
+    std::string name;
+    std::string filename;
     
-    // Motor parameters (from JSON)
-    float r_spool;                         // Spool radius in meters
-    uint16_t steps_per_rev;                // Full steps per revolution
-    uint16_t microstep_divisor;            // Microstepping (e.g., 16 for 1/16)
+    // Motor parameters
+    float r_spool;
+    uint16_t steps_per_rev;
+    uint16_t microstep_divisor;
     
     // Porch dimensions (informational)
-    float porch_lx, porch_ly, porch_lz;    // Porch dimensions in meters
+    float porch_lx, porch_ly, porch_lz;
     
-    // Spline knots for each motor
-    std::vector<SplineKnot> knots[4];      // 4 motors
+    // Raw spline knots (from JSON)
+    std::vector<SplineKnot> knots[4];
     
-    // Duration
-    float duration_sec;                    // Total choreography duration
+    // Duration and loop
+    float duration_sec;
+    int16_t loop_count;
     
-    // Playback settings
-    int16_t loop_count;                    // -1=infinite, 1=once, N=N times
-    
-    // Validation
-    bool valid;                            // true if successfully parsed
+    bool valid;
     
     Choreography() : r_spool(0.015f), steps_per_rev(200), microstep_divisor(16),
                      porch_lx(0), porch_ly(0), porch_lz(0), duration_sec(0),
@@ -230,7 +201,45 @@ struct Choreography {
 };
 
 /**
- * Choreography metadata (stored in NVS, lightweight).
+ * Precomputed trajectory for a single motor.
+ */
+struct MotorTrajectory {
+    std::vector<Waypoint> waypoints;
+    
+    // For fast lookup during playback
+    size_t currentIndex;
+    
+    MotorTrajectory() : currentIndex(0) {}
+    
+    void reset() { currentIndex = 0; }
+    
+    /**
+     * Get interpolated position at time t.
+     * Uses linear interpolation between waypoints.
+     */
+    int32_t getPosition(float t);
+};
+
+/**
+ * Full precomputed trajectory for all motors.
+ */
+struct PrecomputedTrajectory {
+    MotorTrajectory motors[4];
+    float duration_sec;
+    float waypointInterval_sec;  // Time between waypoints (e.g., 0.01 = 100 Hz)
+    bool valid;
+    
+    PrecomputedTrajectory() : duration_sec(0), waypointInterval_sec(0.01f), valid(false) {}
+    
+    void reset() {
+        for (int i = 0; i < 4; i++) {
+            motors[i].reset();
+        }
+    }
+};
+
+/**
+ * Choreography metadata (stored in NVS).
  */
 struct ChoreographyMeta {
     std::string name;
@@ -244,11 +253,12 @@ struct ChoreographyMeta {
 // ============================================================================
 
 enum class PlaybackState : uint8_t {
-    IDLE = 0,       // Not playing, motors may be enabled or disabled
-    HOMING,         // Running homing sequence
-    ARMED,          // Ready for playback, waiting for start command
-    PLAYING,        // Active playback
-    E_STOP          // Emergency stop, drivers disabled
+    IDLE = 0,
+    PRECOMPUTING,  // Loading/precomputing trajectory
+    HOMING,
+    ARMED,
+    PLAYING,
+    E_STOP
 };
 
 // ============================================================================
@@ -262,95 +272,34 @@ public:
     
     void onInitialize() override;
     
-    // HAL injection (call before initialize, or set a default stub HAL)
+    // HAL injection
     void setHAL(StepperMotorHAL* hal);
     
-    // NVS persistence for choreography metadata
+    // NVS persistence
     void saveCustomData(nvs_handle_t handle) override;
     void loadCustomData(nvs_handle_t handle) override;
     bool hasCustomDataToSave() const override { return metadataModified; }
-    
-    // Post-load reconciliation
     void onPostLoadReconcile() override;
     
-    // ========================================================================
-    // Choreography Management API
-    // ========================================================================
-    
-    /**
-     * Begin uploading a new choreography.
-     * @param name User-friendly name for the choreography
-     * @param total_bytes Expected total size of the JSON file
-     * @return ESP_OK, ESP_ERR_NO_MEM if insufficient space
-     */
+    // Choreography Management
     esp_err_t uploadBegin(const std::string& name, size_t total_bytes);
-    
-    /**
-     * Upload a chunk of choreography data.
-     * @param chunk_index Chunk index (0, 1, 2, ...)
-     * @param data Raw bytes (base64-decoded JSON fragment)
-     * @param len Length of data
-     * @return ESP_OK, ESP_ERR_INVALID_STATE if upload not started
-     */
     esp_err_t uploadChunk(uint16_t chunk_index, const uint8_t* data, size_t len);
-    
-    /**
-     * Finalize upload, parse JSON, store to SPIFFS.
-     * @return ESP_OK, ESP_ERR_INVALID_ARG if JSON parse fails
-     */
     esp_err_t uploadCommit();
-    
-    /**
-     * Delete a choreography by index.
-     * @param index Choreography index to delete
-     */
     void deleteChoreography(int16_t index);
-    
-    /**
-     * Load a choreography into memory for playback.
-     * @param index Choreography index to load
-     * @return ESP_OK if loaded successfully
-     */
     esp_err_t loadChoreography(int16_t index);
     
-    // ========================================================================
-    // Playback Control API
-    // ========================================================================
-    
-    /**
-     * Start playback from the beginning.
-     * Requires a choreography to be loaded.
-     */
+    // Playback Control
     esp_err_t startPlayback();
-    
-    /**
-     * Stop playback, hold current position.
-     */
     void stopPlayback();
-    
-    /**
-     * Emergency stop - disable all drivers immediately.
-     */
     void emergencyStop();
-    
-    /**
-     * Clear emergency stop, return to IDLE.
-     */
     void clearEmergencyStop();
-    
-    /**
-     * Start homing sequence.
-     */
     esp_err_t startHoming();
     
-    // ========================================================================
     // Status
-    // ========================================================================
-    
-    PlaybackState getState() const { return state; }
+    PlaybackState getState() const { return state.load(); }
     size_t getChoreographyCount() const { return choreographyMeta.size(); }
     int16_t getActiveChoreographyIndex() const { return activeChoreographyIndex; }
-    float getPlaybackProgress() const;  // 0.0 - 1.0
+    float getPlaybackProgress() const;
     
     static constexpr const char* TAG = "StepperMotor";
     
@@ -359,76 +308,105 @@ private:
     // Hardware Abstraction
     // ========================================================================
     StepperMotorHAL* hal;
-    bool halOwned;  // true if we should delete HAL on destruction
+    bool halOwned;
     
     // ========================================================================
-    // Parameters (exposed to component system)
+    // Configuration Constants
+    // ========================================================================
+    static constexpr uint8_t NUM_MOTORS = 4;
+    static constexpr const char* SPIFFS_BASE_PATH = "/spiffs";
+    static constexpr const char* CHOREO_FILE_PREFIX = "choreo_";
+    static constexpr size_t UPLOAD_CHUNK_SIZE = 4096;
+    static constexpr size_t MAX_CHOREOGRAPHY_SIZE = 256 * 1024;  // 256KB
+    
+    // Trajectory precomputation settings
+    static constexpr float WAYPOINT_INTERVAL_SEC = 0.005f;  // 200 Hz waypoint rate
+    static constexpr uint32_t TASK_RATE_HZ = 200;           // Motion planning task rate
+    static constexpr uint32_t DEFAULT_ISR_RATE_HZ = 40000;  // Default step ISR rate (40 kHz)
+    static constexpr uint32_t MAX_ISR_RATE_HZ = 80000;      // Max step ISR rate (80 kHz)
+    
+    // ========================================================================
+    // Parameters
     // ========================================================================
     
     // Playback control
-    BoolParameter* playing;                  // true=playing, false=stopped
-    IntParameter* activeChoreographyParam;   // Selected choreography index (-1=none)
-    BoolParameter* enableDrivers;            // Enable/disable motor drivers
-    IntParameter* stateParam;                // Current PlaybackState (read-only)
+    BoolParameter* playing;
+    IntParameter* activeChoreographyParam;
+    BoolParameter* enableDrivers;
+    IntParameter* stateParam;
     
     // Playback status (read-only)
-    FloatParameter* playbackProgressParam;   // 0.0 - 1.0
-    FloatParameter* playbackTimeParam;       // Current time in seconds
-    IntParameter* choreographyCountParam;    // Number of stored choreographies
+    FloatParameter* playbackProgressParam;
+    FloatParameter* playbackTimeParam;
+    IntParameter* choreographyCountParam;
     
-    // Motor positions (read-only, updated during playback)
-    IntParameter* motorPositions;            // Current step positions [4]
-    IntParameter* motorTargets;              // Target step positions [4]
+    // Motor positions (read-only)
+    IntParameter* motorPositions;
+    IntParameter* motorTargets;
     
     // Homing
-    BoolParameter* homeCommand;              // Set true to start homing
-    BoolParameter* isHomed;                  // true after successful homing
+    BoolParameter* homeCommand;
+    BoolParameter* isHomed;
     
     // Emergency stop
-    BoolParameter* eStopCommand;             // Set true to trigger E-STOP
-    BoolParameter* eStopClear;               // Set true to clear E-STOP
+    BoolParameter* eStopCommand;
+    BoolParameter* eStopClear;
     
-    // Upload parameters (writable triggers)
-    StringParameter* uploadName;             // Name for new choreography
-    IntParameter* uploadTotalBytes;          // Expected file size
-    IntParameter* uploadChunkIndex;          // Current chunk index
-    StringParameter* uploadChunkData;        // Base64 chunk data
-    BoolParameter* uploadCommitParam;        // Set true to finalize
+    // Upload parameters
+    StringParameter* uploadName;
+    IntParameter* uploadTotalBytes;
+    IntParameter* uploadChunkIndex;
+    StringParameter* uploadChunkData;
+    BoolParameter* uploadCommitParam;
     
-    // Delete parameter
-    IntParameter* deleteChoreographyParam;   // Set to index to delete
-    
-    // Query parameters (for GUI)
-    IntParameter* queryChoreographyIndex;    // Set to query a choreography
-    StringParameter* queryChoreographyName;  // Read-only: name
-    FloatParameter* queryChoreographyDuration; // Read-only: duration
-    IntParameter* queryChoreographyLoop;     // Read-only: loop count
-    StringParameter* choreographyIdsParam;   // Comma-separated list of IDs
+    // Delete/Query
+    IntParameter* deleteChoreographyParam;
+    IntParameter* queryChoreographyIndex;
+    StringParameter* queryChoreographyName;
+    FloatParameter* queryChoreographyDuration;
+    IntParameter* queryChoreographyLoop;
+    StringParameter* choreographyIdsParam;
     
     // Configuration
-    IntParameter* chunkSizeParam;            // Read-only: chunk size for uploads
-    FloatParameter* evalRateHz;              // ISR evaluation rate (default 2000 Hz)
-    IntParameter* microsteppingParam;        // Microstepping divisor (1,2,4,8,16,32,etc). Default 16.
-    BoolParameter* microsteppingConfigurable; // Read-only: true if HAL supports software microstepping
+    IntParameter* chunkSizeParam;
+    IntParameter* isrRateHz;             // Step ISR rate (default 40 kHz)
+    IntParameter* maxRpmParam;           // Max motor RPM for ISR rate calc
+    IntParameter* microsteppingParam;
+    BoolParameter* microsteppingConfigurable;
     
     // ========================================================================
     // Choreography Storage
     // ========================================================================
-    std::map<int16_t, ChoreographyMeta> choreographyMeta;  // Stable ID -> metadata
-    Choreography activeChoreography;                       // Currently loaded choreography
-    int16_t activeChoreographyIndex;                       // Which choreography is loaded (-1=none)
-    bool metadataModified;                                 // Needs NVS save
+    std::map<int16_t, ChoreographyMeta> choreographyMeta;
+    Choreography activeChoreography;
+    PrecomputedTrajectory trajectory;
+    int16_t activeChoreographyIndex;
+    bool metadataModified;
     
     // ========================================================================
-    // Playback State
+    // Playback State (shared between task and ISR)
     // ========================================================================
-    PlaybackState state;
-    int32_t currentPosition[4];              // Current step position for each motor
-    int32_t targetPosition[4];               // Target position from spline eval
-    uint16_t currentKnotIndex[4];            // Current knot index per motor
-    float playbackStartTime;                 // micros() at playback start (converted to float seconds)
-    int64_t playbackStartUs;                 // micros() at playback start (raw)
-    int16_t loopsRemaining;                  // Loops left (-1=infinite)
+    std::atomic<PlaybackState> state;
+    
+    // These are written by the task, read by the ISR
+    // Using atomics for lock-free access
+    std::atomic<int32_t> targetPosition[4];
+    std::atomic<bool> targetDirection[4];
+    
+    // These are written by the ISR, read by the task
+    std::atomic<int32_t> currentPosition[4];
+    
+    // Playback timing
+    std::atomic<int64_t> playbackStartUs;
+    std::atomic<int16_t> loopsRemaining;
+    
+    // ========================================================================
+    // Task and ISR handles
+    // ========================================================================
+    TaskHandle_t motionTaskHandle;
+    esp_timer_handle_t stepTimer;
+    std::atomic<bool> taskRunning;
+    std::atomic<bool> stopRequested;
     
     // ========================================================================
     // Upload State
@@ -443,48 +421,41 @@ private:
     // Homing State
     // ========================================================================
     bool homingInProgress[4];
-    int32_t homingDirection[4];              // -1 or +1
+    int32_t homingDirection[4];
     uint32_t homingTimeoutMs;
     uint32_t homingStartMs;
-    
-    // ========================================================================
-    // ISR / Timer
-    // ========================================================================
-    esp_timer_handle_t evalTimer;
-    SemaphoreHandle_t stateMutex;
-    std::atomic_bool stopRequested;
     
     // ========================================================================
     // Internal Methods
     // ========================================================================
     
-    // Spline evaluation
+    // Trajectory precomputation
+    esp_err_t precomputeTrajectory();
     float hermiteEval(float t, const SplineKnot& k0, const SplineKnot& k1);
-    int32_t evaluateMotorPosition(uint8_t motor_index, float t);
+    int32_t evaluateSplineAt(const std::vector<SplineKnot>& knots, float t);
+    
+    // Motion planning task
+    static void motionTaskWrapper(void* arg);
+    void motionTask();
+    
+    // Step generation ISR
+    static void IRAM_ATTR stepTimerCallback(void* arg);
+    void IRAM_ATTR stepTimerISR();
+    
+    // Homing ISR
+    void IRAM_ATTR homingStepISR();
     
     // Choreography management
     int16_t findNextChoreographyId() const;
     esp_err_t parseChoreographyJson(const char* json, size_t len, Choreography& out);
     esp_err_t saveChoreographyToSpiffs(const std::string& filename, const uint8_t* data, size_t len);
     esp_err_t loadChoreographyFromSpiffs(const std::string& filename, Choreography& out);
+    
+    // State management
+    void transitionTo(PlaybackState newState);
     void updateStatusParams();
     void updateChoreographyIdsParam();
     
-    // ISR callback
-    static void IRAM_ATTR evalTimerCallback(void* arg);
-    void IRAM_ATTR evalTimerISR();
-    
-    // Homing
-    void homingStep();
-    
-    // State transitions
-    void transitionTo(PlaybackState newState);
-    
-    // SPIFFS helpers
-    static constexpr const char* SPIFFS_BASE_PATH = "/spiffs";
-    static constexpr const char* CHOREO_FILE_PREFIX = "choreo_";
-    static constexpr size_t UPLOAD_CHUNK_SIZE = 4096;
-    static constexpr size_t MAX_CHOREOGRAPHY_SIZE = 256 * 1024;  // 256KB max
-    static constexpr uint8_t NUM_MOTORS = 4;
-    static constexpr float DEFAULT_EVAL_RATE_HZ = 2000.0f;
+    // ISR rate calculation
+    uint32_t calculateRequiredIsrRate() const;
 };
