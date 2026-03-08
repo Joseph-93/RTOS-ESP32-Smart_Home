@@ -150,6 +150,38 @@ public:
      * @return Minimum pulse width in µs
      */
     virtual uint32_t getMinPulseWidthUs() const = 0;
+    
+    // ========================================================================
+    // Microstepping Configuration
+    // ========================================================================
+    
+    /**
+     * Set microstepping divisor.
+     * Common values: 1 (full), 2 (half), 4 (quarter), 8, 16, 32, 64, 128, 256
+     * 
+     * For drivers with hardware MS pins (A4988, DRV8825):
+     *   Implementation should set MS1/MS2/MS3 pins accordingly.
+     *   If MS pins are hardwired, this may be a no-op (returns false).
+     * 
+     * For drivers with software config (TMC2209 UART):
+     *   Implementation sends the config command.
+     * 
+     * @param divisor Microstepping divisor (1, 2, 4, 8, 16, 32, etc.)
+     * @return true if successfully set, false if not supported or invalid
+     */
+    virtual bool setMicrostepping(uint16_t divisor) = 0;
+    
+    /**
+     * Get current microstepping divisor.
+     * @return Current divisor (1, 2, 4, 8, 16, etc.)
+     */
+    virtual uint16_t getMicrostepping() const = 0;
+    
+    /**
+     * Check if microstepping is software-configurable.
+     * @return true if setMicrostepping() can change the setting
+     */
+    virtual bool isMicrosteppingSoftwareConfigurable() const = 0;
 };
 
 // ============================================================================
@@ -376,6 +408,8 @@ private:
     // Configuration
     IntParameter* chunkSizeParam;            // Read-only: chunk size for uploads
     FloatParameter* evalRateHz;              // ISR evaluation rate (default 2000 Hz)
+    IntParameter* microsteppingParam;        // Microstepping divisor (1,2,4,8,16,32,etc). Default 16.
+    BoolParameter* microsteppingConfigurable; // Read-only: true if HAL supports software microstepping
     
     // ========================================================================
     // Choreography Storage

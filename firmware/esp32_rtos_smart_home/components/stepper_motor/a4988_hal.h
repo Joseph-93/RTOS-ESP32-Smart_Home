@@ -7,7 +7,7 @@
  * A4988 Stepper Motor Driver HAL
  * 
  * Hardware: A4988 driver board with 12V NEMA 17 stepper motors
- * Microstepping: Configurable via MS1/MS2/MS3 pins (set externally)
+ * Microstepping: Configurable via MS1/MS2/MS3 pins (directly controlled by ESP32)
  * 
  * Pin connections per motor:
  * - STEP: Rising edge triggers one microstep
@@ -15,6 +15,7 @@
  * 
  * Shared pins:
  * - ENABLE: Active LOW (LOW = drivers enabled, HIGH = disabled/freewheel)
+ * - MS1/MS2/MS3: Microstepping select (shared across all 4 drivers)
  * 
  * Limit switches:
  * - Input only GPIOs (34, 35, 36, 39)
@@ -25,6 +26,15 @@
  * - Minimum STEP low time: 1 µs  
  * - Direction setup time before STEP: 200 ns
  * - Enable setup time: 200 ns
+ * 
+ * Microstepping table (A4988):
+ *   MS1  MS2  MS3  | Resolution
+ *   ---------------|-----------
+ *    L    L    L   | Full step (1)
+ *    H    L    L   | Half step (2)
+ *    L    H    L   | Quarter step (4)
+ *    H    H    L   | Eighth step (8)
+ *    H    H    H   | Sixteenth step (16)
  * 
  * ESP-WROOM-32 30-pin module pin assignment:
  * Chosen to avoid boot strapping pins and flash pins.
@@ -49,6 +59,12 @@
 
 // Shared enable pin (active LOW - all 4 drivers wired together)
 #define A4988_ENABLE_PIN        GPIO_NUM_26
+
+// Microstepping select pins (shared across all 4 drivers)
+// Wire all 4x A4988 MS1 pins together to GPIO 27, etc.
+#define A4988_MS1_PIN           GPIO_NUM_27
+#define A4988_MS2_PIN           GPIO_NUM_14
+#define A4988_MS3_PIN           GPIO_NUM_12
 
 // Limit switch pins (input only GPIOs, active LOW)
 #define A4988_LIMIT0_PIN        GPIO_NUM_34
@@ -81,6 +97,11 @@ public:
     uint8_t getMotorCount() const override { return NUM_MOTORS; }
     uint32_t getMinPulseWidthUs() const override { return MIN_PULSE_WIDTH_US; }
     
+    // Microstepping configuration
+    bool setMicrostepping(uint16_t divisor) override;
+    uint16_t getMicrostepping() const override { return currentMicrostepping; }
+    bool isMicrosteppingSoftwareConfigurable() const override { return true; }
+    
 private:
     static constexpr const char* TAG = "A4988_HAL";
     static constexpr uint8_t NUM_MOTORS = 4;
@@ -110,6 +131,7 @@ private:
     
     bool initialized;
     bool currentDirection[NUM_MOTORS];  // Track direction to avoid redundant writes
+    uint16_t currentMicrostepping;       // Current microstepping divisor (1,2,4,8,16)
     
     // Inline delay for step pulse width (busy-wait, ISR safe)
     inline void IRAM_ATTR delayMicroseconds(uint32_t us) const {
@@ -119,4 +141,7 @@ private:
             // Busy wait
         }
     }
+    
+    // Apply MS pin states for a given divisor
+    void applyMicrosteppingPins(uint16_t divisor);
 };

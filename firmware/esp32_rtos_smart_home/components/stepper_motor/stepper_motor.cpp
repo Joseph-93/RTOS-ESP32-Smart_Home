@@ -53,6 +53,8 @@ static size_t base64_decode(const char* input, size_t input_len, uint8_t* output
 
 class StubStepperMotorHAL : public StepperMotorHAL {
 public:
+    StubStepperMotorHAL() : microstepping(16) {}
+    
     esp_err_t init() override { 
         ESP_LOGW("StubHAL", "Using stub HAL - no motors will move!");
         return ESP_OK; 
@@ -65,6 +67,18 @@ public:
     bool isLimitTriggered(uint8_t motor_index) override { return false; }
     uint8_t getMotorCount() const override { return 4; }
     uint32_t getMinPulseWidthUs() const override { return 2; }
+    
+    // Microstepping (stub just stores the value)
+    bool setMicrostepping(uint16_t divisor) override { 
+        microstepping = divisor;
+        ESP_LOGI("StubHAL", "Microstepping set to 1/%d (stub)", divisor);
+        return true; 
+    }
+    uint16_t getMicrostepping() const override { return microstepping; }
+    bool isMicrosteppingSoftwareConfigurable() const override { return true; }
+    
+private:
+    uint16_t microstepping;
 };
 
 // ============================================================================
@@ -294,6 +308,26 @@ void StepperMotorComponent::onInitialize() {
     // Configuration
     chunkSizeParam = addIntParam("chunkSize", 1, 1, 0, 65536, UPLOAD_CHUNK_SIZE, true);
     evalRateHz = addFloatParam("evalRateHz", 1, 1, 100, 10000, DEFAULT_EVAL_RATE_HZ);
+    
+    // Microstepping configuration (default 1/16)
+    microsteppingParam = addIntParam("microstepping", 1, 1, 1, 256, 16);
+    microsteppingParam->setOnChange([this](size_t, size_t, int32_t val) {
+        if (hal) {
+            if (!hal->setMicrostepping(val)) {
+                ESP_LOGW(TAG, "HAL rejected microstepping value %ld", val);
+                // Revert to current HAL value
+                microsteppingParam->setValueQuiet(0, 0, hal->getMicrostepping());
+            }
+        }
+    });
+    
+    microsteppingConfigurable = addBoolParam("microsteppingConfigurable", 1, 1, false, true);
+    
+    // Set initial microstepping and update configurable flag
+    if (hal) {
+        hal->setMicrostepping(16);  // Default to 1/16
+        microsteppingConfigurable->setValueQuiet(0, 0, hal->isMicrosteppingSoftwareConfigurable());
+    }
     
     // Create high-precision timer for ISR
     esp_timer_create_args_t timer_args = {

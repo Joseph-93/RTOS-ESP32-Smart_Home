@@ -13,7 +13,8 @@ constexpr gpio_num_t A4988StepperMotorHAL::LIMIT_PINS[];
 // ============================================================================
 
 A4988StepperMotorHAL::A4988StepperMotorHAL() 
-    : initialized(false) 
+    : initialized(false),
+      currentMicrostepping(16)  // Default to 1/16 microstepping
 {
     for (int i = 0; i < NUM_MOTORS; i++) {
         currentDirection[i] = false;
@@ -86,6 +87,25 @@ esp_err_t A4988StepperMotorHAL::init() {
     gpio_set_level(A4988_ENABLE_PIN, 1);  // Start DISABLED (HIGH = disabled for A4988)
     ESP_LOGI(TAG, "ENABLE pin: GPIO%d (starting disabled)", A4988_ENABLE_PIN);
     
+    // Configure MS1/MS2/MS3 pins as outputs (shared microstepping control)
+    gpio_config_t ms_conf = {
+        .pin_bit_mask = (1ULL << A4988_MS1_PIN) | (1ULL << A4988_MS2_PIN) | (1ULL << A4988_MS3_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    err = gpio_config(&ms_conf);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to configure MS pins: %d", err);
+        return err;
+    }
+    
+    // Set default microstepping (1/16)
+    applyMicrosteppingPins(currentMicrostepping);
+    ESP_LOGI(TAG, "MS pins: MS1=GPIO%d, MS2=GPIO%d, MS3=GPIO%d (default 1/%d)", 
+             A4988_MS1_PIN, A4988_MS2_PIN, A4988_MS3_PIN, currentMicrostepping);
+    
     // Configure LIMIT switch pins as inputs
     // GPIO 34-39 are input-only and don't have internal pullups
     // External pullup resistors required (10K to 3.3V typical)
@@ -119,6 +139,7 @@ esp_err_t A4988StepperMotorHAL::init() {
     ESP_LOGI(TAG, "  Motor 3: STEP=GPIO%d, DIR=GPIO%d, LIMIT=GPIO%d", 
              STEP_PINS[3], DIR_PINS[3], LIMIT_PINS[3]);
     ESP_LOGI(TAG, "  ENABLE (shared): GPIO%d", A4988_ENABLE_PIN);
+    ESP_LOGI(TAG, "  Microstepping: 1/%d", currentMicrostepping);
     
     return ESP_OK;
 }
@@ -136,6 +157,9 @@ void A4988StepperMotorHAL::deinit() {
         gpio_reset_pin(LIMIT_PINS[i]);
     }
     gpio_reset_pin(A4988_ENABLE_PIN);
+    gpio_reset_pin(A4988_MS1_PIN);
+    gpio_reset_pin(A4988_MS2_PIN);
+    gpio_reset_pin(A4988_MS3_PIN);
     
     initialized = false;
     ESP_LOGI(TAG, "A4988 HAL deinitialized");
@@ -210,4 +234,72 @@ bool A4988StepperMotorHAL::isLimitTriggered(uint8_t motor_index) {
     // Limit switches are active LOW (normally HIGH with pullup, LOW when triggered)
     int level = gpio_get_level(LIMIT_PINS[motor_index]);
     return (level == 0);
+}
+
+// ============================================================================
+// Microstepping Configuration
+// ============================================================================
+
+bool A4988StepperMotorHAL::setMicrostepping(uint16_t divisor) {
+    // A4988 supports: 1 (full), 2 (half), 4 (quarter), 8 (eighth), 16 (sixteenth)
+    switch (divisor) {
+        case 1:
+        case 2:
+        case 4:
+        case 8:
+        case 16:
+            break;
+        default:
+            ESP_LOGW(TAG, "Invalid microstepping divisor %d (A4988 supports 1,2,4,8,16)", divisor);
+            return false;
+    }
+    
+    applyMicrosteppingPins(divisor);
+    currentMicrostepping = divisor;
+    ESP_LOGI(TAG, "Microstepping set to 1/%d", divisor);
+    return true;
+}
+
+void A4988StepperMotorHAL::applyMicrosteppingPins(uint16_t divisor) {
+    /*
+     * A4988 Microstepping Truth Table:
+     *   MS1  MS2  MS3  | Resolution
+     *   ---------------|-----------
+     *    L    L    L   | Full step (1)
+     *    H    L    L   | Half step (2)
+     *    L    H    L   | Quarter step (4)
+     *    H    H    L   | Eighth step (8)
+     *    H    H    H   | Sixteenth step (16)
+     */
+    
+    bool ms1 = false, ms2 = false, ms3 = false;
+    
+    switch (divisor) {
+        case 1:   // Full step
+            ms1 = false; ms2 = false; ms3 = false;
+            break;
+        case 2:   // Half step
+            ms1 = true;  ms2 = false; ms3 = false;
+            break;
+        case 4:   // Quarter step
+            ms1 = false; ms2 = true;  ms3 = false;
+            break;
+        case 8:   // Eighth step
+            ms1 = true;  ms2 = true;  ms3 = false;
+            break;
+        case 16:  // Sixteenth step (default)
+            ms1 = true;  ms2 = true;  ms3 = true;
+            break;
+        default:
+            // Default to 1/16 for safety (smoothest)
+            ms1 = true;  ms2 = true;  ms3 = true;
+            break;
+    }
+    
+    gpio_set_level(A4988_MS1_PIN, ms1 ? 1 : 0);
+    gpio_set_level(A4988_MS2_PIN, ms2 ? 1 : 0);
+    gpio_set_level(A4988_MS3_PIN, ms3 ? 1 : 0);
+    
+    ESP_LOGD(TAG, "MS pins set: MS1=%d, MS2=%d, MS3=%d (1/%d stepping)", 
+             ms1, ms2, ms3, divisor);
 }

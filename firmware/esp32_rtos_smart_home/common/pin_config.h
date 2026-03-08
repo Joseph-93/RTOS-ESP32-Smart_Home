@@ -86,6 +86,9 @@
 #define PIN_STEPPER_MOTOR3_STEP     GPIO_NUM_23
 #define PIN_STEPPER_MOTOR3_DIR      GPIO_NUM_25
 #define PIN_STEPPER_ENABLE          GPIO_NUM_26  // Shared, active LOW
+#define PIN_STEPPER_MS1             GPIO_NUM_27  // Microstepping select (shared)
+#define PIN_STEPPER_MS2             GPIO_NUM_14  // Microstepping select (shared)
+#define PIN_STEPPER_MS3             GPIO_NUM_12  // Microstepping select (shared)
 #define PIN_STEPPER_LIMIT0          GPIO_NUM_34  // Input only
 #define PIN_STEPPER_LIMIT1          GPIO_NUM_35  // Input only
 #define PIN_STEPPER_LIMIT2          GPIO_NUM_36  // Input only
@@ -93,6 +96,8 @@
 //
 // NOTE: Limit switch GPIOs (34-39) have no internal pullup.
 // External 10K pullup resistors to 3.3V required.
+// NOTE: GPIO 12 (MS3) is a boot strapping pin - must be LOW at boot.
+// This is fine since 1/16 microstepping (default) sets MS3=HIGH after boot.
 
 // ============================================================================
 // RESERVED / SYSTEM PINS (DO NOT USE)
