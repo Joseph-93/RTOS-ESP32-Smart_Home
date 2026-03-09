@@ -411,6 +411,9 @@ private:
     // Velocity safety tracking (for detecting bad trajectories)
     int32_t prevTarget[4];  // Previous target positions (task-local, no atomics needed)
     
+    // ISR direction tracking (to minimize setDirection calls)
+    bool lastDirection[4];  // Last direction set in ISR (ISR-local, no atomics needed)
+    
     // ========================================================================
     // Task and ISR handles
     // ========================================================================

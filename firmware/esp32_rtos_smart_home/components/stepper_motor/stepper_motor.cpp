@@ -140,6 +140,7 @@ StepperMotorComponent::StepperMotorComponent()
         motorIsHomed[i] = false;
         limitTriggered[i] = false;
         prevTarget[i] = 0;
+        lastDirection[i] = false;
     }
     playbackStartUs = 0;
     loopsRemaining = 0;
@@ -719,7 +720,13 @@ void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
             
             // Execute jog step
             bool direction = (jog > 0);  // 1=pay-out (positive), -1=retract (negative)
-            hal->setDirection(m, direction);
+            
+            // Only call setDirection if it changed
+            if (direction != lastDirection[m]) {
+                hal->setDirection(m, direction);
+                lastDirection[m] = direction;
+            }
+            
             hal->step(m);
             
             int32_t pos = currentPosition[m].load();
@@ -739,8 +746,15 @@ void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
         int32_t target = targetPosition[m].load();
         
         if (current != target) {
-            bool dir = (target > current);
-            hal->setDirection(m, dir);
+            // Direction is pre-computed by motion task - just read it
+            bool dir = targetDirection[m].load();
+            
+            // Only call setDirection if it changed (minimize GPIO writes)
+            if (dir != lastDirection[m]) {
+                hal->setDirection(m, dir);
+                lastDirection[m] = dir;
+            }
+            
             hal->step(m);
             currentPosition[m].store(current + (dir ? 1 : -1));
         }
