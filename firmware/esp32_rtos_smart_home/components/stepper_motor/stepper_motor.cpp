@@ -487,6 +487,27 @@ esp_err_t StepperMotorComponent::precomputeTrajectory() {
     size_t memBytes = numWaypoints * NUM_MOTORS * sizeof(Waypoint);
     ESP_LOGI(TAG, "  Waypoints: %zu per motor, %zu KB total", numWaypoints, memBytes / 1024);
     
+    // Check heap before allocation
+    size_t freeHeap = esp_get_free_heap_size();
+    size_t minHeapReserve = 32 * 1024;  // Keep 32KB for stack/other operations
+    
+    if (memBytes > freeHeap - minHeapReserve) {
+        ESP_LOGE(TAG, "Not enough heap for trajectory: need %zu KB, have %zu KB free (reserve %zu KB)",
+                 memBytes / 1024, freeHeap / 1024, minHeapReserve / 1024);
+        
+        char errMsg[128];
+        snprintf(errMsg, sizeof(errMsg), 
+            "Out of memory: trajectory needs %zu KB, only %zu KB available",
+            memBytes / 1024, (freeHeap - minHeapReserve) / 1024);
+        errorMessage->setValueQuiet(0, 0, errMsg);
+        
+        transitionTo(PlaybackState::E_STOP);
+        return ESP_ERR_NO_MEM;
+    }
+    
+    ESP_LOGI(TAG, "  Heap check OK: %zu KB free (need %zu KB + %zu KB reserve)",
+             freeHeap / 1024, memBytes / 1024, minHeapReserve / 1024);
+    
     // Clear and reserve
     trajectory.valid = false;
     trajectory.duration_sec = duration;
