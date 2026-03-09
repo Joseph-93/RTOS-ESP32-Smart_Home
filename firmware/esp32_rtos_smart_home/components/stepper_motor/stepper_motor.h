@@ -293,7 +293,6 @@ public:
     void stopPlayback();
     void emergencyStop();
     void clearEmergencyStop();
-    esp_err_t startHoming();
     
     // Status
     PlaybackState getState() const { return state.load(); }
@@ -344,9 +343,12 @@ private:
     IntParameter* motorPositions;
     IntParameter* motorTargets;
     
-    // Homing
-    BoolParameter* homeCommand;
-    BoolParameter* isHomed;
+    // Manual Jog Control
+    IntParameter* jogCommandParams[4];     // Per-motor jog: -1=retract, 0=stop, 1=pay-out
+    BoolParameter* motorHomedParams[4];    // Per-motor homing status
+    BoolParameter* moveToHomeParam;        // Move to center after all homed
+    IntParameter* jogSpeedParam;           // Jog speed in steps/sec
+    IntParameter* backoffDistanceParam;    // Limit backoff distance
     
     // Emergency stop
     BoolParameter* eStopCommand;
@@ -418,12 +420,13 @@ private:
     bool uploadInProgress;
     
     // ========================================================================
-    // Homing State
+    // Manual Jog State
     // ========================================================================
-    bool homingInProgress[4];
-    int32_t homingDirection[4];
-    uint32_t homingTimeoutMs;
-    uint32_t homingStartMs;
+    std::atomic<int8_t> jogCommand[4];      // -1=retract, 0=stop, 1=pay-out
+    std::atomic<bool> motorIsHomed[4];      // Per-motor homing status
+    std::atomic<bool> limitTriggered[4];    // Set by ISR when limit hit
+    uint32_t jogSpeed;                      // Steps/sec for manual jog
+    uint32_t backoffDistance;               // Steps to back off after limit
     
     // ========================================================================
     // Internal Methods
@@ -442,8 +445,9 @@ private:
     static void IRAM_ATTR stepTimerCallback(void* arg);
     void IRAM_ATTR stepTimerISR();
     
-    // Homing ISR
-    void IRAM_ATTR homingStepISR();
+    // Manual jog helpers
+    bool allMotorsHomed() const;
+    void moveToHomePosition();
     
     // Choreography management
     int16_t findNextChoreographyId() const;

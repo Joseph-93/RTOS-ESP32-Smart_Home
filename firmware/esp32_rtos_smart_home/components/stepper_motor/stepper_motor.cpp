@@ -128,15 +128,16 @@ StepperMotorComponent::StepperMotorComponent()
       uploadExpectedSize(0),
       uploadReceivedSize(0),
       uploadInProgress(false),
-      homingTimeoutMs(10000),
-      homingStartMs(0)
+      jogSpeed(500),
+      backoffDistance(50)
 {
     for (int i = 0; i < NUM_MOTORS; i++) {
         currentPosition[i] = 0;
         targetPosition[i] = 0;
         targetDirection[i] = false;
-        homingInProgress[i] = false;
-        homingDirection[i] = -1;
+        jogCommand[i] = 0;
+        motorIsHomed[i] = false;
+        limitTriggered[i] = false;
     }
     playbackStartUs = 0;
     loopsRemaining = 0;
@@ -252,15 +253,25 @@ void StepperMotorComponent::onInitialize() {
     motorPositions = addIntParam("motorPositions", NUM_MOTORS, 1, INT32_MIN, INT32_MAX, 0, true);
     motorTargets = addIntParam("motorTargets", NUM_MOTORS, 1, INT32_MIN, INT32_MAX, 0, true);
     
-    // Homing
-    homeCommand = addBoolParam("homeCommand", 1, 1, false);
-    homeCommand->setOnChange([this](size_t, size_t, bool val) {
-        if (val) {
-            startHoming();
-            homeCommand->setValueQuiet(0, 0, false);
+    // Manual jog control
+    for (int i = 0; i < NUM_MOTORS; i++) {
+        std::string motorName = "motor" + std::to_string(i);
+        
+        jogCommandParams[i] = addIntParam(motorName + "JogCommand", 1, 1, -1, 1, 0);
+        motorHomedParams[i] = addBoolParam(motorName + "Homed", 1, 1, false, true);
+    }
+    
+    jogSpeedParam = addIntParam("jogSpeed", 1, 1, 10, 5000, 500);
+    backoffDistanceParam = addIntParam("backoffDistance", 1, 1, 10, 200, 50);
+    
+    moveToHomeParam = addBoolParam("moveToHome", 1, 1, false);
+    moveToHomeParam->setOnChange([this](size_t, size_t, bool val) {
+        if (val && allMotorsHomed()) {
+            ESP_LOGI(TAG, "Move to home position requested");
+            moveToHomeParam->setValueQuiet(0, 0, false);
+            // moveToHomePosition() will be called by task
         }
     });
-    isHomed = addBoolParam("isHomed", 1, 1, false, true);
     
     // Emergency stop
     eStopCommand = addBoolParam("eStopCommand", 1, 1, false);
@@ -522,6 +533,53 @@ void StepperMotorComponent::motionTask() {
     while (taskRunning.load()) {
         PlaybackState currentState = state.load();
         
+        // ====================================================================
+        // Handle limit-triggered back-off (manual jog mode)
+        // ====================================================================
+        for (int m = 0; m < NUM_MOTORS; m++) {
+            if (limitTriggered[m].load()) {
+                uint32_t backoff = backoffDistanceParam->getValue(0, 0);
+                ESP_LOGI(TAG, "Motor %d hit limit - backing off %lu steps", m, backoff);
+                
+                // Back off at safe rate (not in ISR)
+                hal->setDirection(m, true);  // Reverse direction (pay-out)
+                for (uint32_t step = 0; step < backoff; step++) {
+                    hal->step(m);
+                    vTaskDelay(pdMS_TO_TICKS(2));  // 500 Hz back-off rate
+                }
+                
+                // Zero position and mark as homed
+                currentPosition[m].store(0);
+                motorIsHomed[m].store(true);
+                motorHomedParams[m]->setValueQuiet(0, 0, true);
+                
+                // Clear flag
+                limitTriggered[m].store(false);
+                
+                ESP_LOGI(TAG, "Motor %d homed ✓", m);
+            }
+        }
+        
+        // ====================================================================
+        // Check if all homed and user requested move to home
+        // ====================================================================
+        if (moveToHomeParam->getValue(0, 0) && allMotorsHomed()) {
+            ESP_LOGI(TAG, "Moving all motors to home position");
+            moveToHomePosition();
+            moveToHomeParam->setValueQuiet(0, 0, false);
+        }
+        
+        // ====================================================================
+        // Read jog parameter updates
+        // ====================================================================
+        for (int m = 0; m < NUM_MOTORS; m++) {
+            int8_t cmd = jogCommandParams[m]->getValue(0, 0);
+            jogCommand[m].store(cmd);
+        }
+        
+        // ====================================================================
+        // Playback mode
+        // ====================================================================
         if (currentState == PlaybackState::PLAYING && trajectory.valid) {
             // Calculate current playback time
             int64_t now_us = esp_timer_get_time();
@@ -598,8 +656,33 @@ void IRAM_ATTR StepperMotorComponent::stepTimerCallback(void* arg) {
 void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
     PlaybackState currentState = state.load();
     
-    if (currentState == PlaybackState::HOMING) {
-        homingStepISR();
+    // Manual jog mode - handle limit detection and jogging
+    if (currentState == PlaybackState::IDLE) {
+        for (uint8_t m = 0; m < NUM_MOTORS; m++) {
+            // Skip if limit-triggered (task handles back-off)
+            if (limitTriggered[m].load()) {
+                continue;
+            }
+            
+            int8_t jog = jogCommand[m].load();
+            if (jog == 0) continue;  // No jog command
+            
+            // Check limit switch before stepping
+            if (hal->isLimitTriggered(m)) {
+                // Hit limit - stop jogging, flag for task to handle back-off
+                jogCommand[m].store(0);
+                limitTriggered[m].store(true);
+                continue;
+            }
+            
+            // Execute jog step
+            bool direction = (jog > 0);  // 1=pay-out (positive), -1=retract (negative)
+            hal->setDirection(m, direction);
+            hal->step(m);
+            
+            int32_t pos = currentPosition[m].load();
+            currentPosition[m].store(direction ? pos + 1 : pos - 1);
+        }
         return;
     }
     
@@ -607,7 +690,7 @@ void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
         return;
     }
     
-    // Step each motor toward its target
+    // Step each motor toward its target (playback mode)
     // This is the hottest path - keep it minimal
     for (uint8_t m = 0; m < NUM_MOTORS; m++) {
         int32_t current = currentPosition[m].load();
@@ -619,34 +702,6 @@ void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
             hal->step(m);
             currentPosition[m].store(current + (dir ? 1 : -1));
         }
-    }
-}
-
-void IRAM_ATTR StepperMotorComponent::homingStepISR() {
-    bool all_done = true;
-    
-    for (uint8_t m = 0; m < NUM_MOTORS; m++) {
-        if (!homingInProgress[m]) continue;
-        
-        all_done = false;
-        
-        if (hal->isLimitTriggered(m)) {
-            // Hit limit - back off
-            hal->setDirection(m, true);
-            for (int s = 0; s < 50; s++) {
-                hal->step(m);
-            }
-            currentPosition[m].store(0);
-            homingInProgress[m] = false;
-        } else {
-            hal->setDirection(m, false);
-            hal->step(m);
-        }
-    }
-    
-    if (all_done) {
-        // Homing complete - will be handled by task
-        stopRequested.store(true);
     }
 }
 
@@ -773,31 +828,42 @@ void StepperMotorComponent::clearEmergencyStop() {
     ESP_LOGI(TAG, "E-STOP cleared");
 }
 
-esp_err_t StepperMotorComponent::startHoming() {
-    PlaybackState currentState = state.load();
-    if (currentState == PlaybackState::PLAYING || currentState == PlaybackState::E_STOP) {
-        ESP_LOGE(TAG, "Cannot home in current state");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
+// ============================================================================
+// Manual Jog Helpers
+// ============================================================================
+
+bool StepperMotorComponent::allMotorsHomed() const {
     for (int i = 0; i < NUM_MOTORS; i++) {
-        homingInProgress[i] = true;
-        homingDirection[i] = -1;
+        if (!motorIsHomed[i].load()) return false;
     }
-    homingStartMs = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    return true;
+}
+
+void StepperMotorComponent::moveToHomePosition() {
+    // Move all motors to center position (1000 steps retracted from limit)
+    const int32_t homePosition = -1000;
     
-    if (hal) {
-        hal->setEnabled(0xFF, true);
+    ESP_LOGI(TAG, "Moving all motors to home position (%ld steps)", homePosition);
+    
+    for (int m = 0; m < NUM_MOTORS; m++) {
+        int32_t current = currentPosition[m].load();
+        int32_t delta = homePosition - current;
+        
+        if (delta == 0) continue;  // Already at home
+        
+        bool direction = (delta > 0);
+        hal->setDirection(m, direction);
+        
+        for (int32_t step = 0; step < abs(delta); step++) {
+            hal->step(m);
+            vTaskDelay(pdMS_TO_TICKS(2));  // 500 Hz move rate
+        }
+        
+        currentPosition[m].store(homePosition);
+        motorPositions->setValueQuiet(m, 0, homePosition);
     }
     
-    transitionTo(PlaybackState::HOMING);
-    isHomed->setValueQuiet(0, 0, false);
-    
-    // Start timer for homing (slower rate)
-    esp_timer_start_periodic(stepTimer, 1000);  // 1 kHz
-    
-    ESP_LOGI(TAG, "Homing started");
-    return ESP_OK;
+    ESP_LOGI(TAG, "All motors at home position");
 }
 
 // ============================================================================
