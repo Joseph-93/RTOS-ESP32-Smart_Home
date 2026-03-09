@@ -108,6 +108,27 @@
                 <div id="gui-designer-container"></div>
             </div>
 
+            <!-- Special controls for StepperMotor component -->
+            <div id="stepper-motor-controls" class="special-controls" style="display:none;">
+                <h3>🎛️ Manual Jog Control</h3>
+                <p class="help-text">Manually jog each motor to home position. Hold buttons to move motors. Release when limit switch triggers.</p>
+                
+                <div id="stepper-jog-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <!-- Motor cards will be inserted here by JavaScript -->
+                </div>
+                
+                <div id="stepper-homing-status" style="padding: 15px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 15px; text-align: center;">
+                    <strong>Status:</strong> <span id="stepper-status-text">Loading...</span>
+                </div>
+                
+                <div id="stepper-move-home-section" style="display: none; text-align: center; padding: 20px; background: #c8e6c9; border-radius: 8px;">
+                    <p style="margin: 0 0 15px 0; font-size: 16px;"><strong>✓ All motors homed!</strong> Move to center position?</p>
+                    <button class="btn btn-primary" onclick="moveSteppersToHome()" style="font-size: 18px; padding: 12px 30px;">
+                        🏠 Move to Home Position
+                    </button>
+                </div>
+            </div>
+
             <!-- Pagination Controls -->
             <div class="pagination-controls">
                 <button id="prevPage" onclick="prevPage()" disabled>← Previous</button>
@@ -169,6 +190,10 @@
             document.getElementById('gui-designer-controls').style.display = 'block';
             // Init color designer once WebSocket is ready
             setTimeout(() => initGuiDesigner(esp32ws, componentName), 800);
+        } else if (componentName === 'StepperMotor') {
+            document.getElementById('stepper-motor-controls').style.display = 'block';
+            // Init stepper motor jog interface
+            setTimeout(() => initStepperMotorJog(esp32ws, componentName), 800);
         }
         
         // Global functions for modal editors
@@ -820,6 +845,221 @@
                 showNotification(`Triggered network action slot ${slot}`, 'success');
             } catch (e) {
                 showNotification('Failed to trigger action', 'error');
+            }
+        }
+        
+        // ========================================
+        // STEPPER MOTOR FUNCTIONS
+        // ========================================
+        
+        let stepperMotorState = {
+            motorHomed: [false, false, false, false],
+            motorPositions: [0, 0, 0, 0],
+            updateInterval: null
+        };
+        
+        function initStepperMotorJog(ws, component) {
+            if (!ws || !ws.connected) {
+                console.error('WebSocket not connected for StepperMotor jog');
+                return;
+            }
+            
+            // Create motor jog cards
+            const container = document.getElementById('stepper-jog-container');
+            container.innerHTML = '';
+            
+            for (let motorId = 0; motorId < 4; motorId++) {
+                const card = document.createElement('div');
+                card.className = 'stepper-motor-card';
+                card.style.cssText = `
+                    background: var(--bg-secondary);
+                    border: 1px solid var(--border-color);
+                    border-radius: 8px;
+                    padding: 15px;
+                `;
+                
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <span style="font-weight: 600; font-size: 16px;">Motor ${motorId}</span>
+                        <span id="motor-${motorId}-status" class="motor-status" style="padding: 4px 10px; border-radius: 4px; font-size: 13px; background: #ccc; color: #666;">
+                            Not Homed
+                        </span>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                        <button 
+                            class="stepper-jog-btn retract" 
+                            data-motor="${motorId}"
+                            data-direction="-1"
+                            style="flex: 1; padding: 20px; font-size: 16px; font-weight: 600; border: 2px solid #2196F3; background: white; border-radius: 6px; cursor: pointer; user-select: none;"
+                            onmousedown="startStepperJog(${motorId}, -1)"
+                            onmouseup="stopStepperJog(${motorId})"
+                            onmouseleave="stopStepperJog(${motorId})"
+                            ontouchstart="startStepperJog(${motorId}, -1); event.preventDefault()"
+                            ontouchend="stopStepperJog(${motorId}); event.preventDefault()">
+                            ▲ RETRACT
+                        </button>
+                        <button 
+                            class="stepper-jog-btn payout" 
+                            data-motor="${motorId}"
+                            data-direction="1"
+                            style="flex: 1; padding: 20px; font-size: 16px; font-weight: 600; border: 2px solid #2196F3; background: white; border-radius: 6px; cursor: pointer; user-select: none;"
+                            onmousedown="startStepperJog(${motorId}, 1)"
+                            onmouseup="stopStepperJog(${motorId})"
+                            onmouseleave="stopStepperJog(${motorId})"
+                            ontouchstart="startStepperJog(${motorId}, 1); event.preventDefault()"
+                            ontouchend="stopStepperJog(${motorId}); event.preventDefault()">
+                            ▼ PAY OUT
+                        </button>
+                    </div>
+                    
+                    <div id="motor-${motorId}-position" style="font-family: monospace; color: #666; font-size: 14px;">
+                        Position: 0 steps
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            }
+            
+            // Add CSS for active button state
+            const style = document.createElement('style');
+            style.textContent = `
+                .stepper-jog-btn:active {
+                    background: #2196F3 !important;
+                    color: white !important;
+                }
+                .motor-status.homed {
+                    background: #4CAF50 !important;
+                    color: white !important;
+                }
+            `;
+            document.head.appendChild(style);
+            
+            // Start polling for status updates
+            updateStepperMotorStatus();
+            stepperMotorState.updateInterval = setInterval(updateStepperMotorStatus, 1000);
+        }
+        
+        async function startStepperJog(motorId, direction) {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: `motor${motorId}JogCommand`,
+                    row: 0,
+                    col: 0,
+                    value: direction
+                });
+            } catch (e) {
+                console.error('Failed to start jog:', e);
+            }
+        }
+        
+        async function stopStepperJog(motorId) {
+            if (!esp32ws || !esp32ws.connected) return;
+            
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: `motor${motorId}JogCommand`,
+                    row: 0,
+                    col: 0,
+                    value: 0
+                });
+            } catch (e) {
+                console.error('Failed to stop jog:', e);
+            }
+        }
+        
+        async function updateStepperMotorStatus() {
+            if (!esp32ws || !esp32ws.connected) return;
+            
+            try {
+                let homedCount = 0;
+                
+                for (let i = 0; i < 4; i++) {
+                    // Get homed status
+                    const homedResp = await esp32ws.send({
+                        type: 'get_param',
+                        comp: 'StepperMotor',
+                        param: `motor${i}Homed`,
+                        row: 0,
+                        col: 0
+                    });
+                    
+                    // Get position
+                    const posResp = await esp32ws.send({
+                        type: 'get_param',
+                        comp: 'StepperMotor',
+                        param: 'motorPositions',
+                        row: i,
+                        col: 0
+                    });
+                    
+                    const isHomed = homedResp.value;
+                    const position = posResp.value || 0;
+                    
+                    stepperMotorState.motorHomed[i] = isHomed;
+                    stepperMotorState.motorPositions[i] = position;
+                    
+                    // Update UI
+                    const statusEl = document.getElementById(`motor-${i}-status`);
+                    const posEl = document.getElementById(`motor-${i}-position`);
+                    
+                    if (statusEl) {
+                        statusEl.textContent = isHomed ? '✓ Homed' : 'Not Homed';
+                        statusEl.classList.toggle('homed', isHomed);
+                    }
+                    
+                    if (posEl) {
+                        posEl.textContent = `Position: ${position} steps`;
+                    }
+                    
+                    if (isHomed) homedCount++;
+                }
+                
+                // Update overall status
+                const statusText = document.getElementById('stepper-status-text');
+                if (statusText) {
+                    statusText.textContent = `${homedCount} motors homed. ${4 - homedCount} remaining.`;
+                }
+                
+                // Show/hide move-home button
+                const moveHomeSection = document.getElementById('stepper-move-home-section');
+                if (moveHomeSection) {
+                    moveHomeSection.style.display = (homedCount === 4) ? 'block' : 'none';
+                }
+                
+            } catch (e) {
+                console.error('Failed to update stepper status:', e);
+            }
+        }
+        
+        async function moveSteppersToHome() {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: 'moveToHome',
+                    row: 0,
+                    col: 0,
+                    value: true
+                });
+                showNotification('Moving motors to home position...', 'success');
+            } catch (e) {
+                console.error('Failed to move to home:', e);
+                showNotification('Failed to move to home', 'error');
             }
         }
     </script>
