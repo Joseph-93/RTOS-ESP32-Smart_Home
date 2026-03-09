@@ -124,6 +124,7 @@ StepperMotorComponent::StepperMotorComponent()
       motionTaskHandle(nullptr),
       stepTimer(nullptr),
       taskRunning(false),
+      taskExited(true),
       stopRequested(false),
       uploadExpectedSize(0),
       uploadReceivedSize(0),
@@ -660,6 +661,7 @@ void StepperMotorComponent::motionTask() {
     }
     
     ESP_LOGI(TAG, "Motion task exiting");
+    taskExited.store(true);  // Signal we're done
     vTaskDelete(NULL);
 }
 
@@ -774,6 +776,7 @@ esp_err_t StepperMotorComponent::startPlayback() {
     // Start motion task if not already running
     if (!motionTaskHandle) {
         taskRunning.store(true);
+        taskExited.store(false);  // Reset exit flag
         BaseType_t result = xTaskCreatePinnedToCore(
             motionTaskWrapper,
             "stepper_motion",
@@ -814,8 +817,20 @@ void StepperMotorComponent::stopPlayback() {
     // Stop task
     taskRunning.store(false);
     if (motionTaskHandle) {
-        // Give task time to exit
-        vTaskDelay(pdMS_TO_TICKS(50));
+        // Wait for task to signal it has exited (with timeout)
+        const uint32_t timeoutMs = 200;
+        const uint32_t pollIntervalMs = 10;
+        uint32_t elapsed = 0;
+        
+        while (!taskExited.load() && elapsed < timeoutMs) {
+            vTaskDelay(pdMS_TO_TICKS(pollIntervalMs));
+            elapsed += pollIntervalMs;
+        }
+        
+        if (!taskExited.load()) {
+            ESP_LOGW(TAG, "Task did not exit cleanly in %lu ms", timeoutMs);
+        }
+        
         motionTaskHandle = nullptr;
     }
     

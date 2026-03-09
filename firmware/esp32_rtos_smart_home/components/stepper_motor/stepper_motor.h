@@ -417,6 +417,7 @@ private:
     TaskHandle_t motionTaskHandle;
     esp_timer_handle_t stepTimer;
     std::atomic<bool> taskRunning;
+    std::atomic<bool> taskExited;      // Set by task before self-delete
     std::atomic<bool> stopRequested;
     
     // ========================================================================
