@@ -382,6 +382,13 @@ private:
     IntParameter* microsteppingParam;
     BoolParameter* microsteppingConfigurable;
     
+    // Room dimensions & position limits
+    FloatParameter* roomDimensionX;      // Room X dimension (meters)
+    FloatParameter* roomDimensionY;      // Room Y dimension (meters)
+    FloatParameter* roomDimensionZ;      // Room Z dimension (meters)
+    IntParameter* maxPositionSteps;      // Read-only: auto-calculated from room diagonal
+    BoolParameter* softLimitsEnabled;    // Enable/disable soft position limiting
+    
     // ========================================================================
     // Choreography Storage
     // ========================================================================
@@ -410,6 +417,10 @@ private:
     
     // Velocity safety tracking (for detecting bad trajectories)
     int32_t prevTarget[4];  // Previous target positions (task-local, no atomics needed)
+    
+    // Position limits (cached for ISR performance)
+    std::atomic<int32_t> cachedMaxPosition;  // Cached from maxPositionSteps param
+    std::atomic<bool> cachedLimitsEnabled;   // Cached from softLimitsEnabled param
     
     // ISR direction tracking (to minimize setDirection calls)
     bool lastDirection[4];  // Last direction set in ISR (ISR-local, no atomics needed)
@@ -449,6 +460,10 @@ private:
     esp_err_t precomputeTrajectory();
     float hermiteEval(float t, const SplineKnot& k0, const SplineKnot& k1);
     int32_t evaluateSplineAt(const std::vector<SplineKnot>& knots, float t);
+    
+    // Room dimensions & position limits
+    void updateMaxPositionFromRoomDimensions();
+    void checkPositionLimitsAfterRoomChange();
     
     // Motion planning task
     static void motionTaskWrapper(void* arg);

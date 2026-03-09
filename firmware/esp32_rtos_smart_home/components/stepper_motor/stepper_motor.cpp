@@ -126,6 +126,8 @@ StepperMotorComponent::StepperMotorComponent()
       taskRunning(false),
       taskExited(true),
       stopRequested(false),
+      cachedMaxPosition(INT32_MAX),
+      cachedLimitsEnabled(false),
       uploadExpectedSize(0),
       uploadReceivedSize(0),
       uploadInProgress(false),
@@ -383,6 +385,36 @@ void StepperMotorComponent::onInitialize() {
         microsteppingConfigurable->setValueQuiet(0, 0, hal->isMicrosteppingSoftwareConfigurable());
     }
     
+    // Room dimensions & position limits
+    roomDimensionX = addFloatParam("roomDimensionX", 1, 1, 0.5f, 20.0f, 3.0f);
+    roomDimensionX->setOnChange([this](size_t, size_t, float) {
+        updateMaxPositionFromRoomDimensions();
+        checkPositionLimitsAfterRoomChange();
+    });
+    
+    roomDimensionY = addFloatParam("roomDimensionY", 1, 1, 0.5f, 20.0f, 2.5f);
+    roomDimensionY->setOnChange([this](size_t, size_t, float) {
+        updateMaxPositionFromRoomDimensions();
+        checkPositionLimitsAfterRoomChange();
+    });
+    
+    roomDimensionZ = addFloatParam("roomDimensionZ", 1, 1, 0.5f, 20.0f, 2.5f);
+    roomDimensionZ->setOnChange([this](size_t, size_t, float) {
+        updateMaxPositionFromRoomDimensions();
+        checkPositionLimitsAfterRoomChange();
+    });
+    
+    maxPositionSteps = addIntParam("maxPositionSteps", 1, 1, 0, INT32_MAX, 0, true);  // Read-only
+    softLimitsEnabled = addBoolParam("softLimitsEnabled", 1, 1, true);  // Enabled by default
+    softLimitsEnabled->setOnChange([this](size_t, size_t, bool val) {
+        cachedLimitsEnabled.store(val);  // Cache for ISR
+        ESP_LOGI(TAG, "Soft position limits %s", val ? "enabled" : "disabled");
+    });
+    cachedLimitsEnabled.store(true);  // Initialize cache
+    
+    // Calculate initial max position
+    updateMaxPositionFromRoomDimensions();
+    
     // Create step timer (ISR dispatch)
     esp_timer_create_args_t timer_args = {
         .callback = stepTimerCallback,
@@ -540,6 +572,63 @@ esp_err_t StepperMotorComponent::precomputeTrajectory() {
     
     ESP_LOGI(TAG, "Trajectory precomputation complete");
     return ESP_OK;
+}
+
+// ============================================================================
+// Room Dimensions & Position Limits
+// ============================================================================
+
+void StepperMotorComponent::updateMaxPositionFromRoomDimensions() {
+    float Lx = roomDimensionX->getValue(0, 0);
+    float Ly = roomDimensionY->getValue(0, 0);
+    float Lz = roomDimensionZ->getValue(0, 0);
+    
+    // Max cable length = room diagonal (corner to corner)
+    float diagonal = sqrt(Lx*Lx + Ly*Ly + Lz*Lz);
+    
+    // Convert to steps using choreography motor config
+    float r_spool = activeChoreography.r_spool;
+    uint16_t steps_per_rev = activeChoreography.steps_per_rev;
+    uint16_t microstep = activeChoreography.microstep_divisor;
+    
+    float circumference = 2.0f * M_PI * r_spool;
+    float revolutions = diagonal / circumference;
+    int32_t maxSteps = (int32_t)(revolutions * steps_per_rev * microstep);
+    
+    maxPositionSteps->setValueQuiet(0, 0, maxSteps);
+    cachedMaxPosition.store(maxSteps);  // Cache for ISR
+    
+    ESP_LOGI(TAG, "Room dimensions: %.2f × %.2f × %.2f m, diagonal: %.2f m, max position: %ld steps",
+             Lx, Ly, Lz, diagonal, maxSteps);
+}
+
+void StepperMotorComponent::checkPositionLimitsAfterRoomChange() {
+    if (!softLimitsEnabled->getValue(0, 0)) {
+        return;  // Limits disabled, no check needed
+    }
+    
+    int32_t maxPos = maxPositionSteps->getValue(0, 0);
+    bool anyMotorOutOfRange = false;
+    
+    for (int m = 0; m < NUM_MOTORS; m++) {
+        int32_t current = currentPosition[m].load();
+        if (current > maxPos) {
+            ESP_LOGW(TAG, "Motor %d position %ld exceeds new max %ld!", m, current, maxPos);
+            anyMotorOutOfRange = true;
+        }
+    }
+    
+    if (anyMotorOutOfRange) {
+        char errMsg[256];
+        snprintf(errMsg, sizeof(errMsg),
+            "Room dimensions reduced! Motors exceed new max position (%ld steps). "
+            "STOPPED: Use manual jog to bring motors within range.",
+            maxPos);
+        errorMessage->setValueQuiet(0, 0, errMsg);
+        
+        ESP_LOGE(TAG, "%s", errMsg);
+        emergencyStop();  // Stop all movement
+    }
 }
 
 // ============================================================================
@@ -744,6 +833,17 @@ void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
     for (uint8_t m = 0; m < NUM_MOTORS; m++) {
         int32_t current = currentPosition[m].load();
         int32_t target = targetPosition[m].load();
+        
+        // Apply soft position limits (if enabled)
+        if (cachedLimitsEnabled.load()) {
+            int32_t maxPos = cachedMaxPosition.load();
+            if (target > maxPos) {
+                target = maxPos;  // Clamp to max
+            }
+            if (target < 0) {
+                target = 0;  // Clamp to min (homed position)
+            }
+        }
         
         if (current != target) {
             // Direction is pre-computed by motion task - just read it
