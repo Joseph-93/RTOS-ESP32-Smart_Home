@@ -228,7 +228,7 @@ void A4988StepperMotorHAL::setEnabled(uint8_t motor_index, bool enabled) {
     }
 }
 
-bool A4988StepperMotorHAL::isLimitTriggered(uint8_t motor_index) {
+bool IRAM_ATTR A4988StepperMotorHAL::isLimitTriggered(uint8_t motor_index) {
     if (motor_index >= NUM_MOTORS) return false;
     
     // Limit switches are active LOW (normally HIGH with pullup, LOW when triggered)
