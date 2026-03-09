@@ -138,6 +138,7 @@ StepperMotorComponent::StepperMotorComponent()
         jogCommand[i] = 0;
         motorIsHomed[i] = false;
         limitTriggered[i] = false;
+        prevTarget[i] = 0;
     }
     playbackStartUs = 0;
     loopsRemaining = 0;
@@ -248,6 +249,9 @@ void StepperMotorComponent::onInitialize() {
     playbackProgressParam = addFloatParam("playbackProgress", 1, 1, 0.0f, 1.0f, 0.0f, true);
     playbackTimeParam = addFloatParam("playbackTime", 1, 1, 0.0f, 86400.0f, 0.0f, true);
     choreographyCountParam = addIntParam("choreographyCount", 1, 1, 0, 1000, 0, true);
+    
+    // Error reporting (read-only)
+    errorMessage = addStringParam("errorMessage", 1, 1, "", true);
     
     // Motor positions (read-only)
     motorPositions = addIntParam("motorPositions", NUM_MOTORS, 1, INT32_MIN, INT32_MAX, 0, true);
@@ -607,11 +611,26 @@ void StepperMotorComponent::motionTask() {
             
             // Update target positions from precomputed trajectory
             for (int m = 0; m < NUM_MOTORS; m++) {
-                int32_t target = trajectory.motors[m].getPosition(t);
+                int32_t newTarget = trajectory.motors[m].getPosition(t);
+                
+                // Safety check: detect velocity that would exceed motor capability
+                int32_t velocity = abs(newTarget - prevTarget[m]);
+                if (velocity > MAX_VELOCITY_STEPS_PER_TICK) {
+                    char errMsg[128];
+                    snprintf(errMsg, sizeof(errMsg), 
+                        "Motor %d velocity too high: %ld steps/tick (max %u) - E-STOP",
+                        m, (long)velocity, MAX_VELOCITY_STEPS_PER_TICK);
+                    errorMessage->setValueQuiet(0, 0, errMsg);
+                    ESP_LOGE(TAG, "%s", errMsg);
+                    emergencyStop();
+                    return;
+                }
+                
+                prevTarget[m] = newTarget;
                 int32_t current = currentPosition[m].load();
                 
-                targetPosition[m].store(target);
-                targetDirection[m].store(target > current);
+                targetPosition[m].store(newTarget);
+                targetDirection[m].store(newTarget > current);
                 
                 // Update read-only params (not every tick - would be too much)
                 // We'll do this less frequently
@@ -731,10 +750,15 @@ esp_err_t StepperMotorComponent::startPlayback() {
     // Reset trajectory indices
     trajectory.reset();
     
-    // Set initial targets
+    // Clear error message
+    errorMessage->setValueQuiet(0, 0, "");
+    
+    // Set initial targets and reset velocity tracking
     for (int m = 0; m < NUM_MOTORS; m++) {
         if (!trajectory.motors[m].waypoints.empty()) {
-            targetPosition[m].store(trajectory.motors[m].waypoints[0].pos_steps);
+            int32_t initial = trajectory.motors[m].waypoints[0].pos_steps;
+            targetPosition[m].store(initial);
+            prevTarget[m] = initial;  // Initialize velocity tracking
         }
     }
     

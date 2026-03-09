@@ -324,6 +324,9 @@ private:
     static constexpr uint32_t DEFAULT_ISR_RATE_HZ = 40000;  // Default step ISR rate (40 kHz)
     static constexpr uint32_t MAX_ISR_RATE_HZ = 80000;      // Max step ISR rate (80 kHz)
     
+    // Safety limits
+    static constexpr uint32_t MAX_VELOCITY_STEPS_PER_TICK = 320;  // @ 200Hz = 64k steps/sec max
+    
     // ========================================================================
     // Parameters
     // ========================================================================
@@ -338,6 +341,9 @@ private:
     FloatParameter* playbackProgressParam;
     FloatParameter* playbackTimeParam;
     IntParameter* choreographyCountParam;
+    
+    // Error reporting (read-only)
+    StringParameter* errorMessage;
     
     // Motor positions (read-only)
     IntParameter* motorPositions;
@@ -401,6 +407,9 @@ private:
     // Playback timing
     std::atomic<int64_t> playbackStartUs;
     std::atomic<int16_t> loopsRemaining;
+    
+    // Velocity safety tracking (for detecting bad trajectories)
+    int32_t prevTarget[4];  // Previous target positions (task-local, no atomics needed)
     
     // ========================================================================
     // Task and ISR handles
