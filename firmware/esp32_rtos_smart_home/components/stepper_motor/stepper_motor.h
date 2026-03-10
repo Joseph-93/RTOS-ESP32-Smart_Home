@@ -356,6 +356,9 @@ private:
     IntParameter* jogSpeedParam;           // Jog speed in steps/sec
     IntParameter* backoffDistanceParam;    // Limit backoff distance
     
+    // Limit switch simulation (for testing without hardware)
+    BoolParameter* simulateLimitTrigger;   // 1x4: simulate limit triggered per motor
+    
     // Emergency stop
     BoolParameter* eStopCommand;
     BoolParameter* eStopClear;
@@ -421,6 +424,9 @@ private:
     // Position limits (cached for ISR performance)
     std::atomic<int32_t> cachedMaxPosition;  // Cached from maxPositionSteps param
     std::atomic<bool> cachedLimitsEnabled;   // Cached from softLimitsEnabled param
+    
+    // Limit switch simulation (cached for ISR performance)
+    std::atomic<bool> cachedSimulateLimit[4];  // Cached from simulateLimitTrigger param
     
     // ISR direction tracking (to minimize setDirection calls)
     bool lastDirection[4];  // Last direction set in ISR (ISR-local, no atomics needed)

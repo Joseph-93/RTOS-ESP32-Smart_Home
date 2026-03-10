@@ -143,6 +143,7 @@ StepperMotorComponent::StepperMotorComponent()
         limitTriggered[i] = false;
         prevTarget[i] = 0;
         lastDirection[i] = false;
+        cachedSimulateLimit[i] = false;
     }
     playbackStartUs = 0;
     loopsRemaining = 0;
@@ -271,6 +272,13 @@ void StepperMotorComponent::onInitialize() {
     
     jogSpeedParam = addIntParam("jogSpeed", 1, 1, 10, 5000, 500);
     backoffDistanceParam = addIntParam("backoffDistance", 1, 1, 10, 200, 50);
+    
+    // Limit switch simulation (1x4 parameter: one bool per motor)
+    simulateLimitTrigger = addBoolParam("simulateLimitTrigger", 1, 4, false);
+    simulateLimitTrigger->setOnChange([this](size_t row, size_t col, bool val) {
+        cachedSimulateLimit[col].store(val);
+        ESP_LOGI(TAG, "Motor %zu simulate limit: %s", col, val ? "TRIGGERED" : "clear");
+    });
     
     moveToHomeParam = addBoolParam("moveToHome", 1, 1, false);
     moveToHomeParam->setOnChange([this](size_t, size_t, bool val) {
@@ -799,8 +807,9 @@ void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
             int8_t jog = jogCommand[m].load();
             if (jog == 0) continue;  // No jog command
             
-            // Check limit switch before stepping
-            if (hal->isLimitTriggered(m)) {
+            // Check limit switch before stepping (simulation overrides hardware)
+            bool limitHit = cachedSimulateLimit[m].load() || hal->isLimitTriggered(m);
+            if (limitHit) {
                 // Hit limit - stop jogging, flag for task to handle back-off
                 jogCommand[m].store(0);
                 limitTriggered[m].store(true);
