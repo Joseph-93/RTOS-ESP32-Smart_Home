@@ -11,7 +11,7 @@ message(STATUS "ENABLE_GUI = ${ENABLE_GUI}")
 # The #ifdef guards in main.cpp exclude unused code from compilation.
 # This avoids CMake cache issues with conditional component lists on fresh builds.
 # To enable/disable components, edit components_config.cmake.
-list(APPEND REQUIRED_COMPONENTS heartbeat rgb_led touch_sensor gui light_sensor motion_sensor door_sensor)
+list(APPEND REQUIRED_COMPONENTS heartbeat rgb_led touch_sensor gui light_sensor motion_sensor door_sensor stepper_motor)
 
 message(STATUS "Enabled components: ${REQUIRED_COMPONENTS}")
 

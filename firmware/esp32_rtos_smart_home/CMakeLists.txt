@@ -42,6 +42,9 @@ endif()
 if(ENABLE_TOUCH_SENSOR)
     add_compile_definitions(ENABLE_TOUCH_SENSOR)
 endif()
+if(ENABLE_STEPPER_MOTOR)
+    add_compile_definitions(ENABLE_STEPPER_MOTOR)
+endif()
 
 # Add common directory to component search path
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/common")

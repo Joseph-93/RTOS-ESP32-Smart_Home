@@ -46,6 +46,10 @@
 #ifdef ENABLE_RGB_LED
 #include "rgb_led.h"
 #endif
+#ifdef ENABLE_STEPPER_MOTOR
+#include "stepper_motor.h"
+#include "a4988_hal.h"
+#endif
 
 #include "web_server.h"
 #include "wifi_init.h"
@@ -88,6 +92,10 @@ static TouchSensorComponent touch_sensor_component;
 #endif
 #ifdef ENABLE_RGB_LED
 static RgbLedComponent rgb_led_component;
+#endif
+#ifdef ENABLE_STEPPER_MOTOR
+static A4988StepperMotorHAL stepper_hal;
+static StepperMotorComponent stepper_motor_component(&stepper_hal);
 #endif
 static WebServerComponent web_server_component;
 static OtaUpdateComponent ota_component;
@@ -135,6 +143,10 @@ extern "C" void app_main(void)
 
 #ifdef ENABLE_RGB_LED
     component_graph->registerComponent(&rgb_led_component);
+#endif
+
+#ifdef ENABLE_STEPPER_MOTOR
+    component_graph->registerComponent(&stepper_motor_component);
 #endif
 
     component_graph->registerComponent(&web_server_component);
