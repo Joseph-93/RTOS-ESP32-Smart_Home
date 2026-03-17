@@ -1,0 +1,1733 @@
+[2026-03-16 18:21:44.758] Heartbeat: uptime 49s, heap 24764B, beats 40, rate 1.0Hz
+[2026-03-16 18:21:54.705] Heartbeat: uptime 59s, heap 24764B, beats 50, rate 1.0Hz
+[2026-03-16 18:22:04.773] Heartbeat: uptime 69s, heap 26072B, beats 60, rate 1.0Hz
+[2026-03-16 18:22:14.757] Heartbeat: uptime 79s, heap 26344B, beats 70, rate 1.0Hz
+[2026-03-16 18:22:24.865] Heartbeat: uptime 89s, heap 27904B, beats 80, rate 1.0Hz
+[2026-03-16 18:22:34.859] Heartbeat: uptime 99s, heap 27904B, beats 90, rate 1.0Hz
+[2026-03-16 18:22:46.232] Heartbeat: uptime 109s, heap 24784B, beats 100, rate 1.0Hz
+[2026-03-16 18:22:55.080] Heartbeat: uptime 119s, heap 24736B, beats 110, rate 1.0Hz
+[2026-03-16 18:23:04.890] Heartbeat: uptime 129s, heap 27880B, beats 120, rate 1.0Hz
+[2026-03-16 18:23:14.909] Heartbeat: uptime 139s, heap 27880B, beats 130, rate 1.0Hz
+[2026-03-16 18:23:24.883] Heartbeat: uptime 149s, heap 26320B, beats 140, rate 1.0Hz
+[2026-03-16 18:23:34.946] Heartbeat: uptime 159s, heap 27880B, beats 150, rate 1.0Hz
+[2026-03-16 18:23:47.264] Heartbeat: uptime 169s, heap 26060B, beats 160, rate 1.0Hz
+[2026-03-16 18:23:55.372] Heartbeat: uptime 179s, heap 26320B, beats 170, rate 1.0Hz
+[2026-03-16 18:24:05.022] Heartbeat: uptime 189s, heap 27880B, beats 180, rate 1.0Hz
+[2026-03-16 18:24:15.008] Heartbeat: uptime 199s, heap 26316B, beats 190, rate 1.0Hz
+[2026-03-16 18:24:29.737] Heartbeat: uptime 209s, heap 24760B, beats 200, rate 1.0Hz
+[2026-03-16 18:24:35.063] Heartbeat: uptime 219s, heap 27880B, beats 210, rate 1.0Hz
+[2026-03-16 18:24:45.093] Heartbeat: uptime 229s, heap 27880B, beats 220, rate 1.0Hz
+[2026-03-16 18:24:55.209] Heartbeat: uptime 239s, heap 27880B, beats 230, rate 1.0Hz
+[2026-03-16 18:25:05.123] Heartbeat: uptime 249s, heap 27888B, beats 240, rate 1.0Hz
+[2026-03-16 18:25:15.123] Heartbeat: uptime 259s, heap 24760B, beats 250, rate 1.0Hz
+[2026-03-16 18:25:25.169] Heartbeat: uptime 269s, heap 27888B, beats 260, rate 1.0Hz
+[2026-03-16 18:25:35.192] Heartbeat: uptime 279s, heap 24760B, beats 270, rate 1.0Hz
+[2026-03-16 18:25:45.208] Heartbeat: uptime 289s, heap 24756B, beats 280, rate 1.0Hz
+[2026-03-16 18:25:55.412] Heartbeat: uptime 299s, heap 26328B, beats 290, rate 1.0Hz
+[2026-03-16 18:26:05.263] Heartbeat: uptime 309s, heap 24752B, beats 300, rate 1.0Hz
+[2026-03-16 18:26:15.275] Heartbeat: uptime 319s, heap 27880B, beats 310, rate 1.0Hz
+[2026-03-16 18:26:25.298] Heartbeat: uptime 329s, heap 26320B, beats 320, rate 1.0Hz
+[2026-03-16 18:26:35.377] Heartbeat: uptime 339s, heap 26196B, beats 330, rate 1.0Hz
+[2026-03-16 18:26:45.332] Heartbeat: uptime 349s, heap 26320B, beats 340, rate 1.0Hz
+[2026-03-16 18:32:30.117] Heartbeat: uptime 49s, heap 24636B, beats 40, rate 1.0Hz
+[2026-03-16 18:32:40.167] Heartbeat: uptime 59s, heap 26220B, beats 50, rate 1.0Hz
+[2026-03-16 18:32:50.155] Heartbeat: uptime 69s, heap 26216B, beats 60, rate 1.0Hz
+[2026-03-16 18:33:00.167] Heartbeat: uptime 79s, heap 26212B, beats 70, rate 1.0Hz
+[2026-03-16 18:33:10.208] Heartbeat: uptime 89s, heap 26216B, beats 80, rate 1.0Hz
+[2026-03-16 18:33:20.273] Heartbeat: uptime 99s, heap 27780B, beats 90, rate 1.0Hz
+[2026-03-16 18:33:30.296] Heartbeat: uptime 109s, heap 27780B, beats 100, rate 1.0Hz
+[2026-03-16 18:33:32.042] OTA: I (112107) OTA: Starting OTA update from: http://172.21.48.1:8321/esp32_rtos_smart_home.bin
+[2026-03-16 18:33:32.043] OTA: I (112113) OTA: Target partition: ota_1 (addr=0x1f0000, size=0x1a0000)
+[2026-03-16 18:33:40.329] Heartbeat: uptime 119s, heap 10800B, beats 110, rate 1.0Hz
+[2026-03-16 18:33:47.054] OTA: E (127128) OTA: HTTP connection failed: ESP_ERR_HTTP_CONNECT
+[2026-03-16 18:33:50.346] Heartbeat: uptime 129s, heap 27672B, beats 120, rate 1.0Hz
+[2026-03-16 18:34:00.388] Heartbeat: uptime 139s, heap 25840B, beats 130, rate 1.0Hz
+[2026-03-16 18:34:11.773] Heartbeat: uptime 149s, heap 24540B, beats 140, rate 1.0Hz
+[2026-03-16 18:34:20.382] Heartbeat: uptime 159s, heap 27660B, beats 150, rate 1.0Hz
+[2026-03-16 18:34:30.410] Heartbeat: uptime 169s, heap 27660B, beats 160, rate 1.0Hz
+[2026-03-16 18:34:40.763] Heartbeat: uptime 179s, heap 27660B, beats 170, rate 1.0Hz
+[2026-03-16 18:34:50.787] Heartbeat: uptime 189s, heap 24540B, beats 180, rate 1.0Hz
+[2026-03-16 18:35:00.707] Heartbeat: uptime 199s, heap 27660B, beats 190, rate 1.0Hz
+[2026-03-16 18:35:10.706] Heartbeat: uptime 209s, heap 27660B, beats 200, rate 1.0Hz
+[2026-03-16 18:35:20.761] Heartbeat: uptime 219s, heap 26088B, beats 210, rate 1.0Hz
+[2026-03-16 18:35:31.141] Heartbeat: uptime 229s, heap 27660B, beats 220, rate 1.0Hz
+[2026-03-16 18:35:40.615] Heartbeat: uptime 240s, heap 27660B, beats 230, rate 1.0Hz
+[2026-03-16 18:35:50.589] Heartbeat: uptime 250s, heap 27660B, beats 240, rate 1.0Hz
+[2026-03-16 18:36:00.945] Heartbeat: uptime 260s, heap 27660B, beats 250, rate 1.0Hz
+[2026-03-16 18:36:10.666] Heartbeat: uptime 270s, heap 27660B, beats 260, rate 1.0Hz
+[2026-03-16 18:36:20.630] Heartbeat: uptime 280s, heap 27660B, beats 270, rate 1.0Hz
+[2026-03-16 18:36:30.627] Heartbeat: uptime 290s, heap 27140B, beats 280, rate 1.0Hz
+[2026-03-16 18:36:40.627] Heartbeat: uptime 300s, heap 24540B, beats 290, rate 1.0Hz
+[2026-03-16 18:36:50.672] Heartbeat: uptime 310s, heap 24540B, beats 300, rate 1.0Hz
+[2026-03-16 18:36:58.720] OTA: I (318821) OTA: Starting OTA update from: http://10.0.0.189:8321/esp32_rtos_smart_home.bin
+[2026-03-16 18:36:58.720] OTA: I (318824) OTA: Target partition: ota_1 (addr=0x1f0000, size=0x1a0000)
+[2026-03-16 18:37:00.641] Heartbeat: uptime 320s, heap 9308B, beats 310, rate 1.0Hz
+[2026-03-16 18:37:10.773] Heartbeat: uptime 330s, heap 9296B, beats 320, rate 1.0Hz
+[2026-03-16 18:37:13.737] OTA: E (333840) OTA: HTTP connection failed: ESP_ERR_HTTP_CONNECT
+[2026-03-16 18:37:21.756] Heartbeat: uptime 340s, heap 24540B, beats 330, rate 1.0Hz
+[2026-03-16 18:37:30.841] Heartbeat: uptime 350s, heap 24540B, beats 340, rate 1.0Hz
+[2026-03-16 18:37:40.742] Heartbeat: uptime 360s, heap 27660B, beats 350, rate 1.0Hz
+[2026-03-16 18:37:50.881] Heartbeat: uptime 370s, heap 27660B, beats 360, rate 1.0Hz
+[2026-03-16 18:38:00.790] Heartbeat: uptime 380s, heap 26108B, beats 370, rate 1.0Hz
+[2026-03-16 18:38:10.756] Heartbeat: uptime 390s, heap 26108B, beats 380, rate 1.0Hz
+[2026-03-16 18:38:20.852] Heartbeat: uptime 400s, heap 25848B, beats 390, rate 1.0Hz
+[2026-03-16 18:38:30.846] Heartbeat: uptime 410s, heap 27672B, beats 400, rate 1.0Hz
+[2026-03-16 18:38:40.884] Heartbeat: uptime 420s, heap 27660B, beats 410, rate 1.0Hz
+[2026-03-16 18:38:50.856] Heartbeat: uptime 430s, heap 27660B, beats 420, rate 1.0Hz
+[2026-03-16 18:39:00.899] Heartbeat: uptime 440s, heap 27660B, beats 430, rate 1.0Hz
+[2026-03-16 18:39:10.965] Heartbeat: uptime 450s, heap 27660B, beats 440, rate 1.0Hz
+[2026-03-16 18:39:20.921] Heartbeat: uptime 460s, heap 27660B, beats 450, rate 1.0Hz
+[2026-03-16 18:39:30.942] Heartbeat: uptime 470s, heap 27660B, beats 460, rate 1.0Hz
+[2026-03-16 18:39:40.949] Heartbeat: uptime 480s, heap 27660B, beats 470, rate 1.0Hz
+[2026-03-16 18:39:50.966] Heartbeat: uptime 490s, heap 27660B, beats 480, rate 1.0Hz
+[2026-03-16 18:39:58.124] OTA: I (498251) OTA: Starting OTA update from: http://10.0.0.189:8321/esp32_rtos_smart_home.bin
+[2026-03-16 18:39:58.125] OTA: I (498255) OTA: Target partition: ota_1 (addr=0x1f0000, size=0x1a0000)
+[2026-03-16 18:40:01.007] Heartbeat: uptime 500s, heap 12408B, beats 490, rate 1.0Hz
+[2026-03-16 18:40:11.047] Heartbeat: uptime 510s, heap 12408B, beats 500, rate 1.0Hz
+[2026-03-16 18:40:13.188] OTA: E (513272) OTA: HTTP connection failed: ESP_ERR_HTTP_CONNECT
+[2026-03-16 18:40:21.077] Heartbeat: uptime 520s, heap 27660B, beats 510, rate 1.0Hz
+[2026-03-16 18:40:31.757] Heartbeat: uptime 530s, heap 24540B, beats 520, rate 1.0Hz
+[2026-03-16 18:40:39.024] OTA: I (539121) OTA: Starting OTA update from: http://10.0.0.189:8321/esp32_rtos_smart_home.bin
+[2026-03-16 18:40:39.024] OTA: I (539125) OTA: Target partition: ota_1 (addr=0x1f0000, size=0x1a0000)
+[2026-03-16 18:40:41.078] Heartbeat: uptime 540s, heap 12436B, beats 530, rate 1.0Hz
+[2026-03-16 18:40:51.115] Heartbeat: uptime 550s, heap 12436B, beats 540, rate 1.0Hz
+[2026-03-16 18:40:54.044] OTA: E (554141) OTA: HTTP connection failed: ESP_ERR_HTTP_CONNECT
+[2026-03-16 18:41:01.118] Heartbeat: uptime 560s, heap 24344B, beats 550, rate 1.0Hz
+[2026-03-16 18:41:11.108] Heartbeat: uptime 570s, heap 24540B, beats 560, rate 1.0Hz
+[2026-03-16 18:41:21.238] Heartbeat: uptime 580s, heap 24528B, beats 570, rate 1.0Hz
+[2026-03-16 18:41:31.276] Heartbeat: uptime 590s, heap 24540B, beats 580, rate 1.0Hz
+[2026-03-16 18:41:41.181] Heartbeat: uptime 600s, heap 26100B, beats 590, rate 1.0Hz
+[2026-03-16 18:41:52.265] Heartbeat: uptime 610s, heap 24528B, beats 600, rate 1.0Hz
+[2026-03-16 18:42:01.193] Heartbeat: uptime 620s, heap 26100B, beats 610, rate 1.0Hz
+[2026-03-16 18:42:11.262] Heartbeat: uptime 630s, heap 25840B, beats 620, rate 1.0Hz
+[2026-03-16 18:42:21.220] Heartbeat: uptime 640s, heap 26100B, beats 630, rate 1.0Hz
+[2026-03-16 18:42:31.280] Heartbeat: uptime 650s, heap 27660B, beats 640, rate 1.0Hz
+[2026-03-16 18:42:41.314] Heartbeat: uptime 660s, heap 27660B, beats 650, rate 1.0Hz
+[2026-03-16 18:42:51.359] Heartbeat: uptime 670s, heap 27660B, beats 660, rate 1.0Hz
+[2026-03-16 18:43:01.369] Heartbeat: uptime 680s, heap 27660B, beats 670, rate 1.0Hz
+[2026-03-16 18:43:11.368] Heartbeat: uptime 690s, heap 27660B, beats 680, rate 1.0Hz
+[2026-03-16 18:43:21.376] Heartbeat: uptime 700s, heap 27660B, beats 690, rate 1.0Hz
+[2026-03-16 18:43:31.483] Heartbeat: uptime 710s, heap 27660B, beats 700, rate 1.0Hz
+[2026-03-16 18:43:41.427] Heartbeat: uptime 720s, heap 27660B, beats 710, rate 1.0Hz
+[2026-03-16 18:43:51.513] Heartbeat: uptime 730s, heap 27660B, beats 720, rate 1.0Hz
+[2026-03-16 18:44:01.470] Heartbeat: uptime 740s, heap 27660B, beats 730, rate 1.0Hz
+[2026-03-16 18:44:11.503] Heartbeat: uptime 750s, heap 27660B, beats 740, rate 1.0Hz
+[2026-03-16 18:44:21.539] Heartbeat: uptime 761s, heap 27660B, beats 750, rate 1.0Hz
+[2026-03-16 18:44:31.564] Heartbeat: uptime 771s, heap 27660B, beats 760, rate 1.0Hz
+[2026-03-16 18:44:41.595] Heartbeat: uptime 781s, heap 27660B, beats 770, rate 1.0Hz
+[2026-03-16 18:44:51.642] Heartbeat: uptime 791s, heap 27660B, beats 780, rate 1.0Hz
+[2026-03-16 18:45:01.607] Heartbeat: uptime 801s, heap 27660B, beats 790, rate 1.0Hz
+[2026-03-16 18:45:11.621] Heartbeat: uptime 811s, heap 24332B, beats 800, rate 1.0Hz
+[2026-03-16 18:45:21.612] Heartbeat: uptime 821s, heap 24540B, beats 810, rate 1.0Hz
+[2026-03-16 18:45:31.702] Heartbeat: uptime 831s, heap 27660B, beats 820, rate 1.0Hz
+[2026-03-16 18:45:41.734] Heartbeat: uptime 841s, heap 26100B, beats 830, rate 1.0Hz
+[2026-03-16 18:45:51.686] Heartbeat: uptime 851s, heap 26100B, beats 840, rate 1.0Hz
+[2026-03-16 18:46:01.695] Heartbeat: uptime 861s, heap 26100B, beats 850, rate 1.0Hz
+[2026-03-16 18:46:11.731] Heartbeat: uptime 871s, heap 27660B, beats 860, rate 1.0Hz
+[2026-03-16 18:46:21.773] Heartbeat: uptime 881s, heap 26104B, beats 870, rate 1.0Hz
+[2026-03-16 18:46:31.735] Heartbeat: uptime 891s, heap 26104B, beats 880, rate 1.0Hz
+[2026-03-16 18:46:41.838] Heartbeat: uptime 901s, heap 26088B, beats 890, rate 1.0Hz
+[2026-03-16 18:46:51.842] Heartbeat: uptime 911s, heap 27660B, beats 900, rate 1.0Hz
+[2026-03-16 18:47:01.831] Heartbeat: uptime 921s, heap 27660B, beats 910, rate 1.0Hz
+[2026-03-16 18:47:11.937] Heartbeat: uptime 931s, heap 27660B, beats 920, rate 1.0Hz
+[2026-03-16 18:47:21.903] Heartbeat: uptime 941s, heap 27660B, beats 930, rate 1.0Hz
+[2026-03-16 18:47:31.911] Heartbeat: uptime 951s, heap 27660B, beats 940, rate 1.0Hz
+[2026-03-16 18:47:41.909] Heartbeat: uptime 961s, heap 27660B, beats 950, rate 1.0Hz
+[2026-03-16 18:47:51.952] Heartbeat: uptime 971s, heap 27660B, beats 960, rate 1.0Hz
+[2026-03-16 18:48:01.955] Heartbeat: uptime 981s, heap 27660B, beats 970, rate 1.0Hz
+[2026-03-16 18:48:11.972] Heartbeat: uptime 991s, heap 27660B, beats 980, rate 1.0Hz
+[2026-03-16 18:48:22.035] Heartbeat: uptime 1001s, heap 27660B, beats 990, rate 1.0Hz
+[2026-03-16 18:48:32.125] Heartbeat: uptime 1011s, heap 27660B, beats 1000, rate 1.0Hz
+[2026-03-16 18:48:42.025] Heartbeat: uptime 1021s, heap 27660B, beats 1010, rate 1.0Hz
+[2026-03-16 18:48:52.091] Heartbeat: uptime 1031s, heap 27660B, beats 1020, rate 1.0Hz
+[2026-03-16 18:49:02.082] Heartbeat: uptime 1041s, heap 27660B, beats 1030, rate 1.0Hz
+[2026-03-16 18:49:12.093] Heartbeat: uptime 1051s, heap 27660B, beats 1040, rate 1.0Hz
+[2026-03-16 18:49:22.163] Heartbeat: uptime 1061s, heap 27660B, beats 1050, rate 1.0Hz
+[2026-03-16 18:49:32.128] Heartbeat: uptime 1071s, heap 24344B, beats 1060, rate 1.0Hz
+[2026-03-16 18:49:42.122] Heartbeat: uptime 1081s, heap 24540B, beats 1070, rate 1.0Hz
+[2026-03-16 18:49:52.159] Heartbeat: uptime 1091s, heap 24540B, beats 1080, rate 1.0Hz
+[2026-03-16 18:50:02.161] Heartbeat: uptime 1101s, heap 26100B, beats 1090, rate 1.0Hz
+[2026-03-16 18:50:12.192] Heartbeat: uptime 1111s, heap 24528B, beats 1100, rate 1.0Hz
+[2026-03-16 18:50:22.207] Heartbeat: uptime 1121s, heap 24540B, beats 1110, rate 1.0Hz
+[2026-03-16 18:50:32.265] Heartbeat: uptime 1131s, heap 27660B, beats 1120, rate 1.0Hz
+[2026-03-16 18:50:42.283] Heartbeat: uptime 1141s, heap 27660B, beats 1130, rate 1.0Hz
+[2026-03-16 18:50:52.311] Heartbeat: uptime 1151s, heap 27660B, beats 1140, rate 1.0Hz
+[2026-03-16 18:51:02.326] Heartbeat: uptime 1161s, heap 27660B, beats 1150, rate 1.0Hz
+[2026-03-16 18:51:12.344] Heartbeat: uptime 1171s, heap 27652B, beats 1160, rate 1.0Hz
+[2026-03-16 18:51:22.388] Heartbeat: uptime 1181s, heap 27660B, beats 1170, rate 1.0Hz
+[2026-03-16 18:51:23.875] OTA: I (1183822) OTA: Starting OTA update from: http://10.0.0.189:80/ota/esp32_rtos_smart_home.bin
+[2026-03-16 18:51:23.875] OTA: I (1183826) OTA: Target partition: ota_1 (addr=0x1f0000, size=0x1a0000)
+[2026-03-16 18:51:32.434] Heartbeat: uptime 1191s, heap 12416B, beats 1180, rate 1.0Hz
+[2026-03-16 18:51:38.756] OTA: E (1198842) OTA: HTTP connection failed: ESP_ERR_HTTP_CONNECT
+[2026-03-16 18:51:42.442] Heartbeat: uptime 1201s, heap 27672B, beats 1190, rate 1.0Hz
+[2026-03-16 18:51:52.435] Heartbeat: uptime 1211s, heap 27672B, beats 1200, rate 1.0Hz
+[2026-03-16 18:52:02.548] Heartbeat: uptime 1221s, heap 27672B, beats 1210, rate 1.0Hz
+[2026-03-16 18:52:12.483] Heartbeat: uptime 1231s, heap 27672B, beats 1220, rate 1.0Hz
+[2026-03-16 18:52:22.575] Heartbeat: uptime 1241s, heap 27660B, beats 1230, rate 1.0Hz
+[2026-03-16 18:52:32.579] Heartbeat: uptime 1252s, heap 27660B, beats 1240, rate 1.0Hz
+[2026-03-16 18:52:42.558] Heartbeat: uptime 1262s, heap 27660B, beats 1250, rate 1.0Hz
+[2026-03-16 18:52:52.601] Heartbeat: uptime 1272s, heap 27660B, beats 1260, rate 1.0Hz
+[2026-03-16 18:53:02.641] Heartbeat: uptime 1282s, heap 27656B, beats 1270, rate 1.0Hz
+[2026-03-16 18:53:12.630] Heartbeat: uptime 1292s, heap 27656B, beats 1280, rate 1.0Hz
+[2026-03-16 18:53:22.737] Heartbeat: uptime 1302s, heap 24332B, beats 1290, rate 1.0Hz
+[2026-03-16 18:53:32.776] Heartbeat: uptime 1312s, heap 24532B, beats 1300, rate 1.0Hz
+[2026-03-16 18:53:42.669] Heartbeat: uptime 1322s, heap 26096B, beats 1310, rate 1.0Hz
+[2026-03-16 18:53:52.653] Heartbeat: uptime 1332s, heap 24532B, beats 1320, rate 1.0Hz
+[2026-03-16 18:54:03.360] Heartbeat: uptime 1342s, heap 24536B, beats 1330, rate 1.0Hz
+[2026-03-16 18:54:12.843] Heartbeat: uptime 1352s, heap 27656B, beats 1340, rate 1.0Hz
+[2026-03-16 18:54:22.696] Heartbeat: uptime 1362s, heap 26096B, beats 1350, rate 1.0Hz
+[2026-03-16 18:54:32.775] Heartbeat: uptime 1372s, heap 27656B, beats 1360, rate 1.0Hz
+[2026-03-16 18:54:42.852] Heartbeat: uptime 1382s, heap 27656B, beats 1370, rate 1.0Hz
+[2026-03-16 18:54:52.807] Heartbeat: uptime 1392s, heap 27656B, beats 1380, rate 1.0Hz
+[2026-03-16 18:55:02.886] Heartbeat: uptime 1402s, heap 26096B, beats 1390, rate 1.0Hz
+[2026-03-16 18:55:12.924] Heartbeat: uptime 1412s, heap 26096B, beats 1400, rate 1.0Hz
+[2026-03-16 18:55:22.855] Heartbeat: uptime 1422s, heap 27656B, beats 1410, rate 1.0Hz
+[2026-03-16 18:55:32.905] Heartbeat: uptime 1432s, heap 27656B, beats 1420, rate 1.0Hz
+[2026-03-16 18:55:42.901] Heartbeat: uptime 1442s, heap 27656B, beats 1430, rate 1.0Hz
+[2026-03-16 18:55:52.928] Heartbeat: uptime 1452s, heap 27656B, beats 1440, rate 1.0Hz
+[2026-03-16 18:56:02.920] Heartbeat: uptime 1462s, heap 25972B, beats 1450, rate 1.0Hz
+[2026-03-16 18:56:13.005] Heartbeat: uptime 1472s, heap 27656B, beats 1460, rate 1.0Hz
+[2026-03-16 18:56:23.030] Heartbeat: uptime 1482s, heap 27656B, beats 1470, rate 1.0Hz
+[2026-03-16 18:56:33.020] Heartbeat: uptime 1492s, heap 27656B, beats 1480, rate 1.0Hz
+[2026-03-16 18:56:43.094] Heartbeat: uptime 1502s, heap 27656B, beats 1490, rate 1.0Hz
+[2026-03-16 18:56:53.052] Heartbeat: uptime 1512s, heap 27656B, beats 1500, rate 1.0Hz
+[2026-03-16 18:57:03.085] Heartbeat: uptime 1522s, heap 27656B, beats 1510, rate 1.0Hz
+[2026-03-16 18:57:13.103] Heartbeat: uptime 1532s, heap 27656B, beats 1520, rate 1.0Hz
+[2026-03-16 18:57:23.124] Heartbeat: uptime 1542s, heap 27656B, beats 1530, rate 1.0Hz
+[2026-03-16 18:57:33.144] Heartbeat: uptime 1552s, heap 24532B, beats 1540, rate 1.0Hz
+[2026-03-16 18:57:43.121] Heartbeat: uptime 1562s, heap 24532B, beats 1550, rate 1.0Hz
+[2026-03-16 18:57:53.142] Heartbeat: uptime 1572s, heap 24528B, beats 1560, rate 1.0Hz
+[2026-03-16 18:58:03.184] Heartbeat: uptime 1582s, heap 26092B, beats 1570, rate 1.0Hz
+[2026-03-16 18:58:13.208] Heartbeat: uptime 1592s, heap 27656B, beats 1580, rate 1.0Hz
+[2026-03-16 18:58:23.386] Heartbeat: uptime 1602s, heap 27656B, beats 1590, rate 1.0Hz
+[2026-03-16 18:58:33.219] Heartbeat: uptime 1612s, heap 26096B, beats 1600, rate 1.0Hz
+[2026-03-16 18:58:43.352] Heartbeat: uptime 1622s, heap 27656B, beats 1610, rate 1.0Hz
+[2026-03-16 18:58:53.291] Heartbeat: uptime 1632s, heap 25972B, beats 1620, rate 1.0Hz
+[2026-03-16 18:59:03.317] Heartbeat: uptime 1642s, heap 27668B, beats 1630, rate 1.0Hz
+[2026-03-16 18:59:13.340] Heartbeat: uptime 1652s, heap 27668B, beats 1640, rate 1.0Hz
+[2026-03-16 18:59:23.600] Heartbeat: uptime 1662s, heap 27656B, beats 1650, rate 1.0Hz
+[2026-03-16 18:59:33.395] Heartbeat: uptime 1672s, heap 27656B, beats 1660, rate 1.0Hz
+[2026-03-16 18:59:43.379] Heartbeat: uptime 1682s, heap 27656B, beats 1670, rate 1.0Hz
+[2026-03-16 18:59:53.421] Heartbeat: uptime 1692s, heap 27656B, beats 1680, rate 1.0Hz
+[2026-03-16 19:00:03.432] Heartbeat: uptime 1702s, heap 27656B, beats 1690, rate 1.0Hz
+[2026-03-16 19:00:13.486] Heartbeat: uptime 1712s, heap 27656B, beats 1700, rate 1.0Hz
+[2026-03-16 19:00:23.469] Heartbeat: uptime 1722s, heap 27656B, beats 1710, rate 1.0Hz
+[2026-03-16 19:00:33.533] Heartbeat: uptime 1732s, heap 27656B, beats 1720, rate 1.0Hz
+[2026-03-16 19:00:43.504] Heartbeat: uptime 1742s, heap 27656B, beats 1730, rate 1.0Hz
+[2026-03-16 19:00:53.538] Heartbeat: uptime 1753s, heap 27656B, beats 1740, rate 1.0Hz
+[2026-03-16 19:01:03.815] Heartbeat: uptime 1763s, heap 24528B, beats 1750, rate 1.0Hz
+[2026-03-16 19:01:13.683] Heartbeat: uptime 1773s, heap 27656B, beats 1760, rate 1.0Hz
+[2026-03-16 19:07:58.164] Heartbeat: uptime 216s, heap 27912B, beats 210, rate 1.0Hz
+[2026-03-16 19:08:08.576] Heartbeat: uptime 226s, heap 24784B, beats 220, rate 1.0Hz
+[2026-03-16 19:08:18.231] Heartbeat: uptime 236s, heap 27904B, beats 230, rate 1.0Hz
+[2026-03-16 19:08:28.190] Heartbeat: uptime 246s, heap 27912B, beats 240, rate 1.0Hz
+[2026-03-16 19:08:38.204] Heartbeat: uptime 256s, heap 27912B, beats 250, rate 1.0Hz
+[2026-03-16 19:08:48.304] Heartbeat: uptime 266s, heap 27904B, beats 260, rate 1.0Hz
+[2026-03-16 19:09:35.410] OTA: E (314552) OTA: HTTP connection failed: ESP_ERR_HTTP_CONNECT
+[2026-03-16 19:09:38.425] Heartbeat: uptime 316s, heap 27748B, beats 310, rate 1.0Hz
+[2026-03-16 19:09:48.385] Heartbeat: uptime 326s, heap 27768B, beats 320, rate 1.0Hz
+[2026-03-16 19:09:58.362] Heartbeat: uptime 336s, heap 27768B, beats 330, rate 1.0Hz
+[2026-03-16 19:10:08.373] Heartbeat: uptime 346s, heap 24628B, beats 340, rate 1.0Hz
+[2026-03-16 19:10:18.382] Heartbeat: uptime 356s, heap 24616B, beats 350, rate 1.0Hz
+[2026-03-16 19:10:28.405] Heartbeat: uptime 366s, heap 24644B, beats 360, rate 1.0Hz
+[2026-03-16 19:10:38.477] Heartbeat: uptime 376s, heap 26208B, beats 370, rate 1.0Hz
+[2026-03-16 19:10:46.175] OTA: I (385327) OTA: Starting OTA update from: http://10.0.0.189:80/ota/esp32_rtos_smart_home.bin
+[2026-03-16 19:10:46.175] OTA: I (385331) OTA: Target partition: ota_1 (addr=0x1f0000, size=0x1a0000)
+[2026-03-16 19:10:48.415] Heartbeat: uptime 387s, heap 10680B, beats 380, rate 1.0Hz
+[2026-03-16 19:10:58.514] Heartbeat: uptime 397s, heap 12500B, beats 390, rate 1.0Hz
+[2026-03-16 19:11:01.214] OTA: E (400347) OTA: HTTP connection failed: ESP_ERR_HTTP_CONNECT
+[2026-03-16 19:11:08.531] Heartbeat: uptime 407s, heap 27768B, beats 400, rate 1.0Hz
+[2026-03-16 19:11:18.518] Heartbeat: uptime 417s, heap 27768B, beats 410, rate 1.0Hz
+[2026-03-16 19:11:28.566] Heartbeat: uptime 427s, heap 27624B, beats 420, rate 1.0Hz
+[2026-03-16 19:11:38.546] Heartbeat: uptime 437s, heap 26188B, beats 430, rate 1.0Hz
+[2026-03-16 19:11:48.584] Heartbeat: uptime 447s, heap 27768B, beats 440, rate 1.0Hz
+[2026-03-16 19:11:58.625] Heartbeat: uptime 457s, heap 27768B, beats 450, rate 1.0Hz
+[2026-03-16 19:12:08.615] Heartbeat: uptime 467s, heap 27760B, beats 460, rate 1.0Hz
+[2026-03-16 19:12:18.640] Heartbeat: uptime 477s, heap 27760B, beats 470, rate 1.0Hz
+[2026-03-16 19:12:28.671] Heartbeat: uptime 487s, heap 27768B, beats 480, rate 1.0Hz
+[2026-03-16 19:12:38.701] Heartbeat: uptime 497s, heap 27768B, beats 490, rate 1.0Hz
+[2026-03-16 19:12:48.732] Heartbeat: uptime 507s, heap 27748B, beats 500, rate 1.0Hz
+[2026-03-16 19:12:58.803] Heartbeat: uptime 517s, heap 27748B, beats 510, rate 1.0Hz
+[2026-03-16 19:13:08.764] Heartbeat: uptime 527s, heap 27768B, beats 520, rate 1.0Hz
+[2026-03-16 19:13:18.766] Heartbeat: uptime 537s, heap 27768B, beats 530, rate 1.0Hz
+[2026-03-16 19:13:28.785] Heartbeat: uptime 547s, heap 27748B, beats 540, rate 1.0Hz
+[2026-03-16 19:13:38.809] Heartbeat: uptime 557s, heap 27748B, beats 550, rate 1.0Hz
+[2026-03-16 19:13:48.832] Heartbeat: uptime 567s, heap 27768B, beats 560, rate 1.0Hz
+[2026-03-16 19:13:58.894] Heartbeat: uptime 577s, heap 27768B, beats 570, rate 1.0Hz
+[2026-03-16 19:14:08.874] Heartbeat: uptime 587s, heap 27748B, beats 580, rate 1.0Hz
+[2026-03-16 19:14:18.869] Heartbeat: uptime 597s, heap 24628B, beats 590, rate 1.0Hz
+[2026-03-16 19:14:28.864] Heartbeat: uptime 607s, heap 24644B, beats 600, rate 1.0Hz
+[2026-03-16 19:14:38.928] Heartbeat: uptime 617s, heap 26044B, beats 610, rate 1.0Hz
+[2026-03-16 19:14:48.987] Heartbeat: uptime 627s, heap 24628B, beats 620, rate 1.0Hz
+[2026-03-16 19:14:58.923] Heartbeat: uptime 637s, heap 24628B, beats 630, rate 1.0Hz
+[2026-03-16 19:15:08.983] Heartbeat: uptime 647s, heap 27748B, beats 640, rate 1.0Hz
+[2026-03-16 19:15:18.997] Heartbeat: uptime 657s, heap 26064B, beats 650, rate 1.0Hz
+[2026-03-16 19:15:29.059] Heartbeat: uptime 667s, heap 27768B, beats 660, rate 1.0Hz
+[2026-03-16 19:15:39.055] Heartbeat: uptime 677s, heap 27768B, beats 670, rate 1.0Hz
+[2026-03-16 19:15:49.106] Heartbeat: uptime 687s, heap 27748B, beats 680, rate 1.0Hz
+[2026-03-16 19:15:59.108] Heartbeat: uptime 697s, heap 27748B, beats 690, rate 1.0Hz
+[2026-03-16 19:16:09.113] Heartbeat: uptime 707s, heap 27768B, beats 700, rate 1.0Hz
+[2026-03-16 19:16:19.126] Heartbeat: uptime 717s, heap 27768B, beats 710, rate 1.0Hz
+[2026-03-16 19:16:29.171] Heartbeat: uptime 727s, heap 27748B, beats 720, rate 1.0Hz
+[2026-03-16 19:16:39.183] Heartbeat: uptime 737s, heap 27748B, beats 730, rate 1.0Hz
+[2026-03-16 19:16:49.213] Heartbeat: uptime 747s, heap 27768B, beats 740, rate 1.0Hz
+[2026-03-16 19:16:59.226] Heartbeat: uptime 757s, heap 27768B, beats 750, rate 1.0Hz
+[2026-03-16 19:17:09.252] Heartbeat: uptime 767s, heap 27748B, beats 760, rate 1.0Hz
+[2026-03-16 19:17:19.287] Heartbeat: uptime 777s, heap 27748B, beats 770, rate 1.0Hz
+[2026-03-16 19:17:29.457] Heartbeat: uptime 787s, heap 27748B, beats 780, rate 1.0Hz
+[2026-03-16 19:17:39.348] Heartbeat: uptime 797s, heap 27748B, beats 790, rate 1.0Hz
+[2026-03-16 19:17:49.424] Heartbeat: uptime 807s, heap 27768B, beats 800, rate 1.0Hz
+[2026-03-16 19:17:59.362] Heartbeat: uptime 817s, heap 27768B, beats 810, rate 1.0Hz
+[2026-03-16 19:18:09.567] Heartbeat: uptime 827s, heap 24628B, beats 820, rate 1.0Hz
+[2026-03-16 19:18:20.002] Heartbeat: uptime 837s, heap 24628B, beats 830, rate 1.0Hz
+[2026-03-16 19:18:28.637] OTA: I (847748) OTA: Starting OTA update from: http://10.0.0.189:80/ota/esp32_rtos_smart_home.bin
+[2026-03-16 19:18:28.637] OTA: I (847752) OTA: Target partition: ota_1 (addr=0x1f0000, size=0x1a0000)
+[2026-03-16 19:18:29.450] Heartbeat: uptime 847s, heap 9352B, beats 840, rate 1.0Hz
+[2026-03-16 19:18:39.439] Heartbeat: uptime 857s, heap 10652B, beats 850, rate 1.0Hz
+[2026-03-16 19:18:43.615] OTA: E (862768) OTA: HTTP connection failed: ESP_ERR_HTTP_CONNECT
+[2026-03-16 19:18:49.439] Heartbeat: uptime 868s, heap 26196B, beats 860, rate 1.0Hz
+[2026-03-16 19:18:59.438] Heartbeat: uptime 878s, heap 26196B, beats 870, rate 1.0Hz
+[2026-03-16 19:19:09.442] Heartbeat: uptime 888s, heap 26196B, beats 880, rate 1.0Hz
+[2026-03-16 19:19:19.518] Heartbeat: uptime 898s, heap 27756B, beats 890, rate 1.0Hz
+[2026-03-16 19:19:29.531] Heartbeat: uptime 908s, heap 27756B, beats 900, rate 1.0Hz
+[2026-03-16 19:19:39.581] Heartbeat: uptime 918s, heap 27756B, beats 910, rate 1.0Hz
+[2026-03-16 19:19:49.615] Heartbeat: uptime 928s, heap 27756B, beats 920, rate 1.0Hz
+[2026-03-16 19:19:59.595] Heartbeat: uptime 938s, heap 27756B, beats 930, rate 1.0Hz
+[2026-03-16 19:20:09.630] Heartbeat: uptime 948s, heap 27756B, beats 940, rate 1.0Hz
+[2026-03-16 19:20:19.676] Heartbeat: uptime 958s, heap 27756B, beats 950, rate 1.0Hz
+[2026-03-16 19:20:29.731] Heartbeat: uptime 968s, heap 27756B, beats 960, rate 1.0Hz
+[2026-03-16 19:20:39.681] Heartbeat: uptime 978s, heap 27756B, beats 970, rate 1.0Hz
+[2026-03-16 19:20:49.747] Heartbeat: uptime 988s, heap 27756B, beats 980, rate 1.0Hz
+[2026-03-16 19:20:59.710] Heartbeat: uptime 998s, heap 27756B, beats 990, rate 1.0Hz
+[2026-03-16 19:21:09.792] Heartbeat: uptime 1008s, heap 27756B, beats 1000, rate 1.0Hz
+[2026-03-16 19:21:19.820] Heartbeat: uptime 1018s, heap 27756B, beats 1010, rate 1.0Hz
+[2026-03-16 19:21:29.825] Heartbeat: uptime 1028s, heap 27756B, beats 1020, rate 1.0Hz
+[2026-03-16 19:21:39.807] Heartbeat: uptime 1038s, heap 27756B, beats 1030, rate 1.0Hz
+[2026-03-16 19:21:49.825] Heartbeat: uptime 1048s, heap 27756B, beats 1040, rate 1.0Hz
+[2026-03-16 19:21:59.901] Heartbeat: uptime 1058s, heap 27756B, beats 1050, rate 1.0Hz
+[2026-03-16 19:22:09.880] Heartbeat: uptime 1068s, heap 27756B, beats 1060, rate 1.0Hz
+[2026-03-16 19:22:19.873] Heartbeat: uptime 1078s, heap 24636B, beats 1070, rate 1.0Hz
+[2026-03-16 19:22:29.878] Heartbeat: uptime 1088s, heap 24636B, beats 1080, rate 1.0Hz
+[2026-03-16 19:22:39.920] Heartbeat: uptime 1098s, heap 26192B, beats 1090, rate 1.0Hz
+[2026-03-16 19:22:49.951] Heartbeat: uptime 1108s, heap 26196B, beats 1100, rate 1.0Hz
+[2026-03-16 19:23:01.562] OTA: I (1117855) OTA: Starting OTA update from: http://10.0.0.189:80/ota/esp32_rtos_smart_home.bin
+[2026-03-16 19:23:01.562] OTA: I (1117859) OTA: Target partition: ota_1 (addr=0x1f0000, size=0x1a0000)
+[2026-03-16 19:23:01.562] Heartbeat: uptime 1118s, heap 9296B, beats 1110, rate 1.0Hz
+[2026-03-16 19:23:10.026] Heartbeat: uptime 1128s, heap 12424B, beats 1120, rate 1.0Hz
+[2026-03-16 19:23:13.731] OTA: E (1132873) OTA: HTTP connection failed: ESP_ERR_HTTP_CONNECT
+[2026-03-16 19:23:20.044] Heartbeat: uptime 1138s, heap 27672B, beats 1130, rate 1.0Hz
+[2026-03-16 19:23:30.056] Heartbeat: uptime 1148s, heap 27652B, beats 1140, rate 1.0Hz
+[2026-03-16 19:23:40.220] Heartbeat: uptime 1158s, heap 27652B, beats 1150, rate 1.0Hz
+[2026-03-16 19:23:50.097] Heartbeat: uptime 1168s, heap 27672B, beats 1160, rate 1.0Hz
+[2026-03-16 19:24:00.238] Heartbeat: uptime 1178s, heap 27672B, beats 1170, rate 1.0Hz
+[2026-03-16 19:24:10.149] Heartbeat: uptime 1188s, heap 27652B, beats 1180, rate 1.0Hz
+[2026-03-16 19:24:20.164] Heartbeat: uptime 1198s, heap 27652B, beats 1190, rate 1.0Hz
+[2026-03-16 19:24:30.198] Heartbeat: uptime 1208s, heap 27672B, beats 1200, rate 1.0Hz
+[2026-03-16 19:24:40.227] Heartbeat: uptime 1218s, heap 27672B, beats 1210, rate 1.0Hz
+[2026-03-16 19:24:50.286] Heartbeat: uptime 1228s, heap 27652B, beats 1220, rate 1.0Hz
+[2026-03-16 19:25:00.329] Heartbeat: uptime 1238s, heap 27652B, beats 1230, rate 1.0Hz
+[2026-03-16 19:25:10.366] Heartbeat: uptime 1248s, heap 27660B, beats 1240, rate 1.0Hz
+[2026-03-16 19:25:20.307] Heartbeat: uptime 1258s, heap 27660B, beats 1250, rate 1.0Hz
+[2026-03-16 19:25:30.337] Heartbeat: uptime 1268s, heap 27660B, beats 1260, rate 1.0Hz
+[2026-03-16 19:25:40.360] Heartbeat: uptime 1278s, heap 27660B, beats 1270, rate 1.0Hz
+[2026-03-16 19:25:50.531] Heartbeat: uptime 1288s, heap 27660B, beats 1280, rate 1.0Hz
+[2026-03-16 19:26:00.394] Heartbeat: uptime 1298s, heap 24540B, beats 1290, rate 1.0Hz
+[2026-03-16 19:26:10.528] Heartbeat: uptime 1308s, heap 24540B, beats 1300, rate 1.0Hz
+[2026-03-16 19:26:20.412] Heartbeat: uptime 1318s, heap 24540B, beats 1310, rate 1.0Hz
+[2026-03-16 19:26:30.637] Heartbeat: uptime 1328s, heap 25840B, beats 1320, rate 1.0Hz
+[2026-03-16 19:26:40.591] Heartbeat: uptime 1339s, heap 26100B, beats 1330, rate 1.0Hz
+[2026-03-16 19:26:50.641] Heartbeat: uptime 1349s, heap 26100B, beats 1340, rate 1.0Hz
+[2026-03-16 19:27:00.542] Heartbeat: uptime 1359s, heap 24540B, beats 1350, rate 1.0Hz
+[2026-03-16 19:27:10.589] Heartbeat: uptime 1369s, heap 26100B, beats 1360, rate 1.0Hz
+[2026-03-16 19:27:20.622] Heartbeat: uptime 1379s, heap 25976B, beats 1370, rate 1.0Hz
+[2026-03-16 19:27:34.549] Heartbeat: uptime 1389s, heap 25976B, beats 1380, rate 1.0Hz
+[2026-03-16 19:27:40.580] Heartbeat: uptime 1399s, heap 26100B, beats 1390, rate 1.0Hz
+[2026-03-16 19:27:50.594] Heartbeat: uptime 1409s, heap 27660B, beats 1400, rate 1.0Hz
+[2026-03-16 19:28:00.628] Heartbeat: uptime 1419s, heap 27660B, beats 1410, rate 1.0Hz
+[2026-03-16 19:28:10.653] Heartbeat: uptime 1429s, heap 26100B, beats 1420, rate 1.0Hz
+[2026-03-16 19:28:20.617] Heartbeat: uptime 1439s, heap 26100B, beats 1430, rate 1.0Hz
+[2026-03-16 19:28:30.733] Heartbeat: uptime 1449s, heap 27660B, beats 1440, rate 1.0Hz
+[2026-03-16 19:28:40.721] Heartbeat: uptime 1459s, heap 27660B, beats 1450, rate 1.0Hz
+[2026-03-16 19:28:50.730] Heartbeat: uptime 1469s, heap 27536B, beats 1460, rate 1.0Hz
+[2026-03-16 19:29:00.753] Heartbeat: uptime 1479s, heap 27660B, beats 1470, rate 1.0Hz
+[2026-03-16 19:29:10.868] Heartbeat: uptime 1489s, heap 27660B, beats 1480, rate 1.0Hz
+[2026-03-16 19:29:20.805] Heartbeat: uptime 1499s, heap 27660B, beats 1490, rate 1.0Hz
+[2026-03-16 19:29:30.833] Heartbeat: uptime 1509s, heap 27660B, beats 1500, rate 1.0Hz
+[2026-03-16 19:29:40.898] Heartbeat: uptime 1519s, heap 27660B, beats 1510, rate 1.0Hz
+[2026-03-16 19:29:50.867] Heartbeat: uptime 1529s, heap 27660B, beats 1520, rate 1.0Hz
+[2026-03-16 19:30:00.873] Heartbeat: uptime 1539s, heap 24540B, beats 1530, rate 1.0Hz
+[2026-03-16 19:30:12.535] Heartbeat: uptime 1549s, heap 24540B, beats 1540, rate 1.0Hz
+[2026-03-16 19:30:20.984] Heartbeat: uptime 1559s, heap 26100B, beats 1550, rate 1.0Hz
+[2026-03-16 19:30:30.935] Heartbeat: uptime 1569s, heap 26100B, beats 1560, rate 1.0Hz
+[2026-03-16 19:30:40.930] Heartbeat: uptime 1579s, heap 26100B, beats 1570, rate 1.0Hz
+[2026-03-16 19:30:51.008] Heartbeat: uptime 1589s, heap 27660B, beats 1580, rate 1.0Hz
+[2026-03-16 19:31:01.030] Heartbeat: uptime 1599s, heap 27660B, beats 1590, rate 1.0Hz
+[2026-03-16 19:31:11.069] Heartbeat: uptime 1609s, heap 27672B, beats 1600, rate 1.0Hz
+[2026-03-16 19:31:21.115] Heartbeat: uptime 1619s, heap 27672B, beats 1610, rate 1.0Hz
+[2026-03-16 19:31:25.346] OTA: I (1624494) OTA: Starting OTA update from: http://10.0.0.189:80/ota/esp32_rtos_smart_home.bin
+[2026-03-16 19:31:25.346] OTA: I (1624497) OTA: Target partition: ota_1 (addr=0x1f0000, size=0x1a0000)
+[2026-03-16 19:31:25.419] OTA: I (1624573) OTA: Firmware size: 1163680 bytes (partition capacity: 1703936 bytes)
+[2026-03-16 19:31:25.420] OTA: E (1624576) OTA: Failed to allocate 4096 byte receive buffer (free heap: 3760)
+[2026-03-16 19:31:31.148] Heartbeat: uptime 1629s, heap 27652B, beats 1620, rate 1.0Hz
+[2026-03-16 19:31:41.129] Heartbeat: uptime 1639s, heap 27652B, beats 1630, rate 1.0Hz
+[2026-03-16 19:31:51.158] Heartbeat: uptime 1649s, heap 27672B, beats 1640, rate 1.0Hz
+[2026-03-16 19:32:01.172] Heartbeat: uptime 1659s, heap 27672B, beats 1650, rate 1.0Hz
+[2026-03-16 19:32:11.237] Heartbeat: uptime 1669s, heap 27652B, beats 1660, rate 1.0Hz
+[2026-03-16 19:32:21.207] Heartbeat: uptime 1679s, heap 27652B, beats 1670, rate 1.0Hz
+[2026-03-16 19:32:31.266] Heartbeat: uptime 1689s, heap 27672B, beats 1680, rate 1.0Hz
+[2026-03-16 19:32:41.254] Heartbeat: uptime 1699s, heap 27672B, beats 1690, rate 1.0Hz
+[2026-03-16 19:32:51.264] Heartbeat: uptime 1709s, heap 27512B, beats 1700, rate 1.0Hz
+[2026-03-16 19:33:01.286] Heartbeat: uptime 1719s, heap 27652B, beats 1710, rate 1.0Hz
+[2026-03-16 19:33:11.314] Heartbeat: uptime 1729s, heap 27672B, beats 1720, rate 1.0Hz
+[2026-03-16 19:33:21.370] Heartbeat: uptime 1739s, heap 27672B, beats 1730, rate 1.0Hz
+[2026-03-16 19:33:31.375] Heartbeat: uptime 1749s, heap 27652B, beats 1740, rate 1.0Hz
+[2026-03-16 19:33:41.367] Heartbeat: uptime 1759s, heap 27652B, beats 1750, rate 1.0Hz
+[2026-03-16 19:33:51.371] Heartbeat: uptime 1769s, heap 24552B, beats 1760, rate 1.0Hz
+[2026-03-16 19:34:01.507] Heartbeat: uptime 1779s, heap 24552B, beats 1770, rate 1.0Hz
+[2026-03-16 19:34:11.379] Heartbeat: uptime 1789s, heap 24520B, beats 1780, rate 1.0Hz
+[2026-03-16 19:34:21.459] Heartbeat: uptime 1799s, heap 26088B, beats 1790, rate 1.0Hz
+[2026-03-16 19:34:31.445] Heartbeat: uptime 1810s, heap 26112B, beats 1800, rate 1.0Hz
+[2026-03-16 19:34:41.484] Heartbeat: uptime 1820s, heap 27672B, beats 1810, rate 1.0Hz
+[2026-03-16 19:34:51.545] Heartbeat: uptime 1830s, heap 27652B, beats 1820, rate 1.0Hz
+[2026-03-16 19:35:01.543] Heartbeat: uptime 1840s, heap 27652B, beats 1830, rate 1.0Hz
+[2026-03-16 19:35:11.551] Heartbeat: uptime 1850s, heap 27652B, beats 1840, rate 1.0Hz
+[2026-03-16 19:35:21.564] Heartbeat: uptime 1860s, heap 27652B, beats 1850, rate 1.0Hz
+[2026-03-16 19:35:31.604] Heartbeat: uptime 1870s, heap 27672B, beats 1860, rate 1.0Hz
+[2026-03-16 19:35:41.640] Heartbeat: uptime 1880s, heap 27672B, beats 1870, rate 1.0Hz
+[2026-03-16 19:35:51.649] Heartbeat: uptime 1890s, heap 27652B, beats 1880, rate 1.0Hz
+[2026-03-16 19:36:01.658] Heartbeat: uptime 1900s, heap 27652B, beats 1890, rate 1.0Hz
+[2026-03-16 19:36:11.675] Heartbeat: uptime 1910s, heap 27672B, beats 1900, rate 1.0Hz
+[2026-03-16 19:36:21.704] Heartbeat: uptime 1920s, heap 27672B, beats 1910, rate 1.0Hz
+[2026-03-16 19:36:31.725] Heartbeat: uptime 1930s, heap 27652B, beats 1920, rate 1.0Hz
+[2026-03-16 19:36:41.761] Heartbeat: uptime 1940s, heap 27652B, beats 1930, rate 1.0Hz
+[2026-03-16 19:36:51.767] Heartbeat: uptime 1950s, heap 27672B, beats 1940, rate 1.0Hz
+[2026-03-16 19:37:01.857] Heartbeat: uptime 1960s, heap 27672B, beats 1950, rate 1.0Hz
+[2026-03-16 19:37:11.815] Heartbeat: uptime 1970s, heap 27652B, beats 1960, rate 1.0Hz
+[2026-03-16 19:37:21.836] Heartbeat: uptime 1980s, heap 27652B, beats 1970, rate 1.0Hz
+[2026-03-16 19:37:29.167] GUI: IRQ #1: read=yes cnt=1 x=143 y=95 screen_on=1
+[2026-03-16 19:37:29.167] GUI: PRESSED at (143,95) -> TOUCHING
+[2026-03-16 19:37:29.427] GUI: RELEASED -> IDLE
+[2026-03-16 19:37:29.427] GUI: BUTTON 1 CLICKED
+[2026-03-16 19:37:29.427] GUI: IRQ #2: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.428] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.428] GUI: IRQ #3: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.428] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.483] GUI: IRQ #4: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.484] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.547] GUI: IRQ #5: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.547] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.547] GUI: IRQ #6: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.548] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.591] GUI: IRQ #7: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.592] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.592] GUI: IRQ #8: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.592] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.640] GUI: IRQ #9: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.640] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.696] GUI: IRQ #10: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.697] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.697] GUI: IRQ #11: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.697] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.749] GUI: IRQ #12: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.749] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.749] GUI: IRQ #13: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.749] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.793] GUI: IRQ #14: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.794] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.906] GUI: IRQ #15: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.906] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.906] GUI: IRQ #16: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.906] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.965] GUI: IRQ #17: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.966] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.966] GUI: IRQ #18: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.966] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.966] GUI: IRQ #19: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.966] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:29.967] GUI: IRQ #20: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:29.967] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.022] GUI: IRQ #21: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.023] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.072] GUI: IRQ #22: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.073] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.073] GUI: IRQ #23: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.073] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.119] GUI: IRQ #24: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.120] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.181] GUI: IRQ #25: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.181] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.181] GUI: IRQ #26: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.181] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.230] GUI: IRQ #27: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.230] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.230] GUI: IRQ #28: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.230] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.298] GUI: IRQ #29: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.298] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.378] GUI: IRQ #30: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.378] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.378] GUI: IRQ #31: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.378] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.537] GUI: IRQ #32: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.537] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.537] GUI: IRQ #33: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.538] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.538] GUI: IRQ #34: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.538] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.538] GUI: IRQ #35: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.538] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.538] GUI: IRQ #36: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.538] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.539] GUI: IRQ #37: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.539] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.636] GUI: IRQ #38: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.636] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.637] GUI: IRQ #39: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.637] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.805] GUI: IRQ #40: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.805] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.805] GUI: IRQ #41: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.806] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.806] GUI: IRQ #42: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.806] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.806] GUI: IRQ #43: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.806] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.807] GUI: IRQ #44: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.807] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.807] GUI: IRQ #45: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.807] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.807] GUI: IRQ #46: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.854] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.854] GUI: IRQ #47: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.854] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.905] GUI: IRQ #48: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.905] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.905] GUI: IRQ #49: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.906] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.956] GUI: IRQ #50: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:30.956] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:30.957] GUI: IRQ #51: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.021] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.022] GUI: IRQ #52: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.022] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.102] GUI: IRQ #53: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.102] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.103] GUI: IRQ #54: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.103] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.153] GUI: IRQ #55: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.153] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.153] GUI: IRQ #56: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.154] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.154] GUI: IRQ #57: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.154] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.210] GUI: IRQ #58: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.210] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.326] GUI: IRQ #59: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.326] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.326] GUI: IRQ #60: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.327] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.517] GUI: IRQ #61: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.517] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.517] GUI: IRQ #62: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.518] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.518] GUI: IRQ #63: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.518] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.518] GUI: IRQ #64: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.518] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.518] GUI: IRQ #65: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.519] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.519] GUI: IRQ #66: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.519] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.742] GUI: IRQ #67: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.742] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.742] GUI: IRQ #68: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.743] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.743] GUI: IRQ #69: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.743] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.743] GUI: IRQ #70: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.743] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.743] GUI: IRQ #71: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.744] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.744] GUI: IRQ #72: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.744] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.744] GUI: IRQ #73: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.744] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.927] GUI: IRQ #74: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.928] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.928] GUI: IRQ #75: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.928] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.928] GUI: IRQ #76: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.928] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.929] GUI: IRQ #77: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.929] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.929] GUI: IRQ #78: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.929] GUI: IRQ false alarm - no coords
+[2026-03-16 19:37:31.929] Heartbeat: uptime 1990s, heap 21200B, beats 1980, rate 1.0Hz
+[2026-03-16 19:37:31.929] GUI: IRQ #79: read=no cnt=0 x=164 y=88 screen_on=1
+[2026-03-16 19:37:31.930] GUI: IRQ false alarm - no coords
+[2026-03-16 19:43:07.233] Heartbeat: I (50532) Heartbeat: beat #37 (rate: 1.00 Hz)
+[2026-03-16 19:43:08.271] Heartbeat: I (51535) Heartbeat: beat #38 (rate: 1.00 Hz)
+[2026-03-16 19:43:08.516] OTA: I (51745) OTA: Starting OTA update from: http://10.0.0.189:80/ota/esp32_rtos_smart_home.bin
+[2026-03-16 19:43:08.516] OTA: I (51748) OTA: Free heap before OTA task: 26548 bytes
+[2026-03-16 19:43:08.517] OTA: I (51753) OTA: Target partition: ota_1 (addr=0x1f0000, size=0x1a0000)
+[2026-03-16 19:43:08.517] OTA: I (51758) OTA: Free heap before HTTP init: 14112 bytes
+[2026-03-16 19:43:08.591] OTA: I (51813) OTA: Firmware size: 1163856 bytes (partition capacity: 1703936 bytes)
+[2026-03-16 19:43:08.592] OTA: I (51847) OTA: Download progress: 0% (1024 / 1163856 bytes)
+[2026-03-16 19:43:09.287] Heartbeat: I (52567) Heartbeat: beat #39 (rate: 1.00 Hz)
+[2026-03-16 19:43:10.062] OTA: I (53335) OTA: Download progress: 10% (116736 / 1163856 bytes)
+[2026-03-16 19:43:10.319] Heartbeat: I (53595) Heartbeat: beat #40 (rate: 1.00 Hz)
+[2026-03-16 19:43:10.319] Heartbeat: uptime 53s, heap 8848B, beats 40, rate 1.0Hz
+[2026-03-16 19:43:11.630] Heartbeat: I (54650) Heartbeat: beat #41 (rate: 1.00 Hz)
+[2026-03-16 19:43:11.700] OTA: I (54997) OTA: Download progress: 20% (233472 / 1163856 bytes)
+[2026-03-16 19:43:12.453] Heartbeat: I (55683) Heartbeat: beat #42 (rate: 1.00 Hz)
+[2026-03-16 19:43:12.811] OTA: I (56114) OTA: Download progress: 30% (349184 / 1163856 bytes)
+[2026-03-16 19:43:13.504] Heartbeat: I (56744) Heartbeat: beat #43 (rate: 1.00 Hz)
+[2026-03-16 19:43:13.942] OTA: I (57208) OTA: Download progress: 40% (465920 / 1163856 bytes)
+[2026-03-16 19:43:14.610] Heartbeat: I (57813) Heartbeat: beat #44 (rate: 1.00 Hz)
+[2026-03-16 19:43:15.082] OTA: I (58327) OTA: Download progress: 50% (582656 / 1163856 bytes)
+[2026-03-16 19:43:15.666] Heartbeat: I (58884) Heartbeat: beat #45 (rate: 1.00 Hz)
+[2026-03-16 19:43:16.265] OTA: I (59533) OTA: Download progress: 60% (698368 / 1163856 bytes)
+[2026-03-16 19:43:16.652] Heartbeat: I (59897) Heartbeat: beat #46 (rate: 1.00 Hz)
+[2026-03-16 19:43:17.400] OTA: I (60652) OTA: Download progress: 70% (815104 / 1163856 bytes)
+[2026-03-16 19:43:17.737] Heartbeat: I (60957) Heartbeat: beat #47 (rate: 1.00 Hz)
+[2026-03-16 19:43:18.522] OTA: I (61752) OTA: Download progress: 80% (931840 / 1163856 bytes)
+[2026-03-16 19:43:18.779] Heartbeat: I (61999) Heartbeat: beat #48 (rate: 1.00 Hz)
+[2026-03-16 19:43:19.579] OTA: I (62837) OTA: Download progress: 90% (1047552 / 1163856 bytes)
+[2026-03-16 19:43:19.780] Heartbeat: I (63064) Heartbeat: beat #49 (rate: 1.00 Hz)
+[2026-03-16 19:43:20.838] Heartbeat: I (64087) Heartbeat: beat #50 (rate: 1.00 Hz)
+[2026-03-16 19:43:20.838] Heartbeat: uptime 63s, heap 10396B, beats 50, rate 1.0Hz
+[2026-03-16 19:43:20.907] OTA: I (64157) OTA: Download progress: 100% (1163856 / 1163856 bytes)
+[2026-03-16 19:43:20.907] OTA: I (64164) OTA: Download complete: 1163856 bytes received
+[2026-03-16 19:43:21.709] OTA: I (64974) OTA: ============================================
+[2026-03-16 19:43:21.709] OTA: I (64977) OTA: OTA UPDATE SUCCESSFUL!
+[2026-03-16 19:43:21.709] OTA: I (64979) OTA: New firmware written to: ota_1
+[2026-03-16 19:43:21.709] OTA: I (64980) OTA: Rebooting in 2 seconds...
+[2026-03-16 19:43:21.710] OTA: I (64983) OTA: ============================================
+[2026-03-16 19:43:21.890] Heartbeat: I (65163) Heartbeat: beat #51 (rate: 1.00 Hz)
+[2026-03-16 19:43:22.898] Heartbeat: I (66171) Heartbeat: beat #52 (rate: 1.00 Hz)
+[2026-03-16 19:44:43.020] Heartbeat: I (47069) Heartbeat: beat #43 (rate: 1.00 Hz)
+[2026-03-16 19:44:44.078] Heartbeat: I (48073) Heartbeat: beat #44 (rate: 1.00 Hz)
+[2026-03-16 19:44:45.040] Heartbeat: I (49077) Heartbeat: beat #45 (rate: 1.00 Hz)
+[2026-03-16 19:44:46.048] Heartbeat: I (50080) Heartbeat: beat #46 (rate: 1.00 Hz)
+[2026-03-16 19:44:47.030] Heartbeat: I (51083) Heartbeat: beat #47 (rate: 1.00 Hz)
+[2026-03-16 19:44:48.149] Heartbeat: I (52086) Heartbeat: beat #48 (rate: 1.00 Hz)
+[2026-03-16 19:44:49.079] Heartbeat: I (53090) Heartbeat: beat #49 (rate: 1.00 Hz)
+[2026-03-16 19:44:50.245] Heartbeat: I (54093) Heartbeat: beat #50 (rate: 1.00 Hz)
+[2026-03-16 19:44:50.245] Heartbeat: uptime 53s, heap 24112B, beats 50, rate 1.0Hz
+[2026-03-16 19:44:51.096] Heartbeat: I (55098) Heartbeat: beat #51 (rate: 1.00 Hz)
+[2026-03-16 19:44:52.078] Heartbeat: I (56102) Heartbeat: beat #52 (rate: 1.00 Hz)
+[2026-03-16 19:44:53.068] Heartbeat: I (57106) Heartbeat: beat #53 (rate: 1.00 Hz)
+[2026-03-16 19:44:54.095] Heartbeat: I (58110) Heartbeat: beat #54 (rate: 1.00 Hz)
+[2026-03-16 19:44:55.090] Heartbeat: I (59114) Heartbeat: beat #55 (rate: 1.00 Hz)
+[2026-03-16 19:44:56.114] Heartbeat: I (60118) Heartbeat: beat #56 (rate: 1.00 Hz)
+[2026-03-16 19:44:57.083] Heartbeat: I (61120) Heartbeat: beat #57 (rate: 1.00 Hz)
+[2026-03-16 19:44:57.856] OTA: I (61806) OTA: Starting OTA update from: http://10.0.0.189:80/ota/esp32_rtos_smart_home.bin
+[2026-03-16 19:44:57.857] OTA: I (61808) OTA: Free heap before OTA task: 26276 bytes
+[2026-03-16 19:44:57.857] OTA: I (61814) OTA: Target partition: ota_0 (addr=0x50000, size=0x1a0000)
+[2026-03-16 19:44:57.857] OTA: I (61816) OTA: Free heap before HTTP init: 13532 bytes
+[2026-03-16 19:44:58.208] OTA: I (61868) OTA: Firmware size: 1163856 bytes (partition capacity: 1703936 bytes)
+[2026-03-16 19:44:58.208] OTA: I (61902) OTA: Download progress: 0% (1024 / 1163856 bytes)
+[2026-03-16 19:44:58.208] Heartbeat: I (62124) Heartbeat: beat #58 (rate: 1.00 Hz)
+[2026-03-16 19:44:59.137] Heartbeat: I (63140) Heartbeat: beat #59 (rate: 1.00 Hz)
+[2026-03-16 19:44:59.638] OTA: I (63633) OTA: Download progress: 10% (116736 / 1163856 bytes)
+[2026-03-16 19:45:00.261] Heartbeat: I (64177) Heartbeat: beat #60 (rate: 1.00 Hz)
+[2026-03-16 19:45:00.261] Heartbeat: uptime 63s, heap 13020B, beats 60, rate 1.0Hz
+[2026-03-16 19:45:01.289] Heartbeat: I (65250) Heartbeat: beat #61 (rate: 1.00 Hz)
+[2026-03-16 19:45:02.330] Heartbeat: I (66319) Heartbeat: beat #62 (rate: 1.00 Hz)
+[2026-03-16 19:45:02.740] OTA: I (66700) OTA: Download progress: 30% (349184 / 1163856 bytes)
+[2026-03-16 19:45:03.354] Heartbeat: I (67351) Heartbeat: beat #63 (rate: 1.00 Hz)
+[2026-03-16 19:45:04.101] OTA: I (68076) OTA: Download progress: 40% (465920 / 1163856 bytes)
+[2026-03-16 19:45:04.433] Heartbeat: I (68383) Heartbeat: beat #64 (rate: 1.00 Hz)
+[2026-03-16 19:45:05.390] Heartbeat: I (69389) Heartbeat: beat #65 (rate: 1.00 Hz)
+[2026-03-16 19:45:05.542] OTA: I (69581) OTA: Download progress: 50% (582656 / 1163856 bytes)
+[2026-03-16 19:45:06.481] Heartbeat: I (70436) Heartbeat: beat #66 (rate: 1.00 Hz)
+[2026-03-16 19:45:07.007] OTA: I (70952) OTA: Download progress: 60% (698368 / 1163856 bytes)
+[2026-03-16 19:45:07.503] Heartbeat: I (71497) Heartbeat: beat #67 (rate: 1.00 Hz)
+[2026-03-16 19:45:08.409] OTA: I (72387) OTA: Download progress: 70% (815104 / 1163856 bytes)
+[2026-03-16 19:45:08.573] Heartbeat: I (72571) Heartbeat: beat #68 (rate: 1.00 Hz)
+[2026-03-16 19:45:09.714] Heartbeat: I (73609) Heartbeat: beat #69 (rate: 1.00 Hz)
+[2026-03-16 19:45:09.877] OTA: I (73848) OTA: Download progress: 80% (931840 / 1163856 bytes)
+[2026-03-16 19:45:10.791] Heartbeat: I (74740) Heartbeat: beat #70 (rate: 1.00 Hz)
+[2026-03-16 19:45:10.791] Heartbeat: uptime 74s, heap 9724B, beats 70, rate 1.0Hz
+[2026-03-16 19:45:11.476] OTA: I (75472) OTA: Download progress: 90% (1047552 / 1163856 bytes)
+[2026-03-16 19:45:11.937] Heartbeat: I (75853) Heartbeat: beat #71 (rate: 1.00 Hz)
+[2026-03-16 19:45:12.903] OTA: I (76897) OTA: Download progress: 100% (1163856 / 1163856 bytes)
+[2026-03-16 19:45:12.903] OTA: I (76903) OTA: Download complete: 1163856 bytes received
+[2026-03-16 19:45:12.954] Heartbeat: I (76960) Heartbeat: beat #72 (rate: 1.00 Hz)
+[2026-03-16 19:45:13.675] OTA: I (77713) OTA: ============================================
+[2026-03-16 19:45:13.675] OTA: I (77715) OTA: OTA UPDATE SUCCESSFUL!
+[2026-03-16 19:45:13.676] OTA: I (77719) OTA: New firmware written to: ota_0
+[2026-03-16 19:45:13.676] OTA: I (77722) OTA: Rebooting in 2 seconds...
+[2026-03-16 19:45:13.676] OTA: I (77723) OTA: ============================================
+[2026-03-16 19:45:13.965] Heartbeat: I (77967) Heartbeat: beat #73 (rate: 1.00 Hz)
+[2026-03-16 19:45:14.979] Heartbeat: I (78974) Heartbeat: beat #74 (rate: 1.00 Hz)
+[2026-03-16 19:46:06.379] Heartbeat: I (50603) Heartbeat: beat #49 (rate: 1.00 Hz)
+[2026-03-16 19:46:07.405] Heartbeat: I (51607) Heartbeat: beat #50 (rate: 1.00 Hz)
+[2026-03-16 19:46:07.405] Heartbeat: uptime 51s, heap 25756B, beats 50, rate 1.0Hz
+[2026-03-16 19:46:08.416] Heartbeat: I (52613) Heartbeat: beat #51 (rate: 1.00 Hz)
+[2026-03-16 19:46:09.390] Heartbeat: I (53618) Heartbeat: beat #52 (rate: 1.00 Hz)
+[2026-03-16 19:46:12.427] Heartbeat: I (54623) Heartbeat: beat #53 (rate: 1.00 Hz)
+[2026-03-16 19:46:12.427] Heartbeat: I (55626) Heartbeat: beat #54 (rate: 1.00 Hz)
+[2026-03-16 19:46:12.428] Heartbeat: I (56629) Heartbeat: beat #55 (rate: 1.00 Hz)
+[2026-03-16 19:46:14.409] Heartbeat: I (57633) Heartbeat: beat #56 (rate: 1.00 Hz)
+[2026-03-16 19:46:14.466] Heartbeat: I (58636) Heartbeat: beat #57 (rate: 1.00 Hz)
+[2026-03-16 19:46:15.499] Heartbeat: I (59641) Heartbeat: beat #58 (rate: 1.00 Hz)
+[2026-03-16 19:46:16.419] Heartbeat: I (60645) Heartbeat: beat #59 (rate: 1.00 Hz)
+[2026-03-16 19:46:17.422] Heartbeat: I (61648) Heartbeat: beat #60 (rate: 1.00 Hz)
+[2026-03-16 19:46:17.422] Heartbeat: uptime 61s, heap 24204B, beats 60, rate 1.0Hz
+[2026-03-16 19:46:18.433] Heartbeat: I (62653) Heartbeat: beat #61 (rate: 1.00 Hz)
+[2026-03-16 19:46:19.451] Heartbeat: I (63657) Heartbeat: beat #62 (rate: 1.00 Hz)
+[2026-03-16 19:47:14.373] Heartbeat: I (51104) Heartbeat: beat #47 (rate: 1.00 Hz)
+[2026-03-16 19:47:15.044] Heartbeat: I (52108) Heartbeat: beat #48 (rate: 1.00 Hz)
+[2026-03-16 19:47:16.027] Heartbeat: I (53111) Heartbeat: beat #49 (rate: 1.00 Hz)
+[2026-03-16 19:47:17.033] Heartbeat: I (54115) Heartbeat: beat #50 (rate: 1.00 Hz)
+[2026-03-16 19:47:17.033] Heartbeat: uptime 53s, heap 24272B, beats 50, rate 1.0Hz
+[2026-03-16 19:47:18.054] Heartbeat: I (55120) Heartbeat: beat #51 (rate: 1.00 Hz)
+[2026-03-16 19:47:19.114] Heartbeat: I (56123) Heartbeat: beat #52 (rate: 1.00 Hz)
+[2026-03-16 19:47:20.228] Heartbeat: I (57127) Heartbeat: beat #53 (rate: 1.00 Hz)
+[2026-03-16 19:47:21.099] Heartbeat: I (58131) Heartbeat: beat #54 (rate: 1.00 Hz)
+[2026-03-16 19:47:22.096] Heartbeat: I (59135) Heartbeat: beat #55 (rate: 1.00 Hz)
+[2026-03-16 19:49:31.135] Heartbeat: uptime 54s, heap 27928B, beats 40, rate 1.0Hz
+[2026-03-16 19:49:41.207] Heartbeat: uptime 64s, heap 27924B, beats 50, rate 1.0Hz
+[2026-03-16 19:49:51.158] Heartbeat: uptime 74s, heap 24800B, beats 60, rate 1.0Hz
+[2026-03-16 19:50:01.178] Heartbeat: uptime 84s, heap 27924B, beats 70, rate 1.0Hz
+[2026-03-16 19:50:11.173] Heartbeat: uptime 94s, heap 27924B, beats 80, rate 1.0Hz
+[2026-03-16 19:50:21.158] Heartbeat: uptime 104s, heap 27924B, beats 90, rate 1.0Hz
+[2026-03-16 19:50:31.201] Heartbeat: uptime 114s, heap 27888B, beats 100, rate 1.0Hz
+[2026-03-16 19:50:41.178] Heartbeat: uptime 124s, heap 27420B, beats 110, rate 1.0Hz
+[2026-03-16 19:50:51.165] Heartbeat: uptime 134s, heap 24592B, beats 120, rate 1.0Hz
+[2026-03-16 19:51:01.198] Heartbeat: uptime 144s, heap 24592B, beats 130, rate 1.0Hz
+[2026-03-16 19:51:11.184] Heartbeat: uptime 154s, heap 24592B, beats 140, rate 1.0Hz
+[2026-03-16 19:51:21.193] Heartbeat: uptime 164s, heap 24788B, beats 150, rate 1.0Hz
+[2026-03-16 19:51:31.189] Heartbeat: uptime 174s, heap 24788B, beats 160, rate 1.0Hz
+[2026-03-16 19:51:41.239] Heartbeat: uptime 184s, heap 24596B, beats 170, rate 1.0Hz
+[2026-03-16 19:51:51.178] Heartbeat: uptime 194s, heap 24792B, beats 180, rate 1.0Hz
+[2026-03-16 19:52:01.227] Heartbeat: uptime 204s, heap 24600B, beats 190, rate 1.0Hz
+[2026-03-16 19:52:11.244] Heartbeat: uptime 214s, heap 24796B, beats 200, rate 1.0Hz
+[2026-03-16 19:52:21.194] Heartbeat: uptime 224s, heap 24792B, beats 210, rate 1.0Hz
+[2026-03-16 19:52:31.171] Heartbeat: uptime 234s, heap 24792B, beats 220, rate 1.0Hz
+[2026-03-16 19:52:41.277] Heartbeat: uptime 244s, heap 24596B, beats 230, rate 1.0Hz
+[2026-03-16 19:52:51.230] Heartbeat: uptime 254s, heap 24792B, beats 240, rate 1.0Hz
+[2026-03-16 19:53:01.210] Heartbeat: uptime 264s, heap 24792B, beats 250, rate 1.0Hz
+[2026-03-16 19:53:11.256] Heartbeat: uptime 274s, heap 24596B, beats 260, rate 1.0Hz
+[2026-03-16 19:53:21.191] Heartbeat: uptime 284s, heap 24796B, beats 270, rate 1.0Hz
+[2026-03-16 19:53:31.194] Heartbeat: uptime 294s, heap 24796B, beats 280, rate 1.0Hz
+[2026-03-16 19:53:41.229] Heartbeat: uptime 304s, heap 24792B, beats 290, rate 1.0Hz
+[2026-03-16 19:53:51.203] Heartbeat: uptime 314s, heap 24792B, beats 300, rate 1.0Hz
+[2026-03-16 19:54:01.253] Heartbeat: uptime 324s, heap 24792B, beats 310, rate 1.0Hz
+[2026-03-16 19:54:11.227] Heartbeat: uptime 334s, heap 26096B, beats 320, rate 1.0Hz
+[2026-03-16 19:54:21.205] Heartbeat: uptime 344s, heap 24796B, beats 330, rate 1.0Hz
+[2026-03-16 19:54:31.218] Heartbeat: uptime 354s, heap 24672B, beats 340, rate 1.0Hz
+[2026-03-16 19:54:41.275] Heartbeat: uptime 364s, heap 26356B, beats 350, rate 1.0Hz
+[2026-03-16 19:54:51.321] Heartbeat: uptime 374s, heap 26096B, beats 360, rate 1.0Hz
+[2026-03-16 19:55:01.271] Heartbeat: uptime 384s, heap 26100B, beats 370, rate 1.0Hz
+[2026-03-16 19:55:11.293] Heartbeat: uptime 394s, heap 26360B, beats 380, rate 1.0Hz
+[2026-03-16 19:55:21.343] Heartbeat: uptime 404s, heap 26096B, beats 390, rate 1.0Hz
+[2026-03-16 19:55:31.251] Heartbeat: uptime 414s, heap 27916B, beats 400, rate 1.0Hz
+[2026-03-16 19:55:41.254] Heartbeat: uptime 424s, heap 26356B, beats 410, rate 1.0Hz
+[2026-03-16 19:55:51.319] Heartbeat: uptime 434s, heap 27916B, beats 420, rate 1.0Hz
+[2026-03-16 19:56:01.259] Heartbeat: uptime 444s, heap 26356B, beats 430, rate 1.0Hz
+[2026-03-16 19:56:11.229] Heartbeat: uptime 454s, heap 26356B, beats 440, rate 1.0Hz
+[2026-03-16 19:56:21.281] Heartbeat: uptime 464s, heap 22944B, beats 450, rate 1.0Hz
+[2026-03-16 19:56:31.285] Heartbeat: uptime 474s, heap 27916B, beats 460, rate 1.0Hz
+[2026-03-16 19:56:41.282] Heartbeat: uptime 484s, heap 26356B, beats 470, rate 1.0Hz
+[2026-03-16 19:56:51.297] Heartbeat: uptime 494s, heap 26356B, beats 480, rate 1.0Hz
+[2026-03-16 19:57:01.260] Heartbeat: uptime 504s, heap 26356B, beats 490, rate 1.0Hz
+[2026-03-16 19:57:11.307] Heartbeat: uptime 514s, heap 27916B, beats 500, rate 1.0Hz
+[2026-03-16 19:57:21.683] Heartbeat: uptime 524s, heap 24796B, beats 510, rate 1.0Hz
+[2026-03-16 19:57:31.360] Heartbeat: uptime 534s, heap 27916B, beats 520, rate 1.0Hz
+[2026-03-16 20:00:18.983] Heartbeat: uptime 53s, heap 28064B, beats 50, rate 1.0Hz
+[2026-03-16 20:00:29.016] Heartbeat: uptime 63s, heap 28064B, beats 60, rate 1.0Hz
+[2026-03-16 20:00:38.964] Heartbeat: uptime 73s, heap 28064B, beats 70, rate 1.0Hz
+[2026-03-16 20:02:24.541] Heartbeat: uptime 53s, heap 27924B, beats 50, rate 1.0Hz
+[2026-03-16 20:02:34.555] Heartbeat: uptime 63s, heap 27924B, beats 60, rate 1.0Hz
+[2026-03-16 20:02:44.542] Heartbeat: uptime 73s, heap 27924B, beats 70, rate 1.0Hz
+[2026-03-16 20:02:54.527] Heartbeat: uptime 83s, heap 27916B, beats 80, rate 1.0Hz
+[2026-03-16 20:03:04.520] Heartbeat: uptime 93s, heap 27916B, beats 90, rate 1.0Hz
+[2026-03-16 20:03:14.543] Heartbeat: uptime 103s, heap 27916B, beats 100, rate 1.0Hz
+[2026-03-16 20:03:24.535] Heartbeat: uptime 113s, heap 27876B, beats 110, rate 1.0Hz
+[2026-03-16 20:03:34.566] Heartbeat: uptime 123s, heap 27904B, beats 120, rate 1.0Hz
+[2026-03-16 20:03:44.597] Heartbeat: uptime 133s, heap 27904B, beats 130, rate 1.0Hz
+[2026-03-16 20:03:54.574] Heartbeat: uptime 143s, heap 27904B, beats 140, rate 1.0Hz
+[2026-03-16 20:04:04.572] Heartbeat: uptime 153s, heap 24580B, beats 150, rate 1.0Hz
+[2026-03-16 20:04:14.577] Heartbeat: uptime 163s, heap 24576B, beats 160, rate 1.0Hz
+[2026-03-16 20:04:24.553] Heartbeat: uptime 173s, heap 24576B, beats 170, rate 1.0Hz
+[2026-03-16 20:04:34.594] Heartbeat: uptime 183s, heap 24584B, beats 180, rate 1.0Hz
+[2026-03-16 20:04:44.582] Heartbeat: uptime 193s, heap 24780B, beats 190, rate 1.0Hz
+[2026-03-16 20:04:54.557] Heartbeat: uptime 203s, heap 24768B, beats 200, rate 1.0Hz
+[2026-03-16 20:05:04.545] Heartbeat: uptime 213s, heap 24768B, beats 210, rate 1.0Hz
+[2026-03-16 20:05:14.572] Heartbeat: uptime 223s, heap 24768B, beats 220, rate 1.0Hz
+[2026-03-16 20:05:24.561] Heartbeat: uptime 233s, heap 24768B, beats 230, rate 1.0Hz
+[2026-03-16 20:05:34.552] Heartbeat: uptime 243s, heap 24772B, beats 240, rate 1.0Hz
+[2026-03-16 20:05:44.553] Heartbeat: uptime 253s, heap 24772B, beats 250, rate 1.0Hz
+[2026-03-16 20:05:54.571] Heartbeat: uptime 263s, heap 24776B, beats 260, rate 1.0Hz
+[2026-03-16 20:06:04.556] Heartbeat: uptime 273s, heap 24780B, beats 270, rate 1.0Hz
+[2026-03-16 20:06:14.564] Heartbeat: uptime 283s, heap 24768B, beats 280, rate 1.0Hz
+[2026-03-16 20:06:24.622] Heartbeat: uptime 293s, heap 24768B, beats 290, rate 1.0Hz
+[2026-03-16 20:06:34.621] Heartbeat: uptime 303s, heap 24484B, beats 300, rate 1.0Hz
+[2026-03-16 20:06:44.640] Heartbeat: uptime 313s, heap 24776B, beats 310, rate 1.0Hz
+[2026-03-16 20:06:54.567] Heartbeat: uptime 323s, heap 24772B, beats 320, rate 1.0Hz
+[2026-03-16 20:07:04.599] Heartbeat: uptime 333s, heap 26340B, beats 330, rate 1.0Hz
+[2026-03-16 20:07:14.615] Heartbeat: uptime 343s, heap 24776B, beats 340, rate 1.0Hz
+[2026-03-16 20:07:24.599] Heartbeat: uptime 353s, heap 24780B, beats 350, rate 1.0Hz
+[2026-03-16 20:07:34.643] Heartbeat: uptime 363s, heap 26080B, beats 360, rate 1.0Hz
+[2026-03-16 20:07:44.638] Heartbeat: uptime 373s, heap 26336B, beats 370, rate 1.0Hz
+[2026-03-16 20:07:57.506] Heartbeat: uptime 383s, heap 24776B, beats 380, rate 1.0Hz
+[2026-03-16 20:08:04.608] Heartbeat: uptime 393s, heap 26344B, beats 390, rate 1.0Hz
+[2026-03-16 20:08:14.590] Heartbeat: uptime 403s, heap 26344B, beats 400, rate 1.0Hz
+[2026-03-16 20:08:24.607] Heartbeat: uptime 413s, heap 26344B, beats 410, rate 1.0Hz
+[2026-03-16 20:08:34.614] Heartbeat: uptime 423s, heap 26344B, beats 420, rate 1.0Hz
+[2026-03-16 20:08:44.659] Heartbeat: uptime 433s, heap 27904B, beats 430, rate 1.0Hz
+[2026-03-16 20:08:54.653] Heartbeat: uptime 443s, heap 26344B, beats 440, rate 1.0Hz
+[2026-03-16 20:09:04.618] Heartbeat: uptime 453s, heap 26344B, beats 450, rate 1.0Hz
+[2026-03-16 20:09:14.622] Heartbeat: uptime 463s, heap 26340B, beats 460, rate 1.0Hz
+[2026-03-16 20:09:24.626] Heartbeat: uptime 473s, heap 26336B, beats 470, rate 1.0Hz
+[2026-03-16 20:09:34.614] Heartbeat: uptime 483s, heap 26344B, beats 480, rate 1.0Hz
+[2026-03-16 20:09:44.765] Heartbeat: uptime 493s, heap 27904B, beats 490, rate 1.0Hz
+[2026-03-16 20:09:54.695] Heartbeat: uptime 503s, heap 26344B, beats 500, rate 1.0Hz
+[2026-03-16 20:10:04.665] Heartbeat: uptime 513s, heap 26344B, beats 510, rate 1.0Hz
+[2026-03-16 20:10:14.675] Heartbeat: uptime 523s, heap 26336B, beats 520, rate 1.0Hz
+[2026-03-16 20:10:24.697] Heartbeat: uptime 533s, heap 27900B, beats 530, rate 1.0Hz
+[2026-03-16 20:10:34.702] Heartbeat: uptime 543s, heap 26080B, beats 540, rate 1.0Hz
+[2026-03-16 20:10:44.753] Heartbeat: uptime 553s, heap 27904B, beats 550, rate 1.0Hz
+[2026-03-16 20:10:54.711] Heartbeat: uptime 563s, heap 27904B, beats 560, rate 1.0Hz
+[2026-03-16 20:13:57.047] Heartbeat: uptime 53s, heap 25880B, beats 50, rate 1.0Hz
+[2026-03-16 20:14:12.149] Heartbeat: uptime 63s, heap 22756B, beats 60, rate 1.0Hz
+[2026-03-16 20:14:17.051] Heartbeat: uptime 73s, heap 25876B, beats 70, rate 1.0Hz
+[2026-03-16 20:14:27.045] Heartbeat: uptime 83s, heap 25880B, beats 80, rate 1.0Hz
+[2026-03-16 20:14:37.111] Heartbeat: uptime 93s, heap 25880B, beats 90, rate 1.0Hz
+[2026-03-16 20:14:47.081] Heartbeat: uptime 103s, heap 25876B, beats 100, rate 1.0Hz
+[2026-03-16 20:14:57.086] Heartbeat: uptime 113s, heap 25832B, beats 110, rate 1.0Hz
+[2026-03-16 20:15:07.087] Heartbeat: uptime 123s, heap 25856B, beats 120, rate 1.0Hz
+[2026-03-16 20:15:17.077] Heartbeat: uptime 133s, heap 25856B, beats 130, rate 1.0Hz
+[2026-03-16 20:15:27.105] Heartbeat: uptime 143s, heap 25392B, beats 140, rate 1.0Hz
+[2026-03-16 20:15:37.062] Heartbeat: uptime 153s, heap 22728B, beats 150, rate 1.0Hz
+[2026-03-16 20:15:47.075] Heartbeat: uptime 163s, heap 22532B, beats 160, rate 1.0Hz
+[2026-03-16 20:15:57.062] Heartbeat: uptime 173s, heap 22728B, beats 170, rate 1.0Hz
+[2026-03-16 20:16:07.083] Heartbeat: uptime 183s, heap 22740B, beats 180, rate 1.0Hz
+[2026-03-16 20:16:17.097] Heartbeat: uptime 193s, heap 22544B, beats 190, rate 1.0Hz
+[2026-03-16 20:16:27.093] Heartbeat: uptime 203s, heap 22740B, beats 200, rate 1.0Hz
+[2026-03-16 20:16:37.079] Heartbeat: uptime 213s, heap 22740B, beats 210, rate 1.0Hz
+[2026-03-16 20:16:47.063] Heartbeat: uptime 223s, heap 22740B, beats 220, rate 1.0Hz
+[2026-03-16 20:16:57.108] Heartbeat: uptime 233s, heap 22740B, beats 230, rate 1.0Hz
+[2026-03-16 20:17:07.086] Heartbeat: uptime 243s, heap 22728B, beats 240, rate 1.0Hz
+[2026-03-16 20:17:17.073] Heartbeat: uptime 253s, heap 22728B, beats 250, rate 1.0Hz
+[2026-03-16 20:17:27.073] Heartbeat: uptime 263s, heap 22728B, beats 260, rate 1.0Hz
+[2026-03-16 20:17:37.069] Heartbeat: uptime 273s, heap 22712B, beats 270, rate 1.0Hz
+[2026-03-16 20:17:47.080] Heartbeat: uptime 283s, heap 22728B, beats 280, rate 1.0Hz
+[2026-03-16 20:17:57.076] Heartbeat: uptime 293s, heap 22728B, beats 290, rate 1.0Hz
+[2026-03-16 20:18:07.075] Heartbeat: uptime 303s, heap 22736B, beats 300, rate 1.0Hz
+[2026-03-16 20:18:17.080] Heartbeat: uptime 313s, heap 22736B, beats 310, rate 1.0Hz
+[2026-03-16 20:18:27.141] Heartbeat: uptime 323s, heap 22728B, beats 320, rate 1.0Hz
+[2026-03-16 20:20:00.912] GUI: I (40628) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:20:04.315] Heartbeat: I (44017) Heartbeat: uptime 43s, heap 25856B, beats 40, rate 1.0Hz
+[2026-03-16 20:20:10.945] GUI: I (50620) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:20:17.978] Heartbeat: I (54024) Heartbeat: uptime 53s, heap 22728B, beats 50, rate 1.0Hz
+[2026-03-16 20:20:20.937] GUI: I (60614) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:20:24.727] Heartbeat: I (64028) Heartbeat: uptime 63s, heap 25864B, beats 60, rate 1.0Hz
+[2026-03-16 20:20:31.084] GUI: I (70637) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:20:34.368] Heartbeat: I (74034) Heartbeat: uptime 73s, heap 25856B, beats 70, rate 1.0Hz
+[2026-03-16 20:20:40.882] GUI: I (80631) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:20:44.362] Heartbeat: I (84039) Heartbeat: uptime 83s, heap 25856B, beats 80, rate 1.0Hz
+[2026-03-16 20:20:50.987] GUI: I (90624) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:20:54.345] Heartbeat: I (94046) Heartbeat: uptime 93s, heap 25856B, beats 90, rate 1.0Hz
+[2026-03-16 20:21:00.899] GUI: I (100619) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:21:04.384] Heartbeat: I (104056) Heartbeat: uptime 103s, heap 22456B, beats 100, rate 1.0Hz
+[2026-03-16 20:21:10.953] GUI: I (110612) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:21:14.347] Heartbeat: I (114062) Heartbeat: uptime 113s, heap 22596B, beats 110, rate 1.0Hz
+[2026-03-16 20:21:20.986] GUI: I (120637) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:21:24.358] Heartbeat: I (124066) Heartbeat: uptime 123s, heap 22408B, beats 120, rate 1.0Hz
+[2026-03-16 20:21:30.927] GUI: I (130632) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:21:34.366] Heartbeat: I (134070) Heartbeat: uptime 133s, heap 22596B, beats 130, rate 1.0Hz
+[2026-03-16 20:21:40.954] GUI: I (140626) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:21:46.014] Heartbeat: I (144075) Heartbeat: uptime 143s, heap 22596B, beats 140, rate 1.0Hz
+[2026-03-16 20:21:50.885] GUI: I (150619) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:21:54.360] Heartbeat: I (154079) Heartbeat: uptime 153s, heap 22596B, beats 150, rate 1.0Hz
+[2026-03-16 20:22:00.906] GUI: I (160611) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:22:04.356] Heartbeat: I (164083) Heartbeat: uptime 163s, heap 22596B, beats 160, rate 1.0Hz
+[2026-03-16 20:22:10.904] GUI: I (170635) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:22:14.345] Heartbeat: I (174087) Heartbeat: uptime 173s, heap 22596B, beats 170, rate 1.0Hz
+[2026-03-16 20:22:20.898] GUI: I (180629) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:22:24.342] Heartbeat: I (184091) Heartbeat: uptime 183s, heap 22596B, beats 180, rate 1.0Hz
+[2026-03-16 20:22:30.861] GUI: I (190623) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:22:34.348] Heartbeat: I (194095) Heartbeat: uptime 193s, heap 22596B, beats 190, rate 1.0Hz
+[2026-03-16 20:22:40.862] GUI: I (200616) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:22:44.352] Heartbeat: I (204099) Heartbeat: uptime 203s, heap 22596B, beats 200, rate 1.0Hz
+[2026-03-16 20:22:50.990] GUI: I (210639) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:22:54.445] Heartbeat: I (214103) Heartbeat: uptime 213s, heap 23872B, beats 210, rate 1.0Hz
+[2026-03-16 20:23:00.880] GUI: I (220631) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:23:04.364] Heartbeat: I (224109) Heartbeat: uptime 223s, heap 22596B, beats 220, rate 1.0Hz
+[2026-03-16 20:23:10.936] GUI: I (230623) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:23:14.395] Heartbeat: I (234113) Heartbeat: uptime 233s, heap 23908B, beats 230, rate 1.0Hz
+[2026-03-16 20:23:20.888] GUI: I (240618) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:23:24.487] Heartbeat: I (244117) Heartbeat: uptime 243s, heap 24168B, beats 240, rate 1.0Hz
+[2026-03-16 20:23:30.920] GUI: I (250640) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:23:34.408] Heartbeat: I (254121) Heartbeat: uptime 253s, heap 25728B, beats 250, rate 1.0Hz
+[2026-03-16 20:23:40.898] GUI: I (260638) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:23:44.449] Heartbeat: I (264128) Heartbeat: uptime 263s, heap 25728B, beats 260, rate 1.0Hz
+[2026-03-16 20:24:48.449] GUI: I (50630) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:24:54.099] Heartbeat: I (56389) Heartbeat: uptime 55s, heap 25832B, beats 50, rate 1.0Hz
+[2026-03-16 20:24:58.333] GUI: I (60623) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:25:04.122] Heartbeat: I (66396) Heartbeat: uptime 65s, heap 25844B, beats 60, rate 1.0Hz
+[2026-03-16 20:25:08.354] GUI: I (70616) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:25:14.165] Heartbeat: I (76399) Heartbeat: uptime 75s, heap 25840B, beats 70, rate 1.0Hz
+[2026-03-16 20:25:18.359] GUI: I (80637) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:25:24.132] Heartbeat: I (86405) Heartbeat: uptime 85s, heap 25840B, beats 80, rate 1.0Hz
+[2026-03-16 20:27:20.772] Heartbeat: I (46459) Heartbeat: uptime 45s, heap 25768B, beats 40, rate 1.0Hz
+[2026-03-16 20:27:41.797] GUI: I (50629) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:27:41.797] Heartbeat: I (56462) Heartbeat: uptime 55s, heap 22640B, beats 50, rate 1.0Hz
+[2026-03-16 20:27:41.879] GUI: I (60622) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:27:41.879] Heartbeat: I (66466) Heartbeat: uptime 65s, heap 21080B, beats 60, rate 1.0Hz
+[2026-03-16 20:27:44.837] GUI: I (70616) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:27:50.737] Heartbeat: I (76470) Heartbeat: uptime 75s, heap 25764B, beats 70, rate 1.0Hz
+[2026-03-16 20:27:54.926] GUI: I (80640) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:28:00.717] Heartbeat: I (86477) Heartbeat: uptime 85s, heap 25764B, beats 80, rate 1.0Hz
+[2026-03-16 20:28:04.855] GUI: I (90632) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:28:10.788] Heartbeat: I (96484) Heartbeat: uptime 95s, heap 25768B, beats 90, rate 1.0Hz
+[2026-03-16 20:28:14.835] GUI: I (100630) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:28:20.727] Heartbeat: I (106491) Heartbeat: uptime 105s, heap 25696B, beats 100, rate 1.0Hz
+[2026-03-16 20:28:24.824] GUI: I (110624) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:28:30.720] Heartbeat: I (116500) Heartbeat: uptime 115s, heap 25640B, beats 110, rate 1.0Hz
+[2026-03-16 20:28:34.833] GUI: I (120618) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:28:40.772] Heartbeat: I (126507) Heartbeat: uptime 125s, heap 22352B, beats 120, rate 1.0Hz
+[2026-03-16 20:28:44.882] GUI: I (130640) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:28:50.777] Heartbeat: I (136511) Heartbeat: uptime 135s, heap 22352B, beats 130, rate 1.0Hz
+[2026-03-16 20:28:54.859] GUI: I (140635) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:29:00.768] Heartbeat: I (146515) Heartbeat: uptime 145s, heap 22352B, beats 140, rate 1.0Hz
+[2026-03-16 20:29:04.806] GUI: I (150629) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:29:10.916] Heartbeat: I (156520) Heartbeat: uptime 155s, heap 22548B, beats 150, rate 1.0Hz
+[2026-03-16 20:29:21.308] GUI: I (160623) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:29:21.308] Heartbeat: I (166524) Heartbeat: uptime 165s, heap 22548B, beats 160, rate 1.0Hz
+[2026-03-16 20:29:24.839] GUI: I (170615) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:29:30.874] Heartbeat: I (176527) Heartbeat: uptime 175s, heap 22548B, beats 170, rate 1.0Hz
+[2026-03-16 20:29:34.848] GUI: I (180638) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:29:40.725] Heartbeat: I (186531) Heartbeat: uptime 185s, heap 22548B, beats 180, rate 1.0Hz
+[2026-03-16 20:29:44.851] GUI: I (190629) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:29:50.723] Heartbeat: I (196536) Heartbeat: uptime 195s, heap 22548B, beats 190, rate 1.0Hz
+[2026-03-16 20:29:54.852] GUI: I (200626) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:30:00.712] Heartbeat: I (206540) Heartbeat: uptime 205s, heap 22548B, beats 200, rate 1.0Hz
+[2026-03-16 20:30:04.845] GUI: I (210618) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:30:10.784] Heartbeat: I (216544) Heartbeat: uptime 215s, heap 25672B, beats 210, rate 1.0Hz
+[2026-03-16 20:30:14.855] GUI: I (220640) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:30:20.780] Heartbeat: I (226551) Heartbeat: uptime 225s, heap 25672B, beats 220, rate 1.0Hz
+[2026-03-16 20:30:31.489] GUI: I (230634) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:30:31.489] Heartbeat: I (236558) Heartbeat: uptime 235s, heap 22552B, beats 230, rate 1.0Hz
+[2026-03-16 20:30:36.836] GUI: I (240625) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:30:40.800] Heartbeat: I (246562) Heartbeat: uptime 245s, heap 25676B, beats 240, rate 1.0Hz
+[2026-03-16 20:30:44.840] GUI: I (250618) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:30:50.796] Heartbeat: I (256569) Heartbeat: uptime 255s, heap 25676B, beats 250, rate 1.0Hz
+[2026-03-16 20:30:54.895] GUI: I (260639) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:31:00.804] Heartbeat: I (266576) Heartbeat: uptime 265s, heap 25676B, beats 260, rate 1.0Hz
+[2026-03-16 20:31:04.883] GUI: I (270630) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:31:10.798] Heartbeat: I (276583) Heartbeat: uptime 275s, heap 25676B, beats 270, rate 1.0Hz
+[2026-03-16 20:31:14.839] GUI: I (280621) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:31:20.818] Heartbeat: I (286588) Heartbeat: uptime 285s, heap 25676B, beats 280, rate 1.0Hz
+[2026-03-16 20:31:24.831] GUI: I (290613) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:31:30.833] Heartbeat: I (296595) Heartbeat: uptime 295s, heap 25676B, beats 290, rate 1.0Hz
+[2026-03-16 20:31:34.856] GUI: I (300635) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:31:40.816] Heartbeat: I (306601) Heartbeat: uptime 305s, heap 25676B, beats 300, rate 1.0Hz
+[2026-03-16 20:31:44.844] GUI: I (310627) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:31:50.822] Heartbeat: I (316608) Heartbeat: uptime 315s, heap 25676B, beats 310, rate 1.0Hz
+[2026-03-16 20:31:54.844] GUI: I (320618) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:32:00.850] Heartbeat: I (326615) Heartbeat: uptime 326s, heap 25676B, beats 320, rate 1.0Hz
+[2026-03-16 20:32:04.862] GUI: I (330639) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:32:10.839] Heartbeat: I (336621) Heartbeat: uptime 336s, heap 25676B, beats 330, rate 1.0Hz
+[2026-03-16 20:32:14.850] GUI: I (340631) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:32:20.847] Heartbeat: I (346627) Heartbeat: uptime 346s, heap 25676B, beats 340, rate 1.0Hz
+[2026-03-16 20:32:24.850] GUI: I (350622) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:32:30.850] Heartbeat: I (356634) Heartbeat: uptime 356s, heap 25676B, beats 350, rate 1.0Hz
+[2026-03-16 20:32:34.830] GUI: I (360614) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:32:40.864] Heartbeat: I (366640) Heartbeat: uptime 366s, heap 25676B, beats 360, rate 1.0Hz
+[2026-03-16 20:32:44.855] GUI: I (370637) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:32:50.879] Heartbeat: I (376647) Heartbeat: uptime 376s, heap 25676B, beats 370, rate 1.0Hz
+[2026-03-16 20:32:54.848] GUI: I (380630) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:33:00.898] Heartbeat: I (386653) Heartbeat: uptime 386s, heap 25676B, beats 380, rate 1.0Hz
+[2026-03-16 20:33:04.837] GUI: I (390621) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:33:10.877] Heartbeat: I (396660) Heartbeat: uptime 396s, heap 25676B, beats 390, rate 1.0Hz
+[2026-03-16 20:33:14.826] GUI: I (400612) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:33:21.001] Heartbeat: I (406667) Heartbeat: uptime 406s, heap 25676B, beats 400, rate 1.0Hz
+[2026-03-16 20:33:24.856] GUI: I (410634) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:33:30.895] Heartbeat: I (416674) Heartbeat: uptime 416s, heap 25668B, beats 410, rate 1.0Hz
+[2026-03-16 20:33:34.837] GUI: I (420625) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:33:40.905] Heartbeat: I (426681) Heartbeat: uptime 426s, heap 25668B, beats 420, rate 1.0Hz
+[2026-03-16 20:33:44.829] GUI: I (430617) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:33:50.902] Heartbeat: I (436688) Heartbeat: uptime 436s, heap 25676B, beats 430, rate 1.0Hz
+[2026-03-16 20:33:54.867] GUI: I (440639) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:34:00.908] Heartbeat: I (446695) Heartbeat: uptime 446s, heap 25676B, beats 440, rate 1.0Hz
+[2026-03-16 20:34:04.844] GUI: I (450631) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:34:10.922] Heartbeat: I (456702) Heartbeat: uptime 456s, heap 25676B, beats 450, rate 1.0Hz
+[2026-03-16 20:34:15.030] GUI: I (460623) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:34:20.998] Heartbeat: I (466710) Heartbeat: uptime 466s, heap 25676B, beats 460, rate 1.0Hz
+[2026-03-16 20:34:24.840] GUI: I (470614) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:34:30.940] Heartbeat: I (476717) Heartbeat: uptime 476s, heap 25676B, beats 470, rate 1.0Hz
+[2026-03-16 20:34:34.852] GUI: I (480636) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:34:40.965] Heartbeat: I (486724) Heartbeat: uptime 486s, heap 25676B, beats 480, rate 1.0Hz
+[2026-03-16 20:34:44.929] GUI: I (490629) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:34:50.955] Heartbeat: I (496731) Heartbeat: uptime 496s, heap 25676B, beats 490, rate 1.0Hz
+[2026-03-16 20:34:54.852] GUI: I (500621) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:35:00.997] Heartbeat: I (506738) Heartbeat: uptime 506s, heap 25676B, beats 500, rate 1.0Hz
+[2026-03-16 20:35:04.835] GUI: I (510614) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:35:11.053] Heartbeat: I (516746) Heartbeat: uptime 516s, heap 25676B, beats 510, rate 1.0Hz
+[2026-03-16 20:35:14.853] GUI: I (520636) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:35:20.977] Heartbeat: I (526753) Heartbeat: uptime 526s, heap 25676B, beats 520, rate 1.0Hz
+[2026-03-16 20:35:24.844] GUI: I (530627) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:35:30.978] Heartbeat: I (536760) Heartbeat: uptime 536s, heap 25668B, beats 530, rate 1.0Hz
+[2026-03-16 20:35:34.836] GUI: I (540619) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:35:41.043] Heartbeat: I (546767) Heartbeat: uptime 546s, heap 25668B, beats 540, rate 1.0Hz
+[2026-03-16 20:35:44.866] GUI: I (550640) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:35:50.992] Heartbeat: I (556774) Heartbeat: uptime 556s, heap 25676B, beats 550, rate 1.0Hz
+[2026-03-16 20:35:54.859] GUI: I (560632) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:36:01.124] Heartbeat: I (566781) Heartbeat: uptime 566s, heap 25676B, beats 560, rate 1.0Hz
+[2026-03-16 20:36:04.862] GUI: I (570624) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:36:11.005] Heartbeat: I (576788) Heartbeat: uptime 576s, heap 25676B, beats 570, rate 1.0Hz
+[2026-03-16 20:36:14.840] GUI: I (580616) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:36:21.095] Heartbeat: I (586795) Heartbeat: uptime 586s, heap 25676B, beats 580, rate 1.0Hz
+[2026-03-16 20:36:24.862] GUI: I (590637) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:36:31.027] Heartbeat: I (596798) Heartbeat: uptime 596s, heap 25676B, beats 590, rate 1.0Hz
+[2026-03-16 20:36:34.912] GUI: I (600630) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:36:41.041] Heartbeat: I (606805) Heartbeat: uptime 606s, heap 25676B, beats 600, rate 1.0Hz
+[2026-03-16 20:36:44.837] GUI: I (610621) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:36:51.055] Heartbeat: I (616812) Heartbeat: uptime 616s, heap 25676B, beats 610, rate 1.0Hz
+[2026-03-16 20:36:54.834] GUI: I (620614) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:37:01.033] Heartbeat: I (626817) Heartbeat: uptime 626s, heap 25676B, beats 620, rate 1.0Hz
+[2026-03-16 20:37:04.860] GUI: I (630636) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:37:11.060] Heartbeat: I (636824) Heartbeat: uptime 636s, heap 25676B, beats 630, rate 1.0Hz
+[2026-03-16 20:37:14.846] GUI: I (640628) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:37:21.075] Heartbeat: I (646831) Heartbeat: uptime 646s, heap 25676B, beats 640, rate 1.0Hz
+[2026-03-16 20:37:24.832] GUI: I (650619) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:37:31.082] Heartbeat: I (656838) Heartbeat: uptime 656s, heap 25676B, beats 650, rate 1.0Hz
+[2026-03-16 20:37:34.860] GUI: I (660641) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:37:41.059] Heartbeat: I (666845) Heartbeat: uptime 666s, heap 25676B, beats 660, rate 1.0Hz
+[2026-03-16 20:37:44.852] GUI: I (670635) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:37:51.086] Heartbeat: I (676852) Heartbeat: uptime 676s, heap 25676B, beats 670, rate 1.0Hz
+[2026-03-16 20:37:54.845] GUI: I (680628) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:38:01.778] Heartbeat: I (686859) Heartbeat: uptime 686s, heap 25676B, beats 680, rate 1.0Hz
+[2026-03-16 20:38:04.890] GUI: I (690621) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:38:11.149] Heartbeat: I (696861) Heartbeat: uptime 696s, heap 25676B, beats 690, rate 1.0Hz
+[2026-03-16 20:38:14.841] GUI: I (700614) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:38:21.088] Heartbeat: I (706868) Heartbeat: uptime 706s, heap 25676B, beats 700, rate 1.0Hz
+[2026-03-16 20:38:24.916] GUI: I (710636) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:38:31.147] Heartbeat: I (716875) Heartbeat: uptime 716s, heap 25676B, beats 710, rate 1.0Hz
+[2026-03-16 20:38:34.865] GUI: I (720628) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:38:41.123] Heartbeat: I (726881) Heartbeat: uptime 726s, heap 25676B, beats 720, rate 1.0Hz
+[2026-03-16 20:38:44.861] GUI: I (730619) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:38:51.104] Heartbeat: I (736888) Heartbeat: uptime 736s, heap 25676B, beats 730, rate 1.0Hz
+[2026-03-16 20:38:54.858] GUI: I (740641) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:39:01.251] Heartbeat: I (746894) Heartbeat: uptime 746s, heap 25676B, beats 740, rate 1.0Hz
+[2026-03-16 20:39:58.896] Heartbeat: I (55633) Heartbeat: uptime 55s, heap 26052B, beats 40, rate 1.0Hz
+[2026-03-16 20:39:59.869] GUI: I (56633) GUI: touch poll alive: state=IDLE irqs=0 IRQ_GPIO=22 level=1
+[2026-03-16 20:42:40.196] GUI: I (40637) GUI: touch poll alive: state=IDLE irqs=1180 IRQ_GPIO=22 level=1
+[2026-03-16 20:42:43.512] Heartbeat: I (43978) Heartbeat: uptime 43s, heap 25736B, beats 40, rate 1.0Hz
+[2026-03-16 20:42:50.231] GUI: I (50633) GUI: touch poll alive: state=IDLE irqs=1513 IRQ_GPIO=22 level=1
+[2026-03-16 20:42:53.522] Heartbeat: I (53983) Heartbeat: uptime 53s, heap 25744B, beats 50, rate 1.0Hz
+[2026-03-16 20:43:00.288] GUI: I (60631) GUI: touch poll alive: state=IDLE irqs=1846 IRQ_GPIO=22 level=1
+[2026-03-16 20:43:03.526] Heartbeat: I (63990) Heartbeat: uptime 63s, heap 25744B, beats 60, rate 1.0Hz
+[2026-03-16 20:43:10.173] GUI: I (70628) GUI: touch poll alive: state=IDLE irqs=2179 IRQ_GPIO=22 level=1
+[2026-03-16 20:43:13.545] Heartbeat: I (73997) Heartbeat: uptime 73s, heap 25744B, beats 70, rate 1.0Hz
+[2026-03-16 20:43:20.139] GUI: I (80625) GUI: touch poll alive: state=IDLE irqs=2512 IRQ_GPIO=22 level=1
+[2026-03-16 20:43:23.548] Heartbeat: I (84004) Heartbeat: uptime 83s, heap 25436B, beats 80, rate 1.0Hz
+[2026-03-16 20:43:30.156] GUI: I (90619) GUI: touch poll alive: state=IDLE irqs=2845 IRQ_GPIO=22 level=1
+[2026-03-16 20:43:33.530] Heartbeat: I (94014) Heartbeat: uptime 93s, heap 22600B, beats 90, rate 1.0Hz
+[2026-03-16 20:43:40.720] GUI: I (100619) GUI: touch poll alive: state=IDLE irqs=3178 IRQ_GPIO=22 level=1
+[2026-03-16 20:43:43.546] Heartbeat: I (104018) Heartbeat: uptime 103s, heap 22404B, beats 100, rate 1.0Hz
+[2026-03-16 20:43:50.150] GUI: I (110622) GUI: touch poll alive: state=IDLE irqs=3511 IRQ_GPIO=22 level=1
+[2026-03-16 20:43:53.542] Heartbeat: I (114021) Heartbeat: uptime 113s, heap 22540B, beats 110, rate 1.0Hz
+[2026-03-16 20:44:00.163] GUI: I (120618) GUI: touch poll alive: state=IDLE irqs=3844 IRQ_GPIO=22 level=1
+[2026-03-16 20:44:03.541] Heartbeat: I (124025) Heartbeat: uptime 123s, heap 22548B, beats 120, rate 1.0Hz
+[2026-03-16 20:44:10.159] GUI: I (130617) GUI: touch poll alive: state=IDLE irqs=4177 IRQ_GPIO=22 level=1
+[2026-03-16 20:44:13.826] Heartbeat: I (134029) Heartbeat: uptime 133s, heap 22564B, beats 130, rate 1.0Hz
+[2026-03-16 20:44:20.227] GUI: I (140617) GUI: touch poll alive: state=IDLE irqs=4510 IRQ_GPIO=22 level=1
+[2026-03-16 20:44:23.532] Heartbeat: I (144032) Heartbeat: uptime 143s, heap 22564B, beats 140, rate 1.0Hz
+[2026-03-16 20:44:30.181] GUI: I (150613) GUI: touch poll alive: state=IDLE irqs=4843 IRQ_GPIO=22 level=1
+[2026-03-16 20:44:33.535] Heartbeat: I (154036) Heartbeat: uptime 153s, heap 22564B, beats 150, rate 1.0Hz
+[2026-03-16 20:44:40.247] GUI: I (160639) GUI: touch poll alive: state=IDLE irqs=5177 IRQ_GPIO=22 level=1
+[2026-03-16 20:44:43.532] Heartbeat: I (164040) Heartbeat: uptime 163s, heap 22556B, beats 160, rate 1.0Hz
+[2026-03-16 20:44:50.177] GUI: I (170636) GUI: touch poll alive: state=IDLE irqs=5510 IRQ_GPIO=22 level=1
+[2026-03-16 20:44:53.539] Heartbeat: I (174044) Heartbeat: uptime 173s, heap 22564B, beats 170, rate 1.0Hz
+[2026-03-16 20:45:00.171] GUI: I (180631) GUI: touch poll alive: state=IDLE irqs=5843 IRQ_GPIO=22 level=1
+[2026-03-16 20:45:03.539] Heartbeat: I (184048) Heartbeat: uptime 183s, heap 22564B, beats 180, rate 1.0Hz
+[2026-03-16 20:45:10.180] GUI: I (190630) GUI: touch poll alive: state=IDLE irqs=6176 IRQ_GPIO=22 level=1
+[2026-03-16 20:45:13.547] Heartbeat: I (194054) Heartbeat: uptime 193s, heap 22564B, beats 190, rate 1.0Hz
+[2026-03-16 20:45:20.197] GUI: I (200629) GUI: touch poll alive: state=IDLE irqs=6509 IRQ_GPIO=22 level=1
+[2026-03-16 20:45:23.611] Heartbeat: I (204058) Heartbeat: uptime 203s, heap 22564B, beats 200, rate 1.0Hz
+[2026-03-16 20:45:30.290] GUI: I (210627) GUI: touch poll alive: state=IDLE irqs=6842 IRQ_GPIO=22 level=1
+[2026-03-16 20:45:33.593] Heartbeat: I (214062) Heartbeat: uptime 213s, heap 22564B, beats 210, rate 1.0Hz
+[2026-03-16 20:45:40.224] GUI: I (220623) GUI: touch poll alive: state=IDLE irqs=7175 IRQ_GPIO=22 level=1
+[2026-03-16 20:45:43.605] Heartbeat: I (224068) Heartbeat: uptime 223s, heap 25696B, beats 220, rate 1.0Hz
+[2026-03-16 20:45:50.108] GUI: I (230621) GUI: touch poll alive: state=IDLE irqs=7508 IRQ_GPIO=22 level=1
+[2026-03-16 20:45:53.588] Heartbeat: I (234075) Heartbeat: uptime 233s, heap 24136B, beats 230, rate 1.0Hz
+[2026-03-16 20:46:00.146] GUI: I (240618) GUI: touch poll alive: state=IDLE irqs=7841 IRQ_GPIO=22 level=1
+[2026-03-16 20:46:03.598] Heartbeat: I (244079) Heartbeat: uptime 243s, heap 24136B, beats 240, rate 1.0Hz
+[2026-03-16 20:46:10.167] GUI: I (250616) GUI: touch poll alive: state=IDLE irqs=8174 IRQ_GPIO=22 level=1
+[2026-03-16 20:46:13.585] Heartbeat: I (254083) Heartbeat: uptime 253s, heap 24136B, beats 250, rate 1.0Hz
+[2026-03-16 20:46:20.104] GUI: I (260611) GUI: touch poll alive: state=IDLE irqs=8507 IRQ_GPIO=22 level=1
+[2026-03-16 20:46:23.592] Heartbeat: I (264088) Heartbeat: uptime 263s, heap 24136B, beats 260, rate 1.0Hz
+[2026-03-16 20:46:30.129] GUI: I (270611) GUI: touch poll alive: state=IDLE irqs=8840 IRQ_GPIO=22 level=1
+[2026-03-16 20:46:33.586] Heartbeat: I (274093) Heartbeat: uptime 273s, heap 24136B, beats 270, rate 1.0Hz
+[2026-03-16 20:46:40.162] GUI: I (280611) GUI: touch poll alive: state=IDLE irqs=9173 IRQ_GPIO=22 level=1
+[2026-03-16 20:46:43.641] Heartbeat: I (284098) Heartbeat: uptime 283s, heap 25696B, beats 280, rate 1.0Hz
+[2026-03-16 20:46:50.176] GUI: I (290640) GUI: touch poll alive: state=IDLE irqs=9507 IRQ_GPIO=22 level=1
+[2026-03-16 20:46:53.636] Heartbeat: I (294104) Heartbeat: uptime 293s, heap 25696B, beats 290, rate 1.0Hz
+[2026-03-16 20:47:00.229] GUI: I (300638) GUI: touch poll alive: state=IDLE irqs=9840 IRQ_GPIO=22 level=1
+[2026-03-16 20:47:04.339] Heartbeat: I (304109) Heartbeat: uptime 303s, heap 22564B, beats 300, rate 1.0Hz
+[2026-03-16 20:47:10.182] GUI: I (310633) GUI: touch poll alive: state=IDLE irqs=10173 IRQ_GPIO=22 level=1
+[2026-03-16 20:47:13.645] Heartbeat: I (314113) Heartbeat: uptime 313s, heap 25696B, beats 310, rate 1.0Hz
+[2026-03-16 20:47:20.212] GUI: I (320632) GUI: touch poll alive: state=IDLE irqs=10506 IRQ_GPIO=22 level=1
+[2026-03-16 20:47:23.603] Heartbeat: I (324120) Heartbeat: uptime 323s, heap 24136B, beats 320, rate 1.0Hz
+[2026-03-16 20:47:30.181] GUI: I (330630) GUI: touch poll alive: state=IDLE irqs=10839 IRQ_GPIO=22 level=1
+[2026-03-16 20:47:33.657] Heartbeat: I (334124) Heartbeat: uptime 333s, heap 25696B, beats 330, rate 1.0Hz
+[2026-03-16 20:47:40.198] GUI: I (340630) GUI: touch poll alive: state=IDLE irqs=11172 IRQ_GPIO=22 level=1
+[2026-03-16 20:47:43.674] Heartbeat: I (344127) Heartbeat: uptime 343s, heap 25696B, beats 340, rate 1.0Hz
+[2026-03-16 20:47:50.176] GUI: I (350628) GUI: touch poll alive: state=IDLE irqs=11505 IRQ_GPIO=22 level=1
+[2026-03-16 20:47:53.665] Heartbeat: I (354132) Heartbeat: uptime 353s, heap 25696B, beats 350, rate 1.0Hz
+[2026-03-16 20:48:00.237] GUI: I (360624) GUI: touch poll alive: state=IDLE irqs=11838 IRQ_GPIO=22 level=1
+[2026-03-16 20:48:03.686] Heartbeat: I (364135) Heartbeat: uptime 363s, heap 25696B, beats 360, rate 1.0Hz
+[2026-03-16 20:48:10.175] GUI: I (370620) GUI: touch poll alive: state=IDLE irqs=12171 IRQ_GPIO=22 level=1
+[2026-03-16 20:48:13.694] Heartbeat: I (374141) Heartbeat: uptime 373s, heap 24136B, beats 370, rate 1.0Hz
+[2026-03-16 20:48:20.163] GUI: I (380618) GUI: touch poll alive: state=IDLE irqs=12504 IRQ_GPIO=22 level=1
+[2026-03-16 20:48:23.682] Heartbeat: I (384145) Heartbeat: uptime 383s, heap 25696B, beats 380, rate 1.0Hz
+[2026-03-16 20:48:30.195] GUI: I (390616) GUI: touch poll alive: state=IDLE irqs=12837 IRQ_GPIO=22 level=1
+[2026-03-16 20:48:33.690] Heartbeat: I (394151) Heartbeat: uptime 393s, heap 25696B, beats 390, rate 1.0Hz
+[2026-03-16 20:48:40.217] GUI: I (400613) GUI: touch poll alive: state=IDLE irqs=13170 IRQ_GPIO=22 level=1
+[2026-03-16 20:48:43.705] Heartbeat: I (404158) Heartbeat: uptime 403s, heap 25676B, beats 400, rate 1.0Hz
+[2026-03-16 20:48:50.193] GUI: I (410639) GUI: touch poll alive: state=IDLE irqs=13504 IRQ_GPIO=22 level=1
+[2026-03-16 20:48:53.709] Heartbeat: I (414165) Heartbeat: uptime 413s, heap 25688B, beats 410, rate 1.0Hz
+[2026-03-16 20:49:00.266] GUI: I (420638) GUI: touch poll alive: state=IDLE irqs=13837 IRQ_GPIO=22 level=1
+[2026-03-16 20:49:03.708] Heartbeat: I (424172) Heartbeat: uptime 423s, heap 25696B, beats 420, rate 1.0Hz
+[2026-03-16 20:49:10.190] GUI: I (430634) GUI: touch poll alive: state=IDLE irqs=14170 IRQ_GPIO=22 level=1
+[2026-03-16 20:49:13.720] Heartbeat: I (434181) Heartbeat: uptime 433s, heap 25696B, beats 430, rate 1.0Hz
+[2026-03-16 20:49:20.188] GUI: I (440630) GUI: touch poll alive: state=IDLE irqs=14503 IRQ_GPIO=22 level=1
+[2026-03-16 20:49:23.753] Heartbeat: I (444186) Heartbeat: uptime 443s, heap 25696B, beats 440, rate 1.0Hz
+[2026-03-16 20:49:30.184] GUI: I (450628) GUI: touch poll alive: state=IDLE irqs=14836 IRQ_GPIO=22 level=1
+[2026-03-16 20:49:33.728] Heartbeat: I (454192) Heartbeat: uptime 453s, heap 25696B, beats 450, rate 1.0Hz
+[2026-03-16 20:49:40.234] GUI: I (460627) GUI: touch poll alive: state=IDLE irqs=15169 IRQ_GPIO=22 level=1
+[2026-03-16 20:49:43.737] Heartbeat: I (464199) Heartbeat: uptime 463s, heap 25696B, beats 460, rate 1.0Hz
+[2026-03-16 20:49:50.168] GUI: I (470624) GUI: touch poll alive: state=IDLE irqs=15502 IRQ_GPIO=22 level=1
+[2026-03-16 20:49:53.748] Heartbeat: I (474206) Heartbeat: uptime 473s, heap 25696B, beats 470, rate 1.0Hz
+[2026-03-16 20:50:00.239] GUI: I (480624) GUI: touch poll alive: state=IDLE irqs=15835 IRQ_GPIO=22 level=1
+[2026-03-16 20:50:03.755] Heartbeat: I (484213) Heartbeat: uptime 483s, heap 25696B, beats 480, rate 1.0Hz
+[2026-03-16 20:50:10.165] GUI: I (490622) GUI: touch poll alive: state=IDLE irqs=16168 IRQ_GPIO=22 level=1
+[2026-03-16 20:50:13.787] Heartbeat: I (494220) Heartbeat: uptime 493s, heap 25696B, beats 490, rate 1.0Hz
+[2026-03-16 20:50:20.116] GUI: I (500618) GUI: touch poll alive: state=IDLE irqs=16501 IRQ_GPIO=22 level=1
+[2026-03-16 20:50:23.780] Heartbeat: I (504228) Heartbeat: uptime 503s, heap 25696B, beats 500, rate 1.0Hz
+[2026-03-16 20:50:30.097] GUI: I (510613) GUI: touch poll alive: state=IDLE irqs=16834 IRQ_GPIO=22 level=1
+[2026-03-16 20:50:33.771] Heartbeat: I (514235) Heartbeat: uptime 513s, heap 25696B, beats 510, rate 1.0Hz
+[2026-03-16 20:50:40.266] GUI: I (520640) GUI: touch poll alive: state=IDLE irqs=17168 IRQ_GPIO=22 level=1
+[2026-03-16 20:50:43.820] Heartbeat: I (524242) Heartbeat: uptime 523s, heap 25696B, beats 520, rate 1.0Hz
+[2026-03-16 20:50:50.206] GUI: I (530637) GUI: touch poll alive: state=IDLE irqs=17501 IRQ_GPIO=22 level=1
+[2026-03-16 20:50:53.801] Heartbeat: I (534250) Heartbeat: uptime 533s, heap 25696B, beats 530, rate 1.0Hz
+[2026-03-16 20:51:00.252] GUI: I (540635) GUI: touch poll alive: state=IDLE irqs=17834 IRQ_GPIO=22 level=1
+[2026-03-16 20:51:03.798] Heartbeat: I (544258) Heartbeat: uptime 543s, heap 25696B, beats 540, rate 1.0Hz
+[2026-03-16 20:51:10.174] GUI: I (550634) GUI: touch poll alive: state=IDLE irqs=18167 IRQ_GPIO=22 level=1
+[2026-03-16 20:51:13.807] Heartbeat: I (554265) Heartbeat: uptime 553s, heap 25696B, beats 550, rate 1.0Hz
+[2026-03-16 20:51:20.194] GUI: I (560632) GUI: touch poll alive: state=IDLE irqs=18500 IRQ_GPIO=22 level=1
+[2026-03-16 20:51:23.816] Heartbeat: I (564272) Heartbeat: uptime 563s, heap 25696B, beats 560, rate 1.0Hz
+[2026-03-16 20:51:30.186] GUI: I (570632) GUI: touch poll alive: state=IDLE irqs=18833 IRQ_GPIO=22 level=1
+[2026-03-16 20:51:33.821] Heartbeat: I (574279) Heartbeat: uptime 573s, heap 25696B, beats 570, rate 1.0Hz
+[2026-03-16 20:51:41.346] GUI: I (580630) GUI: touch poll alive: state=IDLE irqs=19166 IRQ_GPIO=22 level=1
+[2026-03-16 20:51:43.835] Heartbeat: I (584285) Heartbeat: uptime 583s, heap 25696B, beats 580, rate 1.0Hz
+[2026-03-16 20:51:50.300] GUI: I (590628) GUI: touch poll alive: state=IDLE irqs=19499 IRQ_GPIO=22 level=1
+[2026-03-16 20:51:53.833] Heartbeat: I (594291) Heartbeat: uptime 593s, heap 25696B, beats 590, rate 1.0Hz
+[2026-03-16 20:52:00.188] GUI: I (600628) GUI: touch poll alive: state=IDLE irqs=19832 IRQ_GPIO=22 level=1
+[2026-03-16 20:52:03.843] Heartbeat: I (604298) Heartbeat: uptime 603s, heap 25696B, beats 600, rate 1.0Hz
+[2026-03-16 20:52:10.137] GUI: I (610630) GUI: touch poll alive: state=IDLE irqs=20165 IRQ_GPIO=22 level=1
+[2026-03-16 20:52:13.857] Heartbeat: I (614306) Heartbeat: uptime 613s, heap 25696B, beats 610, rate 1.0Hz
+[2026-03-16 20:52:20.201] GUI: I (620627) GUI: touch poll alive: state=IDLE irqs=20498 IRQ_GPIO=22 level=1
+[2026-03-16 20:52:23.853] Heartbeat: I (624312) Heartbeat: uptime 623s, heap 25696B, beats 620, rate 1.0Hz
+[2026-03-16 20:52:30.151] GUI: I (630624) GUI: touch poll alive: state=IDLE irqs=20831 IRQ_GPIO=22 level=1
+[2026-03-16 20:52:33.866] Heartbeat: I (634320) Heartbeat: uptime 633s, heap 25696B, beats 630, rate 1.0Hz
+[2026-03-16 20:52:40.155] GUI: I (640620) GUI: touch poll alive: state=IDLE irqs=21164 IRQ_GPIO=22 level=1
+[2026-03-16 20:52:43.874] Heartbeat: I (644327) Heartbeat: uptime 643s, heap 25696B, beats 640, rate 1.0Hz
+[2026-03-16 20:52:50.236] GUI: I (650613) GUI: touch poll alive: state=IDLE irqs=21497 IRQ_GPIO=22 level=1
+[2026-03-16 20:52:53.874] Heartbeat: I (654334) Heartbeat: uptime 653s, heap 25696B, beats 650, rate 1.0Hz
+[2026-03-16 20:53:00.406] GUI: I (660640) GUI: touch poll alive: state=IDLE irqs=21831 IRQ_GPIO=22 level=1
+[2026-03-16 20:53:03.879] Heartbeat: I (664342) Heartbeat: uptime 663s, heap 25696B, beats 660, rate 1.0Hz
+[2026-03-16 20:53:10.260] GUI: I (670635) GUI: touch poll alive: state=IDLE irqs=22164 IRQ_GPIO=22 level=1
+[2026-03-16 20:53:13.892] Heartbeat: I (674349) Heartbeat: uptime 673s, heap 25696B, beats 670, rate 1.0Hz
+[2026-03-16 20:53:20.240] GUI: I (680631) GUI: touch poll alive: state=IDLE irqs=22497 IRQ_GPIO=22 level=1
+[2026-03-16 20:53:23.896] Heartbeat: I (684357) Heartbeat: uptime 683s, heap 25696B, beats 680, rate 1.0Hz
+[2026-03-16 20:53:30.172] GUI: I (690629) GUI: touch poll alive: state=IDLE irqs=22830 IRQ_GPIO=22 level=1
+[2026-03-16 20:53:33.986] Heartbeat: I (694365) Heartbeat: uptime 693s, heap 25696B, beats 690, rate 1.0Hz
+[2026-03-16 20:53:40.164] GUI: I (700627) GUI: touch poll alive: state=IDLE irqs=23163 IRQ_GPIO=22 level=1
+[2026-03-16 20:53:43.959] Heartbeat: I (704371) Heartbeat: uptime 703s, heap 25696B, beats 700, rate 1.0Hz
+[2026-03-16 20:53:50.249] GUI: I (710627) GUI: touch poll alive: state=IDLE irqs=23496 IRQ_GPIO=22 level=1
+[2026-03-16 20:53:53.913] Heartbeat: I (714379) Heartbeat: uptime 713s, heap 25696B, beats 710, rate 1.0Hz
+[2026-03-16 20:54:00.136] GUI: I (720623) GUI: touch poll alive: state=IDLE irqs=23829 IRQ_GPIO=22 level=1
+[2026-03-16 20:54:03.934] Heartbeat: I (724388) Heartbeat: uptime 723s, heap 25696B, beats 720, rate 1.0Hz
+[2026-03-16 20:54:10.198] GUI: I (730619) GUI: touch poll alive: state=IDLE irqs=24162 IRQ_GPIO=22 level=1
+[2026-03-16 20:54:13.932] Heartbeat: I (734395) Heartbeat: uptime 733s, heap 25696B, beats 730, rate 1.0Hz
+[2026-03-16 20:54:20.220] GUI: I (740620) GUI: touch poll alive: state=IDLE irqs=24495 IRQ_GPIO=22 level=1
+[2026-03-16 20:54:23.933] Heartbeat: I (744401) Heartbeat: uptime 743s, heap 25696B, beats 740, rate 1.0Hz
+[2026-03-16 20:54:30.177] GUI: I (750619) GUI: touch poll alive: state=IDLE irqs=24828 IRQ_GPIO=22 level=1
+[2026-03-16 20:54:33.951] Heartbeat: I (754408) Heartbeat: uptime 753s, heap 25696B, beats 750, rate 1.0Hz
+[2026-03-16 20:54:40.285] GUI: I (760618) GUI: touch poll alive: state=IDLE irqs=25161 IRQ_GPIO=22 level=1
+[2026-03-16 20:54:43.954] Heartbeat: I (764414) Heartbeat: uptime 763s, heap 25696B, beats 760, rate 1.0Hz
+[2026-03-16 20:54:50.116] GUI: I (770616) GUI: touch poll alive: state=IDLE irqs=25494 IRQ_GPIO=22 level=1
+[2026-03-16 20:54:53.957] Heartbeat: I (774419) Heartbeat: uptime 773s, heap 25696B, beats 770, rate 1.0Hz
+[2026-03-16 20:55:00.197] GUI: I (780618) GUI: touch poll alive: state=IDLE irqs=25827 IRQ_GPIO=22 level=1
+[2026-03-16 20:55:03.967] Heartbeat: I (784427) Heartbeat: uptime 783s, heap 25696B, beats 780, rate 1.0Hz
+[2026-03-16 20:55:10.187] GUI: I (790620) GUI: touch poll alive: state=IDLE irqs=26160 IRQ_GPIO=22 level=1
+[2026-03-16 20:55:13.989] Heartbeat: I (794436) Heartbeat: uptime 793s, heap 25696B, beats 790, rate 1.0Hz
+[2026-03-16 20:55:20.159] GUI: I (800619) GUI: touch poll alive: state=IDLE irqs=26493 IRQ_GPIO=22 level=1
+[2026-03-16 20:55:23.976] Heartbeat: I (804443) Heartbeat: uptime 803s, heap 25696B, beats 800, rate 1.0Hz
+[2026-03-16 20:55:30.128] GUI: I (810617) GUI: touch poll alive: state=IDLE irqs=26826 IRQ_GPIO=22 level=1
+[2026-03-16 20:55:33.994] Heartbeat: I (814450) Heartbeat: uptime 813s, heap 25696B, beats 810, rate 1.0Hz
+[2026-03-16 20:55:40.181] GUI: I (820618) GUI: touch poll alive: state=IDLE irqs=27159 IRQ_GPIO=22 level=1
+[2026-03-16 20:55:44.033] Heartbeat: I (824457) Heartbeat: uptime 823s, heap 25696B, beats 820, rate 1.0Hz
+[2026-03-16 20:55:50.123] GUI: I (830618) GUI: touch poll alive: state=IDLE irqs=27492 IRQ_GPIO=22 level=1
+[2026-03-16 20:55:53.999] Heartbeat: I (834464) Heartbeat: uptime 833s, heap 25696B, beats 830, rate 1.0Hz
+[2026-03-16 20:56:00.174] GUI: I (840616) GUI: touch poll alive: state=IDLE irqs=27825 IRQ_GPIO=22 level=1
+[2026-03-16 20:56:04.018] Heartbeat: I (844471) Heartbeat: uptime 843s, heap 25696B, beats 840, rate 1.0Hz
+[2026-03-16 20:56:10.099] GUI: I (850612) GUI: touch poll alive: state=IDLE irqs=28158 IRQ_GPIO=22 level=1
+[2026-03-16 20:56:14.019] Heartbeat: I (854478) Heartbeat: uptime 853s, heap 25696B, beats 850, rate 1.0Hz
+[2026-03-16 20:56:20.185] GUI: I (860639) GUI: touch poll alive: state=IDLE irqs=28492 IRQ_GPIO=22 level=1
+[2026-03-16 20:56:24.029] Heartbeat: I (864484) Heartbeat: uptime 863s, heap 25696B, beats 860, rate 1.0Hz
+[2026-03-16 20:56:30.190] GUI: I (870633) GUI: touch poll alive: state=IDLE irqs=28825 IRQ_GPIO=22 level=1
+[2026-03-16 20:56:34.036] Heartbeat: I (874491) Heartbeat: uptime 873s, heap 25696B, beats 870, rate 1.0Hz
+[2026-03-16 20:56:40.197] GUI: I (880631) GUI: touch poll alive: state=IDLE irqs=29158 IRQ_GPIO=22 level=1
+[2026-03-16 20:56:44.050] Heartbeat: I (884497) Heartbeat: uptime 883s, heap 25696B, beats 880, rate 1.0Hz
+[2026-03-16 20:56:50.211] GUI: I (890630) GUI: touch poll alive: state=IDLE irqs=29491 IRQ_GPIO=22 level=1
+[2026-03-16 20:56:54.038] Heartbeat: I (894507) Heartbeat: uptime 893s, heap 20580B, beats 890, rate 1.0Hz
+[2026-03-16 20:57:00.169] GUI: I (900627) GUI: touch poll alive: state=IDLE irqs=29824 IRQ_GPIO=22 level=1
+[2026-03-16 20:57:04.171] Heartbeat: I (904513) Heartbeat: uptime 903s, heap 22560B, beats 900, rate 1.0Hz
+[2026-03-16 20:57:10.171] GUI: I (910624) GUI: touch poll alive: state=IDLE irqs=30157 IRQ_GPIO=22 level=1
+[2026-03-16 20:57:14.043] Heartbeat: I (914517) Heartbeat: uptime 913s, heap 22564B, beats 910, rate 1.0Hz
+[2026-03-16 20:57:20.133] GUI: I (920619) GUI: touch poll alive: state=IDLE irqs=30490 IRQ_GPIO=22 level=1
+[2026-03-16 20:57:24.033] Heartbeat: I (924521) Heartbeat: uptime 923s, heap 22564B, beats 920, rate 1.0Hz
+[2026-03-16 20:57:30.183] GUI: I (930613) GUI: touch poll alive: state=IDLE irqs=30823 IRQ_GPIO=22 level=1
+[2026-03-16 20:57:34.042] Heartbeat: I (934525) Heartbeat: uptime 933s, heap 22564B, beats 930, rate 1.0Hz
+[2026-03-16 20:57:40.217] GUI: I (940639) GUI: touch poll alive: state=IDLE irqs=31157 IRQ_GPIO=22 level=1
+[2026-03-16 20:57:44.044] Heartbeat: I (944529) Heartbeat: uptime 943s, heap 22564B, beats 940, rate 1.0Hz
+[2026-03-16 20:57:50.182] GUI: I (950634) GUI: touch poll alive: state=IDLE irqs=31490 IRQ_GPIO=22 level=1
+[2026-03-16 20:57:54.038] Heartbeat: I (954533) Heartbeat: uptime 953s, heap 22564B, beats 950, rate 1.0Hz
+[2026-03-16 20:58:00.202] GUI: I (960631) GUI: touch poll alive: state=IDLE irqs=31823 IRQ_GPIO=22 level=1
+[2026-03-16 20:58:04.045] Heartbeat: I (964538) Heartbeat: uptime 963s, heap 22564B, beats 960, rate 1.0Hz
+[2026-03-16 20:58:10.163] GUI: I (970630) GUI: touch poll alive: state=IDLE irqs=32156 IRQ_GPIO=22 level=1
+[2026-03-16 20:58:14.033] Heartbeat: I (974542) Heartbeat: uptime 973s, heap 22564B, beats 970, rate 1.0Hz
+[2026-03-16 20:58:20.217] GUI: I (980628) GUI: touch poll alive: state=IDLE irqs=32489 IRQ_GPIO=22 level=1
+[2026-03-16 20:58:24.061] Heartbeat: I (984547) Heartbeat: uptime 983s, heap 22568B, beats 980, rate 1.0Hz
+[2026-03-16 20:58:30.180] GUI: I (990624) GUI: touch poll alive: state=IDLE irqs=32822 IRQ_GPIO=22 level=1
+[2026-03-16 20:58:34.095] Heartbeat: I (994552) Heartbeat: uptime 993s, heap 25696B, beats 990, rate 1.0Hz
+[2026-03-16 20:58:40.853] GUI: I (1000622) GUI: touch poll alive: state=IDLE irqs=33155 IRQ_GPIO=22 level=1
+[2026-03-16 20:58:44.105] Heartbeat: I (1004559) Heartbeat: uptime 1003s, heap 22564B, beats 1000, rate 1.0Hz
+[2026-03-16 20:58:50.215] GUI: I (1010620) GUI: touch poll alive: state=IDLE irqs=33488 IRQ_GPIO=22 level=1
+[2026-03-16 20:58:54.855] Heartbeat: I (1014564) Heartbeat: uptime 1013s, heap 22560B, beats 1010, rate 1.0Hz
+[2026-03-16 20:59:00.171] GUI: I (1020615) GUI: touch poll alive: state=IDLE irqs=33821 IRQ_GPIO=22 level=1
+[2026-03-16 20:59:04.103] Heartbeat: I (1024568) Heartbeat: uptime 1023s, heap 22564B, beats 1020, rate 1.0Hz
+[2026-03-16 20:59:10.146] GUI: I (1030611) GUI: touch poll alive: state=IDLE irqs=34154 IRQ_GPIO=22 level=1
+[2026-03-16 20:59:14.083] Heartbeat: I (1034573) Heartbeat: uptime 1033s, heap 24136B, beats 1030, rate 1.0Hz
+[2026-03-16 20:59:20.219] GUI: I (1040637) GUI: touch poll alive: state=IDLE irqs=34488 IRQ_GPIO=22 level=1
+[2026-03-16 20:59:24.094] Heartbeat: I (1044578) Heartbeat: uptime 1043s, heap 24136B, beats 1040, rate 1.0Hz
+[2026-03-16 20:59:30.186] GUI: I (1050633) GUI: touch poll alive: state=IDLE irqs=34821 IRQ_GPIO=22 level=1
+[2026-03-16 20:59:34.102] Heartbeat: I (1054582) Heartbeat: uptime 1053s, heap 24136B, beats 1050, rate 1.0Hz
+[2026-03-16 20:59:40.180] GUI: I (1060634) GUI: touch poll alive: state=IDLE irqs=35154 IRQ_GPIO=22 level=1
+[2026-03-16 20:59:44.099] Heartbeat: I (1064586) Heartbeat: uptime 1063s, heap 24136B, beats 1060, rate 1.0Hz
+[2026-03-16 20:59:50.121] GUI: I (1070631) GUI: touch poll alive: state=IDLE irqs=35487 IRQ_GPIO=22 level=1
+[2026-03-16 20:59:54.094] Heartbeat: I (1074590) Heartbeat: uptime 1073s, heap 24136B, beats 1070, rate 1.0Hz
+[2026-03-16 21:00:00.191] GUI: I (1080629) GUI: touch poll alive: state=IDLE irqs=35820 IRQ_GPIO=22 level=1
+[2026-03-16 21:00:04.136] Heartbeat: I (1084595) Heartbeat: uptime 1083s, heap 25696B, beats 1080, rate 1.0Hz
+[2026-03-16 21:00:10.180] GUI: I (1090628) GUI: touch poll alive: state=IDLE irqs=36153 IRQ_GPIO=22 level=1
+[2026-03-16 21:00:14.141] Heartbeat: I (1094602) Heartbeat: uptime 1093s, heap 23876B, beats 1090, rate 1.0Hz
+[2026-03-16 21:00:20.165] GUI: I (1100624) GUI: touch poll alive: state=IDLE irqs=36486 IRQ_GPIO=22 level=1
+[2026-03-16 21:00:24.106] Heartbeat: I (1104606) Heartbeat: uptime 1103s, heap 24136B, beats 1100, rate 1.0Hz
+[2026-03-16 21:00:30.172] GUI: I (1110619) GUI: touch poll alive: state=IDLE irqs=36819 IRQ_GPIO=22 level=1
+[2026-03-16 21:00:34.864] Heartbeat: I (1114610) Heartbeat: uptime 1113s, heap 22564B, beats 1110, rate 1.0Hz
+[2026-03-16 21:00:40.199] GUI: I (1120616) GUI: touch poll alive: state=IDLE irqs=37152 IRQ_GPIO=22 level=1
+[2026-03-16 21:00:44.133] Heartbeat: I (1124614) Heartbeat: uptime 1124s, heap 24136B, beats 1120, rate 1.0Hz
+[2026-03-16 21:00:50.240] GUI: I (1130613) GUI: touch poll alive: state=IDLE irqs=37485 IRQ_GPIO=22 level=1
+[2026-03-16 21:00:54.233] Heartbeat: I (1134618) Heartbeat: uptime 1134s, heap 24136B, beats 1130, rate 1.0Hz
+[2026-03-16 21:01:00.167] GUI: I (1140612) GUI: touch poll alive: state=IDLE irqs=37818 IRQ_GPIO=22 level=1
+[2026-03-16 21:01:04.168] Heartbeat: I (1144623) Heartbeat: uptime 1144s, heap 25696B, beats 1140, rate 1.0Hz
+[2026-03-16 21:01:10.176] GUI: I (1150640) GUI: touch poll alive: state=IDLE irqs=38152 IRQ_GPIO=22 level=1
+[2026-03-16 21:01:14.170] Heartbeat: I (1154629) Heartbeat: uptime 1154s, heap 25696B, beats 1150, rate 1.0Hz
+[2026-03-16 21:01:20.210] GUI: I (1160635) GUI: touch poll alive: state=IDLE irqs=38485 IRQ_GPIO=22 level=1
+[2026-03-16 21:01:24.186] Heartbeat: I (1164640) Heartbeat: uptime 1164s, heap 25696B, beats 1160, rate 1.0Hz
+[2026-03-16 21:01:30.199] GUI: I (1170631) GUI: touch poll alive: state=IDLE irqs=38818 IRQ_GPIO=22 level=1
+[2026-03-16 21:01:34.159] Heartbeat: I (1174645) Heartbeat: uptime 1174s, heap 24136B, beats 1170, rate 1.0Hz
+[2026-03-16 21:01:40.207] GUI: I (1180631) GUI: touch poll alive: state=IDLE irqs=39151 IRQ_GPIO=22 level=1
+[2026-03-16 21:01:44.195] Heartbeat: I (1184650) Heartbeat: uptime 1184s, heap 25696B, beats 1180, rate 1.0Hz
+[2026-03-16 21:01:50.919] GUI: I (1190629) GUI: touch poll alive: state=IDLE irqs=39484 IRQ_GPIO=22 level=1
+[2026-03-16 21:01:54.206] Heartbeat: I (1194655) Heartbeat: uptime 1194s, heap 25696B, beats 1190, rate 1.0Hz
+[2026-03-16 21:02:00.187] GUI: I (1200629) GUI: touch poll alive: state=IDLE irqs=39817 IRQ_GPIO=22 level=1
+[2026-03-16 21:02:04.196] Heartbeat: I (1204663) Heartbeat: uptime 1204s, heap 25696B, beats 1200, rate 1.0Hz
+[2026-03-16 21:02:10.173] GUI: I (1210631) GUI: touch poll alive: state=IDLE irqs=40150 IRQ_GPIO=22 level=1
+[2026-03-16 21:02:14.162] Heartbeat: I (1214666) Heartbeat: uptime 1214s, heap 24136B, beats 1210, rate 1.0Hz
+[2026-03-16 21:02:20.173] GUI: I (1220628) GUI: touch poll alive: state=IDLE irqs=40483 IRQ_GPIO=22 level=1
+[2026-03-16 21:02:24.215] Heartbeat: I (1224672) Heartbeat: uptime 1224s, heap 25696B, beats 1220, rate 1.0Hz
+[2026-03-16 21:02:30.155] GUI: I (1230625) GUI: touch poll alive: state=IDLE irqs=40816 IRQ_GPIO=22 level=1
+[2026-03-16 21:02:34.212] Heartbeat: I (1234679) Heartbeat: uptime 1234s, heap 25696B, beats 1230, rate 1.0Hz
+[2026-03-16 21:02:40.335] GUI: I (1240620) GUI: touch poll alive: state=IDLE irqs=41149 IRQ_GPIO=22 level=1
+[2026-03-16 21:02:44.240] Heartbeat: I (1244686) Heartbeat: uptime 1244s, heap 25696B, beats 1240, rate 1.0Hz
+[2026-03-16 21:02:50.157] GUI: I (1250619) GUI: touch poll alive: state=IDLE irqs=41482 IRQ_GPIO=22 level=1
+[2026-03-16 21:02:54.354] Heartbeat: I (1254693) Heartbeat: uptime 1254s, heap 25696B, beats 1250, rate 1.0Hz
+[2026-03-16 21:03:00.234] GUI: I (1260617) GUI: touch poll alive: state=IDLE irqs=41815 IRQ_GPIO=22 level=1
+[2026-03-16 21:03:04.260] Heartbeat: I (1264700) Heartbeat: uptime 1264s, heap 25696B, beats 1260, rate 1.0Hz
+[2026-03-16 21:03:10.149] GUI: I (1270612) GUI: touch poll alive: state=IDLE irqs=42148 IRQ_GPIO=22 level=1
+[2026-03-16 21:03:15.368] Heartbeat: I (1274707) Heartbeat: uptime 1274s, heap 25696B, beats 1270, rate 1.0Hz
+[2026-03-16 21:03:20.234] GUI: I (1280637) GUI: touch poll alive: state=IDLE irqs=42482 IRQ_GPIO=22 level=1
+[2026-03-16 21:03:24.253] Heartbeat: I (1284713) Heartbeat: uptime 1284s, heap 25696B, beats 1280, rate 1.0Hz
+[2026-03-16 21:03:30.209] GUI: I (1290633) GUI: touch poll alive: state=IDLE irqs=42815 IRQ_GPIO=22 level=1
+[2026-03-16 21:03:34.274] Heartbeat: I (1294721) Heartbeat: uptime 1294s, heap 25696B, beats 1290, rate 1.0Hz
+[2026-03-16 21:03:40.189] GUI: I (1300630) GUI: touch poll alive: state=IDLE irqs=43148 IRQ_GPIO=22 level=1
+[2026-03-16 21:03:44.273] Heartbeat: I (1304728) Heartbeat: uptime 1304s, heap 25696B, beats 1300, rate 1.0Hz
+[2026-03-16 21:03:50.178] GUI: I (1310628) GUI: touch poll alive: state=IDLE irqs=43481 IRQ_GPIO=22 level=1
+[2026-03-16 21:03:54.274] Heartbeat: I (1314735) Heartbeat: uptime 1314s, heap 25696B, beats 1310, rate 1.0Hz
+[2026-03-16 21:04:09.723] GUI: I (1320625) GUI: touch poll alive: state=IDLE irqs=43814 IRQ_GPIO=22 level=1
+[2026-03-16 21:04:09.723] GUI: I (1323359) GUI: IRQ #43905: x=68 y=68 screen_on=1
+[2026-03-16 21:04:09.724] GUI: I (1323364) GUI: PRESSED at (68,68) -> TOUCHING (irq=yes)
+[2026-03-16 21:04:09.724] GUI: I (1323574) GUI: RELEASED -> IDLE
+[2026-03-16 21:04:09.724] GUI: I (1323578) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:04:09.724] Heartbeat: I (1324742) Heartbeat: uptime 1324s, heap 22564B, beats 1320, rate 1.0Hz
+[2026-03-16 21:04:09.725] GUI: I (1325368) GUI: IRQ #43964: x=69 y=82 screen_on=1
+[2026-03-16 21:04:09.725] GUI: I (1325373) GUI: PRESSED at (69,82) -> TOUCHING (irq=yes)
+[2026-03-16 21:04:09.725] GUI: I (1325534) GUI: RELEASED -> IDLE
+[2026-03-16 21:04:09.725] GUI: I (1325538) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:04:10.212] GUI: I (1330618) GUI: touch poll alive: state=IDLE irqs=44132 IRQ_GPIO=22 level=1
+[2026-03-16 21:04:14.298] Heartbeat: I (1334746) Heartbeat: uptime 1334s, heap 25696B, beats 1330, rate 1.0Hz
+[2026-03-16 21:04:21.115] GUI: I (1337736) GUI: IRQ #44369: x=60 y=85 screen_on=1
+[2026-03-16 21:04:21.116] GUI: I (1337741) GUI: PRESSED at (60,85) -> TOUCHING (irq=yes)
+[2026-03-16 21:04:24.889] Heartbeat: I (1344754) Heartbeat: uptime 1344s, heap 24132B, beats 1340, rate 1.0Hz
+[2026-03-16 21:04:34.386] Heartbeat: I (1354759) Heartbeat: uptime 1354s, heap 25696B, beats 1350, rate 1.0Hz
+[2026-03-16 21:04:44.337] Heartbeat: I (1364766) Heartbeat: uptime 1364s, heap 25696B, beats 1360, rate 1.0Hz
+[2026-03-16 21:04:46.201] GUI: I (1366614) GUI: RELEASED -> IDLE
+[2026-03-16 21:04:46.201] GUI: I (1366617) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:04:46.202] GUI: I (1366657) GUI: touch poll alive: state=IDLE irqs=44370 IRQ_GPIO=22 level=1
+[2026-03-16 21:04:53.199] GUI: I (1373604) GUI: IRQ #44601: x=80 y=73 screen_on=1
+[2026-03-16 21:04:53.200] GUI: I (1373609) GUI: PRESSED at (80,73) -> TOUCHING (irq=yes)
+[2026-03-16 21:04:53.449] GUI: I (1373857) GUI: RELEASED -> IDLE
+[2026-03-16 21:04:53.450] GUI: I (1373861) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:04:53.959] GUI: I (1374373) GUI: IRQ #44617: x=161 y=73 screen_on=1
+[2026-03-16 21:04:53.960] GUI: I (1374378) GUI: PRESSED at (161,73) -> TOUCHING (irq=yes)
+[2026-03-16 21:04:54.031] GUI: I (1374512) GUI: RELEASED -> IDLE
+[2026-03-16 21:04:54.031] GUI: I (1374516) GUI: BUTTON 1 CLICKED
+[2026-03-16 21:04:54.335] Heartbeat: I (1374773) Heartbeat: uptime 1374s, heap 25696B, beats 1370, rate 1.0Hz
+[2026-03-16 21:04:55.275] GUI: I (1375694) GUI: IRQ #44655: x=73 y=80 screen_on=1
+[2026-03-16 21:04:55.275] GUI: I (1375699) GUI: PRESSED at (73,80) -> TOUCHING (irq=yes)
+[2026-03-16 21:04:55.477] GUI: I (1375871) GUI: RELEASED -> IDLE
+[2026-03-16 21:04:55.477] GUI: I (1375875) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:04:56.215] GUI: I (1376628) GUI: touch poll alive: state=IDLE irqs=44679 IRQ_GPIO=22 level=1
+[2026-03-16 21:04:57.251] GUI: I (1377711) GUI: IRQ #44715: x=64 y=79 screen_on=1
+[2026-03-16 21:04:57.252] GUI: I (1377716) GUI: PRESSED at (64,79) -> TOUCHING (irq=yes)
+[2026-03-16 21:04:57.444] GUI: I (1377879) GUI: RELEASED -> IDLE
+[2026-03-16 21:04:57.444] GUI: I (1377883) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:04:58.306] GUI: I (1378703) GUI: IRQ #44741: x=73 y=73 screen_on=1
+[2026-03-16 21:04:58.306] GUI: I (1378708) GUI: PRESSED at (73,73) -> TOUCHING (irq=yes)
+[2026-03-16 21:04:58.466] GUI: I (1378914) GUI: RELEASED -> IDLE
+[2026-03-16 21:04:58.466] GUI: I (1378918) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:04:59.368] GUI: I (1379817) GUI: IRQ #44770: x=75 y=78 screen_on=1
+[2026-03-16 21:04:59.368] GUI: I (1379822) GUI: PRESSED at (75,78) -> TOUCHING (irq=yes)
+[2026-03-16 21:04:59.580] GUI: I (1379948) GUI: RELEASED -> IDLE
+[2026-03-16 21:04:59.581] GUI: I (1379952) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:05:02.133] GUI: I (1382492) GUI: IRQ #44853: x=64 y=86 screen_on=1
+[2026-03-16 21:05:02.133] GUI: I (1382497) GUI: PRESSED at (64,86) -> TOUCHING (irq=yes)
+[2026-03-16 21:05:02.192] GUI: I (1382624) GUI: RELEASED -> IDLE
+[2026-03-16 21:05:02.193] GUI: I (1382628) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:05:03.305] GUI: I (1383758) GUI: IRQ #44889: x=67 y=83 screen_on=1
+[2026-03-16 21:05:03.305] GUI: I (1383763) GUI: PRESSED at (67,83) -> TOUCHING (irq=yes)
+[2026-03-16 21:05:03.371] GUI: I (1383850) GUI: RELEASED -> IDLE
+[2026-03-16 21:05:03.372] GUI: I (1383853) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:05:04.331] Heartbeat: I (1384780) Heartbeat: uptime 1384s, heap 25696B, beats 1380, rate 1.0Hz
+[2026-03-16 21:05:04.532] GUI: I (1384991) GUI: IRQ #44925: x=67 y=80 screen_on=1
+[2026-03-16 21:05:04.532] GUI: I (1384996) GUI: PRESSED at (67,80) -> TOUCHING (irq=yes)
+[2026-03-16 21:05:04.715] GUI: I (1385161) GUI: RELEASED -> IDLE
+[2026-03-16 21:05:04.715] GUI: I (1385165) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:05:06.166] GUI: I (1386616) GUI: touch poll alive: state=IDLE irqs=44972 IRQ_GPIO=22 level=1
+[2026-03-16 21:05:14.333] Heartbeat: I (1394787) Heartbeat: uptime 1394s, heap 25696B, beats 1390, rate 1.0Hz
+[2026-03-16 21:05:16.163] GUI: I (1396611) GUI: touch poll alive: state=IDLE irqs=45305 IRQ_GPIO=22 level=1
+[2026-03-16 21:05:24.344] Heartbeat: I (1404795) Heartbeat: uptime 1404s, heap 25696B, beats 1400, rate 1.0Hz
+[2026-03-16 21:05:26.179] GUI: I (1406636) GUI: touch poll alive: state=IDLE irqs=45639 IRQ_GPIO=22 level=1
+[2026-03-16 21:05:34.347] Heartbeat: I (1414801) Heartbeat: uptime 1414s, heap 25696B, beats 1410, rate 1.0Hz
+[2026-03-16 21:05:36.163] GUI: I (1416631) GUI: touch poll alive: state=IDLE irqs=45972 IRQ_GPIO=22 level=1
+[2026-03-16 21:05:44.356] Heartbeat: I (1424811) Heartbeat: uptime 1424s, heap 25696B, beats 1420, rate 1.0Hz
+[2026-03-16 21:05:46.167] GUI: I (1426627) GUI: touch poll alive: state=IDLE irqs=46305 IRQ_GPIO=22 level=1
+[2026-03-16 21:06:28.864] GUI: I (40619) GUI: touch poll alive: state=IDLE irqs=1179 IRQ_GPIO=22 level=1
+[2026-03-16 21:06:32.279] Heartbeat: I (43976) Heartbeat: uptime 43s, heap 25736B, beats 40, rate 1.0Hz
+[2026-03-16 21:06:39.207] GUI: I (50614) GUI: touch poll alive: state=IDLE irqs=1512 IRQ_GPIO=22 level=1
+[2026-03-16 21:06:46.444] Heartbeat: I (53984) Heartbeat: uptime 53s, heap 25728B, beats 50, rate 1.0Hz
+[2026-03-16 21:06:49.963] GUI: I (60639) GUI: touch poll alive: state=IDLE irqs=1846 IRQ_GPIO=22 level=1
+[2026-03-16 21:06:52.532] Heartbeat: I (63990) Heartbeat: uptime 63s, heap 25732B, beats 60, rate 1.0Hz
+[2026-03-16 21:06:54.971] GUI: I (65024) GUI: IRQ #1992: x=71 y=87 screen_on=1
+[2026-03-16 21:06:54.971] GUI: I (65029) GUI: PRESSED at (71,87) -> TOUCHING (irq=yes)
+[2026-03-16 21:06:54.971] GUI: I (65161) GUI: RELEASED -> IDLE
+[2026-03-16 21:06:54.972] GUI: I (65165) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:06:55.436] GUI: I (67121) GUI: IRQ #2056: x=70 y=83 screen_on=1
+[2026-03-16 21:06:55.436] GUI: I (67126) GUI: PRESSED at (70,83) -> TOUCHING (irq=yes)
+[2026-03-16 21:06:55.627] GUI: I (67212) GUI: RELEASED -> IDLE
+[2026-03-16 21:06:55.627] GUI: I (67219) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:06:57.650] GUI: I (69376) GUI: IRQ #2126: x=61 y=83 screen_on=1
+[2026-03-16 21:06:57.651] GUI: I (69381) GUI: PRESSED at (61,83) -> TOUCHING (irq=yes)
+[2026-03-16 21:06:57.844] GUI: I (69547) GUI: RELEASED -> IDLE
+[2026-03-16 21:06:57.845] GUI: I (69551) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:06:58.890] GUI: I (70611) GUI: touch poll alive: state=IDLE irqs=2160 IRQ_GPIO=22 level=1
+[2026-03-16 21:06:59.752] GUI: I (71424) GUI: IRQ #2187: x=66 y=87 screen_on=1
+[2026-03-16 21:06:59.752] GUI: I (71429) GUI: PRESSED at (66,87) -> TOUCHING (irq=yes)
+[2026-03-16 21:06:59.893] GUI: I (71635) GUI: RELEASED -> IDLE
+[2026-03-16 21:06:59.893] GUI: I (71639) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:07:01.109] GUI: I (72814) GUI: IRQ #2225: x=70 y=83 screen_on=1
+[2026-03-16 21:07:01.109] GUI: I (72819) GUI: PRESSED at (70,83) -> TOUCHING (irq=yes)
+[2026-03-16 21:07:01.235] GUI: I (72984) GUI: RELEASED -> IDLE
+[2026-03-16 21:07:01.236] GUI: I (72988) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:07:02.268] Heartbeat: I (74002) Heartbeat: uptime 73s, heap 22600B, beats 70, rate 1.0Hz
+[2026-03-16 21:07:02.500] GUI: I (74229) GUI: IRQ #2265: x=59 y=83 screen_on=1
+[2026-03-16 21:07:02.501] GUI: I (74238) GUI: PRESSED at (59,83) -> TOUCHING (irq=yes)
+[2026-03-16 21:07:02.710] GUI: I (74440) GUI: RELEASED -> IDLE
+[2026-03-16 21:07:02.710] GUI: I (74446) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:07:04.268] GUI: I (75981) GUI: IRQ #2315: x=66 y=85 screen_on=1
+[2026-03-16 21:07:04.268] GUI: I (75986) GUI: PRESSED at (66,85) -> TOUCHING (irq=yes)
+[2026-03-16 21:07:04.433] GUI: I (76152) GUI: RELEASED -> IDLE
+[2026-03-16 21:07:04.433] GUI: I (76156) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:07:05.414] GUI: I (77130) GUI: IRQ #2346: x=61 y=80 screen_on=1
+[2026-03-16 21:07:05.414] GUI: I (77135) GUI: PRESSED at (61,80) -> TOUCHING (irq=yes)
+[2026-03-16 21:07:05.652] GUI: I (77300) GUI: RELEASED -> IDLE
+[2026-03-16 21:07:05.653] GUI: I (77304) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:07:07.755] GUI: I (79477) GUI: IRQ #2417: x=66 y=79 screen_on=1
+[2026-03-16 21:07:07.756] GUI: I (79482) GUI: PRESSED at (66,79) -> TOUCHING (irq=yes)
+[2026-03-16 21:07:07.923] GUI: I (79647) GUI: RELEASED -> IDLE
+[2026-03-16 21:07:07.924] GUI: I (79651) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:07:08.897] GUI: I (80624) GUI: touch poll alive: state=IDLE irqs=2448 IRQ_GPIO=22 level=1
+[2026-03-16 21:07:12.305] Heartbeat: I (84006) Heartbeat: uptime 83s, heap 25732B, beats 80, rate 1.0Hz
+[2026-03-16 21:07:18.905] GUI: I (90620) GUI: touch poll alive: state=IDLE irqs=2781 IRQ_GPIO=22 level=1
+[2026-03-16 21:07:22.280] Heartbeat: I (94013) Heartbeat: uptime 93s, heap 25732B, beats 90, rate 1.0Hz
+[2026-03-16 21:07:28.929] GUI: I (100615) GUI: touch poll alive: state=IDLE irqs=3114 IRQ_GPIO=22 level=1
+[2026-03-16 21:07:32.343] Heartbeat: I (104021) Heartbeat: uptime 103s, heap 25732B, beats 100, rate 1.0Hz
+[2026-03-16 21:07:38.929] GUI: I (110640) GUI: touch poll alive: state=IDLE irqs=3448 IRQ_GPIO=22 level=1
+[2026-03-16 21:07:42.308] Heartbeat: I (114027) Heartbeat: uptime 113s, heap 25664B, beats 110, rate 1.0Hz
+[2026-03-16 21:07:48.909] GUI: I (120636) GUI: touch poll alive: state=IDLE irqs=3781 IRQ_GPIO=22 level=1
+[2026-03-16 21:07:52.396] Heartbeat: I (124034) Heartbeat: uptime 123s, heap 25684B, beats 120, rate 1.0Hz
+[2026-03-16 21:07:58.910] GUI: I (130630) GUI: touch poll alive: state=IDLE irqs=4114 IRQ_GPIO=22 level=1
+[2026-03-16 21:08:02.356] Heartbeat: I (134041) Heartbeat: uptime 133s, heap 25684B, beats 130, rate 1.0Hz
+[2026-03-16 21:08:08.899] GUI: I (140625) GUI: touch poll alive: state=IDLE irqs=4447 IRQ_GPIO=22 level=1
+[2026-03-16 21:08:12.328] Heartbeat: I (144048) Heartbeat: uptime 143s, heap 25684B, beats 140, rate 1.0Hz
+[2026-03-16 21:08:18.912] GUI: I (150620) GUI: touch poll alive: state=IDLE irqs=4780 IRQ_GPIO=22 level=1
+[2026-03-16 21:08:22.360] Heartbeat: I (154055) Heartbeat: uptime 153s, heap 25684B, beats 150, rate 1.0Hz
+[2026-03-16 21:08:28.913] GUI: I (160618) GUI: touch poll alive: state=IDLE irqs=5113 IRQ_GPIO=22 level=1
+[2026-03-16 21:08:32.373] Heartbeat: I (164062) Heartbeat: uptime 163s, heap 25684B, beats 160, rate 1.0Hz
+[2026-03-16 21:08:38.911] GUI: I (170614) GUI: touch poll alive: state=IDLE irqs=5446 IRQ_GPIO=22 level=1
+[2026-03-16 21:08:42.388] Heartbeat: I (174068) Heartbeat: uptime 173s, heap 25684B, beats 170, rate 1.0Hz
+[2026-03-16 21:08:48.920] GUI: I (180640) GUI: touch poll alive: state=IDLE irqs=5780 IRQ_GPIO=22 level=1
+[2026-03-16 21:08:52.363] Heartbeat: I (184078) Heartbeat: uptime 183s, heap 25688B, beats 180, rate 1.0Hz
+[2026-03-16 21:08:58.976] GUI: I (190636) GUI: touch poll alive: state=IDLE irqs=6113 IRQ_GPIO=22 level=1
+[2026-03-16 21:09:02.815] Heartbeat: I (194084) Heartbeat: uptime 193s, heap 25688B, beats 190, rate 1.0Hz
+[2026-03-16 21:09:08.955] GUI: I (200633) GUI: touch poll alive: state=IDLE irqs=6446 IRQ_GPIO=22 level=1
+[2026-03-16 21:09:19.467] Heartbeat: I (204091) Heartbeat: uptime 203s, heap 25688B, beats 200, rate 1.0Hz
+[2026-03-16 21:09:19.467] GUI: I (210628) GUI: touch poll alive: state=IDLE irqs=6779 IRQ_GPIO=22 level=1
+[2026-03-16 21:09:22.381] Heartbeat: I (214097) Heartbeat: uptime 213s, heap 25688B, beats 210, rate 1.0Hz
+[2026-03-16 21:09:29.977] GUI: I (220626) GUI: touch poll alive: state=IDLE irqs=7112 IRQ_GPIO=22 level=1
+[2026-03-16 21:09:32.391] Heartbeat: I (224103) Heartbeat: uptime 223s, heap 25688B, beats 220, rate 1.0Hz
+[2026-03-16 21:09:38.944] GUI: I (230623) GUI: touch poll alive: state=IDLE irqs=7445 IRQ_GPIO=22 level=1
+[2026-03-16 21:09:42.409] Heartbeat: I (234109) Heartbeat: uptime 233s, heap 25688B, beats 230, rate 1.0Hz
+[2026-03-16 21:09:48.921] GUI: I (240619) GUI: touch poll alive: state=IDLE irqs=7778 IRQ_GPIO=22 level=1
+[2026-03-16 21:09:52.405] Heartbeat: I (244115) Heartbeat: uptime 243s, heap 25688B, beats 240, rate 1.0Hz
+[2026-03-16 21:09:58.895] GUI: I (250615) GUI: touch poll alive: state=IDLE irqs=8111 IRQ_GPIO=22 level=1
+[2026-03-16 21:10:02.399] Heartbeat: I (254123) Heartbeat: uptime 253s, heap 25688B, beats 250, rate 1.0Hz
+[2026-03-16 21:10:08.883] GUI: I (260613) GUI: touch poll alive: state=IDLE irqs=8444 IRQ_GPIO=22 level=1
+[2026-03-16 21:10:12.417] Heartbeat: I (264130) Heartbeat: uptime 263s, heap 25688B, beats 260, rate 1.0Hz
+[2026-03-16 21:10:18.925] GUI: I (270640) GUI: touch poll alive: state=IDLE irqs=8778 IRQ_GPIO=22 level=1
+[2026-03-16 21:10:22.472] Heartbeat: I (274136) Heartbeat: uptime 273s, heap 25688B, beats 270, rate 1.0Hz
+[2026-03-16 21:10:29.000] GUI: I (280634) GUI: touch poll alive: state=IDLE irqs=9111 IRQ_GPIO=22 level=1
+[2026-03-16 21:10:32.416] Heartbeat: I (284142) Heartbeat: uptime 283s, heap 25688B, beats 280, rate 1.0Hz
+[2026-03-16 21:10:38.904] GUI: I (290629) GUI: touch poll alive: state=IDLE irqs=9444 IRQ_GPIO=22 level=1
+[2026-03-16 21:10:42.439] Heartbeat: I (294151) Heartbeat: uptime 293s, heap 25688B, beats 290, rate 1.0Hz
+[2026-03-16 21:10:48.905] GUI: I (300624) GUI: touch poll alive: state=IDLE irqs=9777 IRQ_GPIO=22 level=1
+[2026-03-16 21:10:52.480] Heartbeat: I (304158) Heartbeat: uptime 303s, heap 25688B, beats 300, rate 1.0Hz
+[2026-03-16 21:10:58.924] GUI: I (310620) GUI: touch poll alive: state=IDLE irqs=10110 IRQ_GPIO=22 level=1
+[2026-03-16 21:11:02.509] Heartbeat: I (314164) Heartbeat: uptime 313s, heap 25688B, beats 310, rate 1.0Hz
+[2026-03-16 21:11:08.925] GUI: I (320615) GUI: touch poll alive: state=IDLE irqs=10443 IRQ_GPIO=22 level=1
+[2026-03-16 21:11:12.457] Heartbeat: I (324171) Heartbeat: uptime 323s, heap 25688B, beats 320, rate 1.0Hz
+[2026-03-16 21:11:18.937] GUI: I (330639) GUI: touch poll alive: state=IDLE irqs=10777 IRQ_GPIO=22 level=1
+[2026-03-16 21:11:22.483] Heartbeat: I (334177) Heartbeat: uptime 333s, heap 25688B, beats 330, rate 1.0Hz
+[2026-03-16 21:11:28.943] GUI: I (340636) GUI: touch poll alive: state=IDLE irqs=11110 IRQ_GPIO=22 level=1
+[2026-03-16 21:11:32.800] Heartbeat: I (344184) Heartbeat: uptime 343s, heap 25688B, beats 340, rate 1.0Hz
+[2026-03-16 21:11:38.924] GUI: I (350632) GUI: touch poll alive: state=IDLE irqs=11443 IRQ_GPIO=22 level=1
+[2026-03-16 21:11:42.477] Heartbeat: I (354190) Heartbeat: uptime 353s, heap 25688B, beats 350, rate 1.0Hz
+[2026-03-16 21:11:48.921] GUI: I (360625) GUI: touch poll alive: state=IDLE irqs=11776 IRQ_GPIO=22 level=1
+[2026-03-16 21:11:52.468] Heartbeat: I (364193) Heartbeat: uptime 363s, heap 25688B, beats 360, rate 1.0Hz
+[2026-03-16 21:11:58.905] GUI: I (370621) GUI: touch poll alive: state=IDLE irqs=12109 IRQ_GPIO=22 level=1
+[2026-03-16 21:12:02.525] Heartbeat: I (374200) Heartbeat: uptime 373s, heap 25688B, beats 370, rate 1.0Hz
+[2026-03-16 21:12:08.965] GUI: I (380616) GUI: touch poll alive: state=IDLE irqs=12442 IRQ_GPIO=22 level=1
+[2026-03-16 21:12:12.511] Heartbeat: I (384207) Heartbeat: uptime 383s, heap 25688B, beats 380, rate 1.0Hz
+[2026-03-16 21:12:18.920] GUI: I (390612) GUI: touch poll alive: state=IDLE irqs=12775 IRQ_GPIO=22 level=1
+[2026-03-16 21:12:22.504] Heartbeat: I (394213) Heartbeat: uptime 393s, heap 25688B, beats 390, rate 1.0Hz
+[2026-03-16 21:12:28.951] GUI: I (400611) GUI: touch poll alive: state=IDLE irqs=13108 IRQ_GPIO=22 level=1
+[2026-03-16 21:12:32.521] Heartbeat: I (404220) Heartbeat: uptime 403s, heap 25688B, beats 400, rate 1.0Hz
+[2026-03-16 21:12:38.913] GUI: I (410637) GUI: touch poll alive: state=IDLE irqs=13442 IRQ_GPIO=22 level=1
+[2026-03-16 21:12:42.519] Heartbeat: I (414226) Heartbeat: uptime 413s, heap 25692B, beats 410, rate 1.0Hz
+[2026-03-16 21:12:48.921] GUI: I (420634) GUI: touch poll alive: state=IDLE irqs=13775 IRQ_GPIO=22 level=1
+[2026-03-16 21:12:52.537] Heartbeat: I (424234) Heartbeat: uptime 423s, heap 25692B, beats 420, rate 1.0Hz
+[2026-03-16 21:12:58.902] GUI: I (430628) GUI: touch poll alive: state=IDLE irqs=14108 IRQ_GPIO=22 level=1
+[2026-03-16 21:13:02.524] Heartbeat: I (434243) Heartbeat: uptime 433s, heap 25688B, beats 430, rate 1.0Hz
+[2026-03-16 21:13:08.917] GUI: I (440623) GUI: touch poll alive: state=IDLE irqs=14441 IRQ_GPIO=22 level=1
+[2026-03-16 21:13:12.533] Heartbeat: I (444250) Heartbeat: uptime 443s, heap 25688B, beats 440, rate 1.0Hz
+[2026-03-16 21:13:18.917] GUI: I (450619) GUI: touch poll alive: state=IDLE irqs=14774 IRQ_GPIO=22 level=1
+[2026-03-16 21:13:22.916] Heartbeat: I (454257) Heartbeat: uptime 453s, heap 25688B, beats 450, rate 1.0Hz
+[2026-03-16 21:13:28.906] GUI: I (460614) GUI: touch poll alive: state=IDLE irqs=15107 IRQ_GPIO=22 level=1
+[2026-03-16 21:13:32.570] Heartbeat: I (464264) Heartbeat: uptime 463s, heap 25688B, beats 460, rate 1.0Hz
+[2026-03-16 21:13:38.936] GUI: I (470638) GUI: touch poll alive: state=IDLE irqs=15441 IRQ_GPIO=22 level=1
+[2026-03-16 21:13:42.579] Heartbeat: I (474271) Heartbeat: uptime 473s, heap 25688B, beats 470, rate 1.0Hz
+[2026-03-16 21:13:48.917] GUI: I (480640) GUI: touch poll alive: state=IDLE irqs=15774 IRQ_GPIO=22 level=1
+[2026-03-16 21:13:52.559] Heartbeat: I (484279) Heartbeat: uptime 483s, heap 25688B, beats 480, rate 1.0Hz
+[2026-03-16 21:13:58.910] GUI: I (490633) GUI: touch poll alive: state=IDLE irqs=16107 IRQ_GPIO=22 level=1
+[2026-03-16 21:14:02.598] Heartbeat: I (494286) Heartbeat: uptime 493s, heap 25688B, beats 490, rate 1.0Hz
+[2026-03-16 21:14:08.942] GUI: I (500628) GUI: touch poll alive: state=IDLE irqs=16440 IRQ_GPIO=22 level=1
+[2026-03-16 21:14:12.581] Heartbeat: I (504293) Heartbeat: uptime 503s, heap 22176B, beats 500, rate 1.0Hz
+[2026-03-16 21:14:19.780] GUI: I (510626) GUI: touch poll alive: state=IDLE irqs=16773 IRQ_GPIO=22 level=1
+[2026-03-16 21:14:22.564] Heartbeat: I (514298) Heartbeat: uptime 513s, heap 25284B, beats 510, rate 1.0Hz
+[2026-03-16 21:14:28.995] GUI: I (520631) GUI: touch poll alive: state=IDLE irqs=17106 IRQ_GPIO=22 level=1
+[2026-03-16 21:14:32.579] Heartbeat: I (524304) Heartbeat: uptime 523s, heap 24992B, beats 520, rate 1.0Hz
+[2026-03-16 21:15:12.648] Heartbeat: I (564329) Heartbeat: uptime 563s, heap 25108B, beats 560, rate 1.0Hz
+[2026-03-16 21:15:18.915] GUI: I (570624) GUI: touch poll alive: state=IDLE irqs=18770 IRQ_GPIO=22 level=1
+[2026-03-16 21:15:22.623] Heartbeat: I (574336) Heartbeat: uptime 573s, heap 22704B, beats 570, rate 1.0Hz
+[2026-03-16 21:15:28.919] GUI: I (580628) GUI: touch poll alive: state=IDLE irqs=19103 IRQ_GPIO=22 level=1
+[2026-03-16 21:15:32.649] Heartbeat: I (584341) Heartbeat: uptime 583s, heap 24220B, beats 580, rate 1.0Hz
+[2026-03-16 21:15:38.894] GUI: I (590625) GUI: touch poll alive: state=IDLE irqs=19436 IRQ_GPIO=22 level=1
+[2026-03-16 21:15:42.644] Heartbeat: I (594348) Heartbeat: uptime 593s, heap 24220B, beats 590, rate 1.0Hz
+[2026-03-16 21:15:48.948] GUI: I (600622) GUI: touch poll alive: state=IDLE irqs=19769 IRQ_GPIO=22 level=1
+[2026-03-16 21:15:52.657] Heartbeat: I (604356) Heartbeat: uptime 603s, heap 21740B, beats 600, rate 1.0Hz
+[2026-03-16 21:15:59.752] GUI: I (610630) GUI: touch poll alive: state=IDLE irqs=20102 IRQ_GPIO=22 level=1
+[2026-03-16 21:16:02.640] Heartbeat: I (614362) Heartbeat: uptime 613s, heap 24240B, beats 610, rate 1.0Hz
+[2026-03-16 21:18:48.407] Heartbeat: I (46825) Heartbeat: uptime 46s, heap 25996B, beats 40, rate 1.0Hz
+[2026-03-16 21:18:51.039] GUI: I (50625) GUI: touch poll alive: state=IDLE irqs=1416 IRQ_GPIO=22 level=1
+[2026-03-16 21:18:57.221] Heartbeat: I (56833) Heartbeat: uptime 56s, heap 24572B, beats 50, rate 1.0Hz
+[2026-03-16 21:19:01.025] GUI: I (60626) GUI: touch poll alive: state=IDLE irqs=1749 IRQ_GPIO=22 level=1
+[2026-03-16 21:19:07.235] Heartbeat: I (66840) Heartbeat: uptime 66s, heap 24776B, beats 60, rate 1.0Hz
+[2026-03-16 21:19:11.041] GUI: I (70633) GUI: touch poll alive: state=IDLE irqs=2082 IRQ_GPIO=22 level=1
+[2026-03-16 21:19:17.277] Heartbeat: I (76848) Heartbeat: uptime 76s, heap 24776B, beats 70, rate 1.0Hz
+[2026-03-16 21:19:21.047] GUI: I (80631) GUI: touch poll alive: state=IDLE irqs=2415 IRQ_GPIO=22 level=1
+[2026-03-16 21:19:27.241] Heartbeat: I (86856) Heartbeat: uptime 86s, heap 24776B, beats 80, rate 1.0Hz
+[2026-03-16 21:19:31.007] GUI: I (90625) GUI: touch poll alive: state=IDLE irqs=2748 IRQ_GPIO=22 level=1
+[2026-03-16 21:19:37.245] Heartbeat: I (96862) Heartbeat: uptime 96s, heap 24776B, beats 90, rate 1.0Hz
+[2026-03-16 21:19:41.033] GUI: I (100619) GUI: touch poll alive: state=IDLE irqs=3081 IRQ_GPIO=22 level=1
+[2026-03-16 21:19:47.259] Heartbeat: I (106869) Heartbeat: uptime 106s, heap 24776B, beats 100, rate 1.0Hz
+[2026-03-16 21:19:50.997] GUI: I (110615) GUI: touch poll alive: state=IDLE irqs=3414 IRQ_GPIO=22 level=1
+[2026-03-16 21:19:57.252] Heartbeat: I (116876) Heartbeat: uptime 116s, heap 24708B, beats 110, rate 1.0Hz
+[2026-03-16 21:20:01.002] GUI: I (120612) GUI: touch poll alive: state=IDLE irqs=3746 IRQ_GPIO=22 level=1
+[2026-03-16 21:20:14.835] Heartbeat: I (126886) Heartbeat: uptime 126s, heap 24692B, beats 120, rate 1.0Hz
+[2026-03-16 21:20:14.835] GUI: I (128383) GUI: IRQ #4004: x=63 y=83 screen_on=1
+[2026-03-16 21:20:14.835] GUI: I (128388) GUI: PRESSED at (63,83) -> TOUCHING (irq=yes)
+[2026-03-16 21:20:14.835] GUI: I (128443) GUI: RELEASED -> IDLE
+[2026-03-16 21:20:14.836] GUI: I (128445) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:20:14.836] GUI: I (130611) GUI: touch poll alive: state=IDLE irqs=4074 IRQ_GPIO=22 level=1
+[2026-03-16 21:20:14.836] GUI: I (133016) GUI: IRQ #4154: x=51 y=67 screen_on=1
+[2026-03-16 21:20:14.836] GUI: I (133021) GUI: PRESSED at (51,67) -> TOUCHING (irq=yes)
+[2026-03-16 21:20:14.837] GUI: I (133107) GUI: RELEASED -> IDLE
+[2026-03-16 21:20:14.837] GUI: I (133110) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:20:15.319] GUI: I (134934) GUI: IRQ #4213: x=51 y=77 screen_on=1
+[2026-03-16 21:20:15.320] GUI: I (134939) GUI: PRESSED at (51,77) -> TOUCHING (irq=yes)
+[2026-03-16 21:20:15.371] GUI: I (134994) GUI: RELEASED -> IDLE
+[2026-03-16 21:20:15.371] GUI: I (134999) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:20:16.252] GUI: I (135868) GUI: IRQ #4240: x=55 y=89 screen_on=1
+[2026-03-16 21:20:16.253] GUI: I (135873) GUI: PRESSED at (55,89) -> TOUCHING (irq=yes)
+[2026-03-16 21:20:16.412] GUI: I (136001) GUI: RELEASED -> IDLE
+[2026-03-16 21:20:16.412] GUI: I (136005) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:20:17.289] Heartbeat: I (136895) Heartbeat: uptime 136s, heap 16888B, beats 130, rate 1.0Hz
+[2026-03-16 21:20:17.774] GUI: I (137376) GUI: IRQ #4284: x=56 y=89 screen_on=1
+[2026-03-16 21:20:17.774] GUI: I (137381) GUI: PRESSED at (56,89) -> TOUCHING (irq=yes)
+[2026-03-16 21:20:17.918] GUI: I (137550) GUI: RELEASED -> IDLE
+[2026-03-16 21:20:17.918] GUI: I (137554) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:20:19.837] GUI: I (139434) GUI: IRQ #4345: x=64 y=88 screen_on=1
+[2026-03-16 21:20:19.838] GUI: I (139439) GUI: PRESSED at (64,88) -> TOUCHING (irq=yes)
+[2026-03-16 21:20:19.961] GUI: I (139566) GUI: RELEASED -> IDLE
+[2026-03-16 21:20:19.961] GUI: I (139570) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:20:21.002] GUI: I (140614) GUI: touch poll alive: state=IDLE irqs=4378 IRQ_GPIO=22 level=1
+[2026-03-16 21:20:27.288] Heartbeat: I (146900) Heartbeat: uptime 146s, heap 22836B, beats 140, rate 1.0Hz
+[2026-03-16 21:20:30.993] GUI: I (150612) GUI: touch poll alive: state=IDLE irqs=4711 IRQ_GPIO=22 level=1
+[2026-03-16 21:20:37.302] Heartbeat: I (156907) Heartbeat: uptime 156s, heap 24692B, beats 150, rate 1.0Hz
+[2026-03-16 21:20:41.074] GUI: I (160638) GUI: touch poll alive: state=IDLE irqs=5045 IRQ_GPIO=22 level=1
+[2026-03-16 21:20:47.314] Heartbeat: I (166913) Heartbeat: uptime 166s, heap 24692B, beats 160, rate 1.0Hz
+[2026-03-16 21:20:51.023] GUI: I (170634) GUI: touch poll alive: state=IDLE irqs=5378 IRQ_GPIO=22 level=1
+[2026-03-16 21:20:58.939] Heartbeat: I (176920) Heartbeat: uptime 176s, heap 24692B, beats 170, rate 1.0Hz
+[2026-03-16 21:21:01.015] GUI: I (180632) GUI: touch poll alive: state=IDLE irqs=5711 IRQ_GPIO=22 level=1
+[2026-03-16 21:21:07.320] Heartbeat: I (186928) Heartbeat: uptime 186s, heap 24696B, beats 180, rate 1.0Hz
+[2026-03-16 21:21:11.053] GUI: I (190630) GUI: touch poll alive: state=IDLE irqs=6044 IRQ_GPIO=22 level=1
+[2026-03-16 21:21:27.423] Heartbeat: I (196935) Heartbeat: uptime 196s, heap 24696B, beats 190, rate 1.0Hz
+[2026-03-16 21:21:27.424] GUI: I (200625) GUI: touch poll alive: state=IDLE irqs=6377 IRQ_GPIO=22 level=1
+[2026-03-16 21:21:27.424] Heartbeat: I (206940) Heartbeat: uptime 206s, heap 21572B, beats 200, rate 1.0Hz
+[2026-03-16 21:21:30.993] GUI: I (210618) GUI: touch poll alive: state=IDLE irqs=6710 IRQ_GPIO=22 level=1
+[2026-03-16 21:21:37.340] Heartbeat: I (216944) Heartbeat: uptime 216s, heap 24700B, beats 210, rate 1.0Hz
+[2026-03-16 21:21:41.028] GUI: I (220614) GUI: touch poll alive: state=IDLE irqs=7043 IRQ_GPIO=22 level=1
+[2026-03-16 21:21:47.350] Heartbeat: I (226950) Heartbeat: uptime 226s, heap 24480B, beats 220, rate 1.0Hz
+[2026-03-16 21:21:51.012] GUI: I (230620) GUI: touch poll alive: state=IDLE irqs=7376 IRQ_GPIO=22 level=1
+[2026-03-16 21:21:57.335] Heartbeat: I (236957) Heartbeat: uptime 236s, heap 24488B, beats 230, rate 1.0Hz
+[2026-03-16 21:22:01.025] GUI: I (240615) GUI: touch poll alive: state=IDLE irqs=7709 IRQ_GPIO=22 level=1
+[2026-03-16 21:22:07.341] Heartbeat: I (246965) Heartbeat: uptime 246s, heap 24492B, beats 240, rate 1.0Hz
+[2026-03-16 21:22:11.012] GUI: I (250624) GUI: touch poll alive: state=IDLE irqs=8042 IRQ_GPIO=22 level=1
+[2026-03-16 21:22:17.413] Heartbeat: I (256971) Heartbeat: uptime 256s, heap 24484B, beats 250, rate 1.0Hz
+[2026-03-16 21:22:21.055] GUI: I (260619) GUI: touch poll alive: state=IDLE irqs=8375 IRQ_GPIO=22 level=1
+[2026-03-16 21:22:27.361] Heartbeat: I (266977) Heartbeat: uptime 266s, heap 24484B, beats 260, rate 1.0Hz
+[2026-03-16 21:22:31.009] GUI: I (270616) GUI: touch poll alive: state=IDLE irqs=8708 IRQ_GPIO=22 level=1
+[2026-03-16 21:22:37.363] Heartbeat: I (276984) Heartbeat: uptime 276s, heap 24492B, beats 270, rate 1.0Hz
+[2026-03-16 21:22:41.013] GUI: I (280614) GUI: touch poll alive: state=IDLE irqs=9041 IRQ_GPIO=22 level=1
+[2026-03-16 21:22:47.372] Heartbeat: I (286991) Heartbeat: uptime 286s, heap 24492B, beats 280, rate 1.0Hz
+[2026-03-16 21:22:50.996] GUI: I (290619) GUI: touch poll alive: state=IDLE irqs=9374 IRQ_GPIO=22 level=1
+[2026-03-16 21:22:57.386] Heartbeat: I (296998) Heartbeat: uptime 296s, heap 24484B, beats 290, rate 1.0Hz
+[2026-03-16 21:23:01.020] GUI: I (300615) GUI: touch poll alive: state=IDLE irqs=9707 IRQ_GPIO=22 level=1
+[2026-03-16 21:23:07.428] Heartbeat: I (307003) Heartbeat: uptime 306s, heap 24484B, beats 300, rate 1.0Hz
+[2026-03-16 21:23:11.015] GUI: I (310613) GUI: touch poll alive: state=IDLE irqs=10040 IRQ_GPIO=22 level=1
+[2026-03-16 21:23:17.786] Heartbeat: I (317010) Heartbeat: uptime 316s, heap 24492B, beats 310, rate 1.0Hz
+[2026-03-16 21:23:22.919] GUI: I (320639) GUI: touch poll alive: state=IDLE irqs=10374 IRQ_GPIO=22 level=1
+[2026-03-16 21:23:27.392] Heartbeat: I (327018) Heartbeat: uptime 326s, heap 24492B, beats 320, rate 1.0Hz
+[2026-03-16 21:23:31.079] GUI: I (330634) GUI: touch poll alive: state=IDLE irqs=10707 IRQ_GPIO=22 level=1
+[2026-03-16 21:23:37.426] Heartbeat: I (337028) Heartbeat: uptime 336s, heap 24484B, beats 330, rate 1.0Hz
+[2026-03-16 21:23:41.005] GUI: I (340633) GUI: touch poll alive: state=IDLE irqs=11040 IRQ_GPIO=22 level=1
+[2026-03-16 21:23:47.409] Heartbeat: I (347035) Heartbeat: uptime 346s, heap 24484B, beats 340, rate 1.0Hz
+[2026-03-16 21:23:51.007] GUI: I (350633) GUI: touch poll alive: state=IDLE irqs=11373 IRQ_GPIO=22 level=1
+[2026-03-16 21:23:57.446] Heartbeat: I (357043) Heartbeat: uptime 356s, heap 24492B, beats 350, rate 1.0Hz
+[2026-03-16 21:24:01.018] GUI: I (360630) GUI: touch poll alive: state=IDLE irqs=11706 IRQ_GPIO=22 level=1
+[2026-03-16 21:24:07.423] Heartbeat: I (367050) Heartbeat: uptime 366s, heap 24492B, beats 360, rate 1.0Hz
+[2026-03-16 21:24:11.001] GUI: I (370625) GUI: touch poll alive: state=IDLE irqs=12039 IRQ_GPIO=22 level=1
+[2026-03-16 21:24:17.444] Heartbeat: I (377057) Heartbeat: uptime 376s, heap 24484B, beats 370, rate 1.0Hz
+[2026-03-16 21:24:21.029] GUI: I (380622) GUI: touch poll alive: state=IDLE irqs=12372 IRQ_GPIO=22 level=1
+[2026-03-16 21:24:27.446] Heartbeat: I (387064) Heartbeat: uptime 386s, heap 24484B, beats 380, rate 1.0Hz
+[2026-03-16 21:24:31.063] GUI: I (390618) GUI: touch poll alive: state=IDLE irqs=12705 IRQ_GPIO=22 level=1
+[2026-03-16 21:24:37.928] Heartbeat: I (397071) Heartbeat: uptime 396s, heap 24492B, beats 390, rate 1.0Hz
+[2026-03-16 21:24:41.026] GUI: I (400614) GUI: touch poll alive: state=IDLE irqs=13038 IRQ_GPIO=22 level=1
+[2026-03-16 21:24:47.462] Heartbeat: I (407078) Heartbeat: uptime 406s, heap 24484B, beats 400, rate 1.0Hz
+[2026-03-16 21:24:51.044] GUI: I (410615) GUI: touch poll alive: state=IDLE irqs=13371 IRQ_GPIO=22 level=1
+[2026-03-16 21:25:01.427] Heartbeat: I (417085) Heartbeat: uptime 416s, heap 24492B, beats 410, rate 1.0Hz
+[2026-03-16 21:25:01.428] GUI: I (420612) GUI: touch poll alive: state=IDLE irqs=13704 IRQ_GPIO=22 level=1
+[2026-03-16 21:25:04.120] GUI: I (423674) GUI: IRQ #13806: x=275 y=117 screen_on=1
+[2026-03-16 21:25:04.120] GUI: I (423679) GUI: PRESSED at (275,117) -> TOUCHING (irq=yes)
+[2026-03-16 21:25:04.324] GUI: I (423908) GUI: RELEASED -> IDLE
+[2026-03-16 21:25:04.324] GUI: I (423912) GUI: BUTTON 2 CLICKED
+[2026-03-16 21:25:07.469] Heartbeat: I (427092) Heartbeat: uptime 426s, heap 24492B, beats 420, rate 1.0Hz
+[2026-03-16 21:25:11.012] GUI: I (430623) GUI: touch poll alive: state=IDLE irqs=14028 IRQ_GPIO=22 level=1
+[2026-03-16 21:25:17.481] Heartbeat: I (437099) Heartbeat: uptime 436s, heap 24484B, beats 430, rate 1.0Hz
+[2026-03-16 21:25:21.077] GUI: I (440622) GUI: touch poll alive: state=IDLE irqs=14361 IRQ_GPIO=22 level=1
+[2026-03-16 21:25:27.488] Heartbeat: I (447107) Heartbeat: uptime 446s, heap 24484B, beats 440, rate 1.0Hz
+[2026-03-16 21:25:31.388] GUI: I (450619) GUI: touch poll alive: state=IDLE irqs=14694 IRQ_GPIO=22 level=1
+[2026-03-16 21:26:26.286] GUI: I (50619) GUI: touch poll alive: state=IDLE irqs=1428 IRQ_GPIO=22 level=1
+[2026-03-16 21:26:32.213] Heartbeat: I (56513) Heartbeat: uptime 55s, heap 25580B, beats 50, rate 1.0Hz
+[2026-03-16 21:26:36.277] GUI: I (60617) GUI: touch poll alive: state=IDLE irqs=1761 IRQ_GPIO=22 level=1
+[2026-03-16 21:26:42.274] Heartbeat: I (66518) Heartbeat: uptime 65s, heap 25580B, beats 60, rate 1.0Hz
+[2026-03-16 21:26:46.268] GUI: I (70617) GUI: touch poll alive: state=IDLE irqs=2094 IRQ_GPIO=22 level=1
+[2026-03-16 21:26:52.222] Heartbeat: I (76523) Heartbeat: uptime 75s, heap 25580B, beats 70, rate 1.0Hz
+[2026-03-16 21:26:56.248] GUI: I (80617) GUI: touch poll alive: state=IDLE irqs=2427 IRQ_GPIO=22 level=1
+[2026-03-16 21:27:02.209] Heartbeat: I (86528) Heartbeat: uptime 85s, heap 25580B, beats 80, rate 1.0Hz
+[2026-03-16 21:27:06.274] GUI: I (90612) GUI: touch poll alive: state=IDLE irqs=2760 IRQ_GPIO=22 level=1
+[2026-03-16 21:27:12.245] Heartbeat: I (96533) Heartbeat: uptime 95s, heap 25580B, beats 90, rate 1.0Hz
+[2026-03-16 21:27:16.323] GUI: I (100640) GUI: touch poll alive: state=IDLE irqs=3094 IRQ_GPIO=22 level=1
+[2026-03-16 21:27:22.243] Heartbeat: I (106538) Heartbeat: uptime 105s, heap 25580B, beats 100, rate 1.0Hz
+[2026-03-16 21:27:26.294] GUI: I (110638) GUI: touch poll alive: state=IDLE irqs=3427 IRQ_GPIO=22 level=1
+[2026-03-16 21:27:32.230] Heartbeat: I (116546) Heartbeat: uptime 115s, heap 22200B, beats 110, rate 1.0Hz
+[2026-03-16 21:27:36.359] GUI: I (120639) GUI: touch poll alive: state=IDLE irqs=3760 IRQ_GPIO=22 level=1
+[2026-03-16 21:27:42.216] Heartbeat: I (126550) Heartbeat: uptime 125s, heap 22428B, beats 120, rate 1.0Hz
+[2026-03-16 21:31:53.586] GUI: I (44867) GUI: RELEASED -> IDLE
+[2026-03-16 21:31:53.598] GUI: I (44871) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:31:53.808] GUI: I (45102) GUI: IRQ #1260: x=53 y=80 screen_on=1
+[2026-03-16 21:31:53.809] GUI: I (45107) GUI: PRESSED at (53,80) -> TOUCHING (irq=yes)
+[2026-03-16 21:31:54.000] GUI: I (45280) GUI: RELEASED -> IDLE
+[2026-03-16 21:31:54.000] GUI: I (45284) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:31:54.235] GUI: I (45479) GUI: IRQ #1265: x=51 y=83 screen_on=1
+[2026-03-16 21:31:54.235] GUI: I (45485) GUI: PRESSED at (51,83) -> TOUCHING (irq=yes)
+[2026-03-16 21:31:54.381] GUI: I (45613) GUI: RELEASED -> IDLE
+[2026-03-16 21:31:54.381] GUI: I (45617) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:31:54.722] GUI: I (45937) GUI: IRQ #1274: x=46 y=83 screen_on=1
+[2026-03-16 21:31:54.722] GUI: I (45942) GUI: PRESSED at (46,83) -> TOUCHING (irq=yes)
+[2026-03-16 21:31:54.887] GUI: I (46149) GUI: RELEASED -> IDLE
+[2026-03-16 21:31:54.888] GUI: I (46154) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:31:56.484] GUI: I (46373) GUI: IRQ #1280: x=47 y=85 screen_on=1
+[2026-03-16 21:31:56.484] GUI: I (46378) GUI: PRESSED at (47,85) -> TOUCHING (irq=yes)
+[2026-03-16 21:31:56.485] GUI: I (46506) GUI: RELEASED -> IDLE
+[2026-03-16 21:31:56.485] GUI: I (46510) GUI: BUTTON 0 CLICKED
+[2026-03-16 21:31:59.353] GUI: I (50611) GUI: touch poll alive: state=IDLE irqs=1415 IRQ_GPIO=22 level=1
+[2026-03-16 21:32:02.767] Heartbeat: I (54010) Heartbeat: uptime 53s, heap 25372B, beats 50, rate 1.0Hz
+[2026-03-16 21:32:09.316] GUI: I (60611) GUI: touch poll alive: state=IDLE irqs=1748 IRQ_GPIO=22 level=1
+[2026-03-16 21:32:12.772] Heartbeat: I (64017) Heartbeat: uptime 63s, heap 25372B, beats 60, rate 1.0Hz
+[2026-03-16 21:32:19.314] GUI: I (70611) GUI: touch poll alive: state=IDLE irqs=2081 IRQ_GPIO=22 level=1
+[2026-03-16 21:32:22.783] Heartbeat: I (74025) Heartbeat: uptime 73s, heap 25384B, beats 70, rate 1.0Hz
+[2026-03-16 21:32:29.374] GUI: I (80639) GUI: touch poll alive: state=IDLE irqs=2415 IRQ_GPIO=22 level=1
+[2026-03-16 21:32:32.813] Heartbeat: I (84034) Heartbeat: uptime 83s, heap 22064B, beats 80, rate 1.0Hz
+[2026-03-16 21:32:39.386] GUI: I (90635) GUI: touch poll alive: state=IDLE irqs=2748 IRQ_GPIO=22 level=1
+[2026-03-16 21:32:42.781] Heartbeat: I (94038) Heartbeat: uptime 93s, heap 22064B, beats 90, rate 1.0Hz
+[2026-03-16 21:32:49.371] GUI: I (100634) GUI: touch poll alive: state=IDLE irqs=3081 IRQ_GPIO=22 level=1
+[2026-03-16 21:32:51.100] GUI: I (102316) GUI: IRQ #3137: x=35 y=33 screen_on=1
+[2026-03-16 21:32:51.100] GUI: I (102322) GUI: PRESSED at (35,33) -> TOUCHING (irq=yes)
+[2026-03-16 21:32:51.302] GUI: I (102587) GUI: RELEASED -> IDLE
+[2026-03-16 21:32:52.776] Heartbeat: I (104042) Heartbeat: uptime 103s, heap 22064B, beats 100, rate 1.0Hz
+[2026-03-16 21:32:59.356] GUI: I (110611) GUI: touch poll alive: state=IDLE irqs=3404 IRQ_GPIO=22 level=1
+[2026-03-16 21:33:02.814] Heartbeat: I (114046) Heartbeat: uptime 113s, heap 22000B, beats 110, rate 1.0Hz
+[2026-03-16 21:33:09.360] GUI: I (120637) GUI: touch poll alive: state=IDLE irqs=3738 IRQ_GPIO=22 level=1
+[2026-03-16 21:33:12.808] Heartbeat: I (124051) Heartbeat: uptime 123s, heap 22028B, beats 120, rate 1.0Hz
+[2026-03-16 21:33:19.362] GUI: I (130633) GUI: touch poll alive: state=IDLE irqs=4071 IRQ_GPIO=22 level=1
+[2026-03-16 21:33:22.783] Heartbeat: I (134055) Heartbeat: uptime 133s, heap 22216B, beats 130, rate 1.0Hz
+[2026-03-16 21:33:29.397] GUI: I (140630) GUI: touch poll alive: state=IDLE irqs=4404 IRQ_GPIO=22 level=1
+[2026-03-16 21:33:32.798] Heartbeat: I (144059) Heartbeat: uptime 143s, heap 22216B, beats 140, rate 1.0Hz
+[2026-03-16 21:33:39.372] GUI: I (150630) GUI: touch poll alive: state=IDLE irqs=4737 IRQ_GPIO=22 level=1
+[2026-03-16 21:33:42.767] Heartbeat: I (154064) Heartbeat: uptime 153s, heap 22216B, beats 150, rate 1.0Hz
+[2026-03-16 21:33:43.126] GUI: I (154383) GUI: IRQ #4862: x=65 y=198 screen_on=1
+[2026-03-16 21:33:43.126] GUI: I (154388) GUI: PRESSED at (65,198) -> TOUCHING (irq=yes)
+[2026-03-16 21:33:43.181] GUI: I (154436) GUI: RELEASED -> IDLE
+[2026-03-16 21:33:43.231] GUI: I (154505) GUI: IRQ #4864: x=71 y=201 screen_on=1
+[2026-03-16 21:33:43.232] GUI: I (154509) GUI: PRESSED at (71,201) -> TOUCHING (irq=yes)
+[2026-03-16 21:33:43.354] GUI: I (154600) GUI: RELEASED -> IDLE
+[2026-03-16 21:33:44.491] GUI: I (155739) GUI: IRQ #4901: x=73 y=198 screen_on=1
+[2026-03-16 21:33:44.491] GUI: I (155744) GUI: PRESSED at (73,198) -> TOUCHING (irq=yes)
+[2026-03-16 21:33:44.601] GUI: I (155859) GUI: RELEASED -> IDLE
+[2026-03-16 21:33:47.718] GUI: I (158975) GUI: IRQ #5004: x=62 y=205 screen_on=1
+[2026-03-16 21:33:47.718] GUI: I (158980) GUI: PRESSED at (62,205) -> TOUCHING (irq=yes)
+[2026-03-16 21:33:48.603] GUI: I (159862) GUI: RELEASED -> IDLE
+[2026-03-16 21:33:48.958] GUI: I (160165) GUI: IRQ #5014: x=59 y=202 screen_on=1
+[2026-03-16 21:33:48.958] GUI: I (160170) GUI: PRESSED at (59,202) -> TOUCHING (irq=yes)
+[2026-03-16 21:33:49.500] GUI: I (160706) GUI: RELEASED -> IDLE
+[2026-03-16 21:33:49.500] GUI: I (160739) GUI: touch poll alive: state=IDLE irqs=5015 IRQ_GPIO=22 level=1
+[2026-03-16 21:33:50.127] GUI: I (161342) GUI: IRQ #5035: x=59 y=200 screen_on=1
+[2026-03-16 21:33:50.127] GUI: I (161347) GUI: PRESSED at (59,200) -> TOUCHING (irq=yes)
+[2026-03-16 21:33:50.589] GUI: I (161604) GUI: RELEASED -> IDLE
+[2026-03-16 21:33:50.589] GUI: I (161636) GUI: IRQ #5036: x=59 y=200 screen_on=1
+[2026-03-16 21:33:50.589] GUI: I (161641) GUI: PRESSED at (59,200) -> TOUCHING (irq=yes)
+[2026-03-16 21:33:50.960] GUI: I (162203) GUI: RELEASED -> IDLE
+[2026-03-16 21:33:50.961] GUI: I (162236) GUI: IRQ #5037: x=61 y=200 screen_on=1
+[2026-03-16 21:33:50.961] GUI: I (162241) GUI: PRESSED at (61,200) -> TOUCHING (irq=yes)
+[2026-03-16 21:33:51.247] GUI: I (162428) GUI: RELEASED -> IDLE
+[2026-03-16 21:33:52.782] Heartbeat: I (164070) Heartbeat: uptime 163s, heap 22216B, beats 160, rate 1.0Hz
+[2026-03-16 21:33:59.392] GUI: I (170637) GUI: touch poll alive: state=IDLE irqs=5310 IRQ_GPIO=22 level=1
+[2026-03-16 21:34:02.806] Heartbeat: I (174074) Heartbeat: uptime 173s, heap 22216B, beats 170, rate 1.0Hz
+[2026-03-16 21:34:09.390] GUI: I (180634) GUI: touch poll alive: state=IDLE irqs=5643 IRQ_GPIO=22 level=1
+[2026-03-16 21:34:12.824] Heartbeat: I (184081) Heartbeat: uptime 183s, heap 23516B, beats 180, rate 1.0Hz
+[2026-03-16 21:34:19.359] GUI: I (190633) GUI: touch poll alive: state=IDLE irqs=5976 IRQ_GPIO=22 level=1
+[2026-03-16 21:34:22.925] Heartbeat: I (194086) Heartbeat: uptime 193s, heap 22952B, beats 190, rate 1.0Hz
+[2026-03-16 21:34:29.369] GUI: I (200630) GUI: touch poll alive: state=IDLE irqs=6309 IRQ_GPIO=22 level=1
+[2026-03-16 21:34:32.808] Heartbeat: I (204092) Heartbeat: uptime 203s, heap 23776B, beats 200, rate 1.0Hz
+[2026-03-16 21:35:17.954] Heartbeat: I (43998) Heartbeat: uptime 43s, heap 25360B, beats 40, rate 1.0Hz
+[2026-03-16 21:37:25.986] GUI: I (40633) GUI: touch poll alive: state=IDLE irqs=1093 IRQ_GPIO=22 level=1
+[2026-03-16 21:37:33.354] Heartbeat: I (46597) Heartbeat: uptime 45s, heap 22584B, beats 40, rate 1.0Hz
+[2026-03-16 21:37:35.952] GUI: I (50637) GUI: touch poll alive: state=IDLE irqs=1410 IRQ_GPIO=22 level=1
+[2026-03-16 21:37:41.922] Heartbeat: I (56601) Heartbeat: uptime 55s, heap 25304B, beats 50, rate 1.0Hz
+[2026-03-16 21:37:45.959] GUI: I (60637) GUI: touch poll alive: state=IDLE irqs=1719 IRQ_GPIO=22 level=1
+[2026-03-16 21:37:51.967] Heartbeat: I (66607) Heartbeat: uptime 65s, heap 25304B, beats 60, rate 1.0Hz
+[2026-03-16 21:37:55.960] GUI: I (70633) GUI: touch poll alive: state=IDLE irqs=2052 IRQ_GPIO=22 level=1
+[2026-03-16 21:38:01.929] Heartbeat: I (76614) Heartbeat: uptime 76s, heap 25280B, beats 70, rate 1.0Hz
+[2026-03-16 21:39:36.119] Heartbeat: I (93109) Heartbeat: uptime 92s, heap 25352B, beats 80, rate 1.0Hz
+[2026-03-16 21:39:36.640] GUI: I (93628) GUI: touch poll alive: state=IDLE irqs=2641 IRQ_GPIO=22 level=1
+[2026-03-16 21:39:46.138] Heartbeat: I (103117) Heartbeat: uptime 102s, heap 25352B, beats 90, rate 1.0Hz
+[2026-03-16 21:39:46.673] GUI: I (103627) GUI: touch poll alive: state=IDLE irqs=2974 IRQ_GPIO=22 level=1
+[2026-03-16 21:39:56.164] Heartbeat: I (113124) Heartbeat: uptime 112s, heap 25284B, beats 100, rate 1.0Hz
+[2026-03-16 21:39:56.675] GUI: I (113622) GUI: touch poll alive: state=IDLE irqs=3307 IRQ_GPIO=22 level=1
+[2026-03-16 21:40:06.143] Heartbeat: I (123135) Heartbeat: uptime 122s, heap 21980B, beats 110, rate 1.0Hz
+[2026-03-16 21:40:06.648] GUI: I (123619) GUI: touch poll alive: state=IDLE irqs=3640 IRQ_GPIO=22 level=1
+[2026-03-16 21:40:16.167] Heartbeat: I (133139) Heartbeat: uptime 132s, heap 21980B, beats 120, rate 1.0Hz
+[2026-03-16 21:40:16.643] GUI: I (133617) GUI: touch poll alive: state=IDLE irqs=3973 IRQ_GPIO=22 level=1
+[2026-03-16 21:40:26.167] Heartbeat: I (143143) Heartbeat: uptime 142s, heap 21980B, beats 130, rate 1.0Hz
+[2026-03-16 21:40:26.644] GUI: I (143617) GUI: touch poll alive: state=IDLE irqs=4306 IRQ_GPIO=22 level=1
+[2026-03-16 21:40:36.160] Heartbeat: I (153148) Heartbeat: uptime 152s, heap 21980B, beats 140, rate 1.0Hz
+[2026-03-16 21:40:36.651] GUI: I (153615) GUI: touch poll alive: state=IDLE irqs=4639 IRQ_GPIO=22 level=1
+[2026-03-16 21:40:46.135] Heartbeat: I (163153) Heartbeat: uptime 162s, heap 20320B, beats 150, rate 1.0Hz
+[2026-03-16 21:40:46.622] GUI: I (163615) GUI: touch poll alive: state=IDLE irqs=4972 IRQ_GPIO=22 level=1
+[2026-03-16 21:40:56.171] Heartbeat: I (173158) Heartbeat: uptime 172s, heap 21984B, beats 160, rate 1.0Hz
+[2026-03-16 21:40:56.666] GUI: I (173639) GUI: touch poll alive: state=IDLE irqs=5306 IRQ_GPIO=22 level=1
+[2026-03-16 21:41:06.143] Heartbeat: I (183164) Heartbeat: uptime 182s, heap 22176B, beats 170, rate 1.0Hz
+[2026-03-16 21:41:06.651] GUI: I (183638) GUI: touch poll alive: state=IDLE irqs=5639 IRQ_GPIO=22 level=1
+[2026-03-16 21:41:17.649] Heartbeat: I (193168) Heartbeat: uptime 192s, heap 25304B, beats 180, rate 1.0Hz
+[2026-03-16 21:41:17.649] GUI: I (193639) GUI: touch poll alive: state=IDLE irqs=5972 IRQ_GPIO=22 level=1
+[2026-03-16 21:41:26.250] Heartbeat: I (203177) Heartbeat: uptime 202s, heap 22184B, beats 190, rate 1.0Hz
+[2026-03-16 21:41:26.661] GUI: I (203636) GUI: touch poll alive: state=IDLE irqs=6305 IRQ_GPIO=22 level=1
+[2026-03-16 21:41:36.155] Heartbeat: I (213181) Heartbeat: uptime 212s, heap 22184B, beats 200, rate 1.0Hz
+[2026-03-16 21:41:36.657] GUI: I (213638) GUI: touch poll alive: state=IDLE irqs=6638 IRQ_GPIO=22 level=1
+[2026-03-16 21:41:46.189] Heartbeat: I (223185) Heartbeat: uptime 222s, heap 23488B, beats 210, rate 1.0Hz
+[2026-03-16 21:41:46.663] GUI: I (223635) GUI: touch poll alive: state=IDLE irqs=6971 IRQ_GPIO=22 level=1
+[2026-03-16 21:41:56.191] Heartbeat: I (233190) Heartbeat: uptime 232s, heap 23488B, beats 220, rate 1.0Hz
+[2026-03-16 21:41:56.647] GUI: I (233636) GUI: touch poll alive: state=IDLE irqs=7304 IRQ_GPIO=22 level=1
+[2026-03-16 21:42:06.221] Heartbeat: I (243195) Heartbeat: uptime 242s, heap 23488B, beats 230, rate 1.0Hz
+[2026-03-16 21:42:06.665] GUI: I (243636) GUI: touch poll alive: state=IDLE irqs=7637 IRQ_GPIO=22 level=1
+[2026-03-16 21:42:16.216] Heartbeat: I (253200) Heartbeat: uptime 252s, heap 23488B, beats 240, rate 1.0Hz
+[2026-03-16 21:42:16.668] GUI: I (253632) GUI: touch poll alive: state=IDLE irqs=7970 IRQ_GPIO=22 level=1

@@ -27,7 +27,7 @@
  * 1. Set anim_total_frames to start upload (allocates staging buffer)
  *    - Rejected with ESP_ERR_NO_MEM if it won't fit in the pool
  * 2. Set anim_chunk_index, then anim_chunk_data (base64) for each chunk
- * 3. Set anim_commit to finalize — moves staging into a new preset slot
+ * 3. Set anim_commit to finalize - moves staging into a new preset slot
  * 4. Set active_preset to the desired index, playing=true to start
  * 
  * Preset management:
@@ -45,10 +45,10 @@
 #define RGB_LED_COUNT           30                 // Number of LEDs on the strip
 
 // Animation memory limits
-// This is a dedicated lamp — animation playback is the primary workload.
+// This is a dedicated lamp - animation playback is the primary workload.
 // The swap-before-allocate pattern in animationBegin() prevents double-allocation
 // OOM, so we can safely use most of the available heap for animation data.
-#define RGB_LED_MAX_ANIMATION_MEMORY    (150 * 1024)  // 150KB — ~1,630 frames at 30 LEDs
+#define RGB_LED_MAX_ANIMATION_MEMORY    (150 * 1024)  // 150KB - ~1,630 frames at 30 LEDs
 #define RGB_LED_CHUNK_SIZE              1024          // Max bytes per upload chunk
 
 // A single animation preset: its raw frame data + metadata

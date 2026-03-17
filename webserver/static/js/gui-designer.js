@@ -72,7 +72,7 @@ class HsvColorWheel {
         this.S = 0.85; // 0-1 (distance from center)
         this.V = 0.9;  // 0-1 (brightness, controlled by external slider)
 
-        this._cached = null; // { V, imageData } — cached wheel disc
+        this._cached = null; // { V, imageData } - cached wheel disc
         this._dragging = false;
 
         this._bindEvents();
@@ -85,7 +85,7 @@ class HsvColorWheel {
 
     setV(v) {
         this.V = Math.max(0, Math.min(1, v));
-        this._cached = null; // invalidate — brightness affects every pixel
+        this._cached = null; // invalidate - brightness affects every pixel
         this._render();
     }
 
@@ -319,7 +319,7 @@ class GuiDesigner {
         this.ws        = ws;
         this.comp      = componentName || 'GUI';
 
-        // Color state — matches ESP32 defaults
+        // Color state - matches ESP32 defaults
         this.bgColor          = [0, 0, 0];
         this.buttonColors     = [[0,100,200],[200,100,0],[0,150,100],[150,0,150],[200,0,0],[0,200,0]];
         this.buttonTextColors = Array(6).fill(null).map(() => [255, 255, 255]);
@@ -480,10 +480,10 @@ class GuiDesigner {
             titleEl.textContent = '🖥️ Background';
         } else if (target.startsWith('btntxt')) {
             const i = parseInt(target.slice(6));
-            titleEl.textContent = `🔤 Button ${i + 1} Text — "${this.buttonNames[i]}"`;
+            titleEl.textContent = `🔤 Button ${i + 1} Text - "${this.buttonNames[i]}"`;
         } else {
             const i = parseInt(target.slice(3));
-            titleEl.textContent = `🎨 Button ${i + 1} Fill — "${this.buttonNames[i]}"`;
+            titleEl.textContent = `🎨 Button ${i + 1} Fill - "${this.buttonNames[i]}"`;
         }
 
         // Sync color picker to current target color

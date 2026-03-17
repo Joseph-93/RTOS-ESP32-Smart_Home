@@ -1,12 +1,14 @@
 #include "heartbeat.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
 
 static const char* TAG = "Heartbeat";
 
 HeartbeatComponent::HeartbeatComponent() 
     : Component("Heartbeat")
     , taskHandle(nullptr)
+    , beatCount(0)
 {
 }
 
@@ -21,10 +23,12 @@ void HeartbeatComponent::onInitialize() {
     rateHz = addFloatParam("rate_hz", 1, 1, 0.1f, 10.0f, 1.0f);
     
     // Create the heartbeat task
+    // Stack needs to be large enough for: ESP_LOGI → log hook → logParam->setValue
+    // → onChange → cJSON broadcast chain. 2048 was too small after log hook was added.
     BaseType_t result = xTaskCreate(
         heartbeatTaskWrapper,
         "heartbeat_task",
-        2048,
+        4096,
         this,
         tskIDLE_PRIORITY + 1,
         &taskHandle
@@ -54,9 +58,18 @@ void HeartbeatComponent::heartbeatTask() {
         beatState = !beatState;
         heartbeat->setValue(0, 0, beatState);  // Triggers onChange which broadcasts to subscribers
         
-        // Only log on rising edge to avoid spam
+        // On rising edge: increment counter and periodically log status
         if (beatState) {
-            ESP_LOGD(TAG, "♥ beat (rate: %.2f Hz)", rate);
+            beatCount++;
+            
+            // Every 10 beats (~10s at 1Hz), write a detailed log via ESP_LOGI()
+            // This feeds the WebSocket log pipeline to the central hub
+            if (beatCount % 10 == 0) {
+                uint32_t uptimeSec = (uint32_t)(esp_timer_get_time() / 1000000ULL);
+                uint32_t freeHeap = esp_get_free_heap_size();
+                ESP_LOGI(TAG, "uptime %lus, heap %luB, beats %lu, rate %.1fHz",
+                         uptimeSec, freeHeap, beatCount, rate);
+            }
         }
         
         vTaskDelay(pdMS_TO_TICKS(halfPeriodMs));

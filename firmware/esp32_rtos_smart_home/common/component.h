@@ -108,8 +108,6 @@ protected:
     uint32_t parameterId;
     bool read_only;
     bool dirty;
-    
-    static constexpr const char* TAG = "BaseParameter";
 };
 
 // ============================================================================
@@ -386,7 +384,7 @@ public:
 protected:
     void addMinMaxToJson(cJSON* info) const;  // Specialized below
     
-    static constexpr const char *TAG = "Parameter";
+    static constexpr const char *TAG = "Param";
     size_t rows, cols;
     std::vector<T> data;
     T min_value, max_value;
@@ -575,8 +573,6 @@ public:
     std::map<std::string, std::string> hubStoreGetAll() const;
 
 protected:
-    static constexpr const char *TAG = "Component";
-    
     // Identity
     uint32_t componentId;
     static uint32_t nextComponentId;
@@ -607,6 +603,13 @@ protected:
     StringParameter* addStringParam(const std::string &paramName, size_t rows, size_t cols, 
                                     const std::string &default_val = "", bool readOnly = false);
     
+public:
+    // Built-in log parameter - write log lines that the central hub can subscribe to
+    // Public so ComponentGraph's ESP_LOG hook can write directly
+    StringParameter* logParam = nullptr;
+    void writeLog(const char* fmt, ...) __attribute__((format(printf, 2, 3)));
+
+protected:
     // Hub Store setup (called during initialize)
     void setupHubStore();
 

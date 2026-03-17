@@ -595,7 +595,7 @@ void WebServerComponent::broadcastTask() {
             last_purge = now;
         }
         
-        if (received != pdTRUE) continue;  // Timeout — loop back to check again
+        if (received != pdTRUE) continue;  // Timeout - loop back to check again
         if (!http_server) continue;
         
         SubscriptionKey key{item.param_id, item.row, item.col};
@@ -628,10 +628,10 @@ void WebServerComponent::broadcastTask() {
                 }
                 xSemaphoreGive(subscriptions_mutex);
             } else {
-                ESP_LOGW(TAG, "Broadcast: mutex timeout — skipping update for param %u", item.param_id);
+                ESP_LOGW(TAG, "Broadcast: mutex timeout - skipping update for param %u", item.param_id);
             }
             
-            // ── Send OUTSIDE the subscriptions mutex — network I/O can block ──
+            // ── Send OUTSIDE the subscriptions mutex - network I/O can block ──
             // But take ws_send_mutex to prevent concurrent frame sends
             std::vector<int> dead_sockets;
             for (int socket_fd : target_sockets) {
@@ -665,7 +665,7 @@ void WebServerComponent::broadcastTask() {
     }
 }
 
-// Purge stale WebSocket connections — removes subscriptions for sockets
+// Purge stale WebSocket connections - removes subscriptions for sockets
 // that are no longer valid (client crashed, WiFi dropped, half-open TCP)
 void WebServerComponent::purgeStaleConnections() {
     if (!http_server || !subscriptions_mutex) return;

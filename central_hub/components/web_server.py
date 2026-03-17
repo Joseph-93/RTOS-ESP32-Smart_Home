@@ -24,10 +24,16 @@ import asyncio
 import json
 import logging
 import socket
+from pathlib import Path
 from typing import Any, Dict, Optional, Set, Tuple, TYPE_CHECKING
+
+# Directory where firmware files are staged for OTA updates
+OTA_SERVE_DIR = Path(__file__).parent.parent / "ota"
 
 import websockets
 from websockets.server import WebSocketServerProtocol
+from websockets.http11 import Response as WsResponse
+from websockets.datastructures import Headers as WsHeaders
 
 # mDNS advertisement
 try:
@@ -207,6 +213,41 @@ class WebServerComponent(Component):
         
         self.connected_devices_param.set_value(0, 0, json.dumps(devices), notify=True)
     
+    async def _process_http_request(self, connection, request):
+        """
+        Intercept plain HTTP GET/HEAD requests before WebSocket upgrade.
+        Serves files from the OTA staging directory at /ota/<filename>.
+        All other paths proceed normally to WebSocket upgrade.
+        """
+        try:
+            path = request.path
+            if not path.startswith('/ota/'):
+                return None  # proceed with WebSocket upgrade
+
+            filename = path[5:]  # strip '/ota/'
+            # Sanitize: no path traversal
+            if '/' in filename or '..' in filename or not filename:
+                return WsResponse(400, 'Bad Request', WsHeaders([]), b'Bad Request')
+
+            filepath = OTA_SERVE_DIR / filename
+            if not filepath.exists() or not filepath.is_file():
+                logger.warning(f"OTA file not found: {filepath}")
+                return WsResponse(404, 'Not Found', WsHeaders([]), b'Not Found')
+
+            data = filepath.read_bytes()
+            is_head = getattr(request, 'method', 'GET').upper() == 'HEAD'
+            logger.info(f"OTA {'HEAD' if is_head else 'GET'}: {filename} ({len(data)} bytes)")
+            headers = WsHeaders([
+                ('Content-Type', 'application/octet-stream'),
+                ('Content-Length', str(len(data))),
+                ('Connection', 'close'),
+            ])
+            # For HEAD requests return headers only, no body
+            return WsResponse(200, 'OK', headers, b'' if is_head else data)
+        except Exception as e:
+            logger.error(f"OTA process_request error: {e}")
+            return WsResponse(500, 'Internal Server Error', WsHeaders([]), b'Error')
+
     async def start(self):
         """Start the WebSocket server."""
         self._running = True
@@ -219,7 +260,8 @@ class WebServerComponent(Component):
             '0.0.0.0',
             self._port,
             ping_interval=30,
-            ping_timeout=10
+            ping_timeout=10,
+            process_request=self._process_http_request
         )
         
         logger.info(f"WebSocket server started at ws://{self._local_ip}:{self._port}/ws")

@@ -5,6 +5,77 @@
 #include "nvs.h"
 #include "esp_mac.h"
 #include "esp_system.h"
+#include <cstdarg>
+#include <cstring>
+
+// OTA update functions (implemented in ota component, resolved at link time)
+extern "C" bool ota_start_update(const char* url);
+extern "C" bool ota_is_update_in_progress(void);
+
+// ============================================================================
+// ESP_LOG capture hook - routes log output to component log params
+// ============================================================================
+static ComponentGraph* s_graph_instance = nullptr;
+static vprintf_like_t s_original_vprintf = nullptr;
+static bool s_log_hook_reentrant = false;
+// Static buffer - avoids 256 bytes on the calling task's stack
+static char s_log_buf[256];
+
+static int log_capture_vprintf(const char* fmt, va_list args) {
+    // Always print to UART first
+    int ret = 0;
+    if (s_original_vprintf) {
+        va_list args_copy;
+        va_copy(args_copy, args);
+        ret = s_original_vprintf(fmt, args_copy);
+        va_end(args_copy);
+    }
+
+    // Guard: re-entrancy, no graph, or called from ISR
+    if (s_log_hook_reentrant || !s_graph_instance || xPortInIsrContext()) {
+        return ret;
+    }
+    s_log_hook_reentrant = true;
+
+    // Format into static buffer (safe - re-entrancy guard above)
+    vsnprintf(s_log_buf, sizeof(s_log_buf), fmt, args);
+
+    // Strip trailing newline
+    size_t len = strlen(s_log_buf);
+    while (len > 0 && (s_log_buf[len - 1] == '\n' || s_log_buf[len - 1] == '\r')) {
+        s_log_buf[--len] = '\0';
+    }
+
+    if (len > 0) {
+        // ESP_LOG format: "X (timestamp) tag: message"
+        // Extract the tag to route to the right component
+        const char* tag_start = nullptr;
+        const char* paren_end = strstr(s_log_buf, ") ");
+        if (paren_end) {
+            tag_start = paren_end + 2;
+        }
+
+        const char* colon = tag_start ? strstr(tag_start, ": ") : nullptr;
+        Component* target = nullptr;
+
+        if (tag_start && colon) {
+            size_t tag_len = colon - tag_start;
+            if (tag_len > 0 && tag_len < 64) {
+                char tag[64];
+                memcpy(tag, tag_start, tag_len);
+                tag[tag_len] = '\0';
+                target = s_graph_instance->getComponent(tag);
+            }
+        }
+
+        if (target && target->logParam) {
+            target->logParam->setValue(0, 0, std::string(s_log_buf));
+        }
+    }
+
+    s_log_hook_reentrant = false;
+    return ret;
+}
 
 // Persistence save interval in milliseconds (30 seconds)
 static constexpr uint32_t PERSISTENCE_INTERVAL_MS = 30000;
@@ -23,7 +94,7 @@ ComponentGraph::ComponentGraph() {
     
     // Create notification queues
     notification_queue_gui = xQueueCreate(10, sizeof(NotificationQueueItem));
-    // NOTE: UART notification queue removed — no consumer exists and it
+    // NOTE: UART notification queue removed - no consumer exists and it
     // wastes ~2.8KB of RAM.  Re-add when a UART logging task is implemented.
     notification_queue_uart = nullptr;
     
@@ -235,6 +306,11 @@ void ComponentGraph::initializeAll() {
     for (auto& pair : components_snapshot) {
         pair.second->postInitialize();
     }
+    
+    // Install ESP_LOG capture hook - routes ESP_LOGx() output to component log params
+    s_graph_instance = this;
+    s_original_vprintf = esp_log_set_vprintf(log_capture_vprintf);
+    ESP_LOGI(TAG, "ESP_LOG capture hook installed - log output will stream to hub");
     
     ESP_LOGI(TAG, "All components initialized");
 }
@@ -623,6 +699,36 @@ cJSON* ComponentGraph::executeMessage(cJSON* request) {
     }
     
 
+    // ========================================================================
+    // start_ota - Begin OTA firmware update from a URL
+    // ========================================================================
+    else if (strcmp(msg_type, "start_ota") == 0) {
+        cJSON* url_item = cJSON_GetObjectItem(request, "url");
+        if (!url_item || !cJSON_IsString(url_item) || strlen(url_item->valuestring) == 0) {
+            cJSON* error = cJSON_CreateObject();
+            cJSON_AddBoolToObject(error, "success", false);
+            cJSON_AddStringToObject(error, "error", "missing or empty 'url' field");
+            return error;
+        }
+        
+        if (ota_is_update_in_progress()) {
+            cJSON* error = cJSON_CreateObject();
+            cJSON_AddBoolToObject(error, "success", false);
+            cJSON_AddStringToObject(error, "error", "OTA update already in progress");
+            return error;
+        }
+        
+        bool started = ota_start_update(url_item->valuestring);
+        
+        cJSON* response = cJSON_CreateObject();
+        cJSON_AddBoolToObject(response, "success", started);
+        if (!started) {
+            cJSON_AddStringToObject(response, "error", "failed to start OTA update");
+        } else {
+            cJSON_AddStringToObject(response, "message", "OTA update started - subscribe to OTA component params for progress");
+        }
+        return response;
+    }
     
     // Unknown message type
     cJSON* error = cJSON_CreateObject();

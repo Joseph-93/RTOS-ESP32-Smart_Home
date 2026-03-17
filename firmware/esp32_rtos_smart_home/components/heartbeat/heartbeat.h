@@ -21,6 +21,7 @@ private:
     FloatParameter* rateHz;        // How many beats per second (Hz)
     
     TaskHandle_t taskHandle;
+    uint32_t beatCount;            // Total rising-edge count
     
     static void heartbeatTaskWrapper(void* pvParameters);
     void heartbeatTask();
