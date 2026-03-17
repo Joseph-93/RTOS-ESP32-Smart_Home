@@ -912,7 +912,7 @@ class RgbLedAnimationBuilder {
                 <div class="rgb-section">
                     <h5>Frames <span id="rgb-frame-badge" class="rgb-badge">0</span></h5>
                     <div id="rgb-frame-list" class="rgb-frame-list">
-                        <div class="empty-hint">No frames — pick an effect above or add manually.</div>
+                        <div class="empty-hint">No frames - pick an effect above or add manually.</div>
                     </div>
                     <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="rgbBuilder._addBlankFrame()">
                         ➕ Add Blank Frame
@@ -1191,7 +1191,7 @@ class RgbLedAnimationBuilder {
         }
         
         if (dataSize === 0 || frameCount === 0) {
-            _rgbNotify('Preset is empty — add frames in editor', 'info');
+            _rgbNotify('Preset is empty - add frames in editor', 'info');
             return;
         }
         
@@ -1506,7 +1506,7 @@ class RgbLedAnimationBuilder {
         if (!list) return;
         
         if (!this.frames.length) {
-            list.innerHTML = '<div class="empty-hint">No frames — pick an effect above or add manually.</div>';
+            list.innerHTML = '<div class="empty-hint">No frames - pick an effect above or add manually.</div>';
             return;
         }
 
@@ -1515,7 +1515,7 @@ class RgbLedAnimationBuilder {
         const overflow = this.frames.length - visible.length;
 
         list.innerHTML = visible.map((frame, idx) => {
-            // Build LED preview — sample up to 40 swatches evenly
+            // Build LED preview - sample up to 40 swatches evenly
             const n = Math.min(40, this.ledCount);
             const swatches = Array.from({ length: n }, (_, si) => {
                 const [r, g, b] = frame.colors[Math.floor(si * this.ledCount / n)] || [0, 0, 0];
@@ -1686,7 +1686,7 @@ class RgbLedAnimationBuilder {
 let rgbBuilder = null;
 
 async function initRgbLedBuilder(ws, compName) {
-    const ledCount = 30;  // Hardcoded — matches RGB_LED_COUNT in firmware
+    const ledCount = 30;  // Hardcoded - matches RGB_LED_COUNT in firmware
 
     const container = document.getElementById('rgb-led-builder-container');
     if (!container) return;

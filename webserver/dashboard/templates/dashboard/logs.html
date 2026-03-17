@@ -1,0 +1,781 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📋 ESP32 Log Viewer</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="{% static 'js/notifications.js' %}"></script>
+    <script src="{% static 'js/websocket.js' %}"></script>
+    <style>
+        .log-viewer-layout {
+            display: flex;
+            gap: 1.5rem;
+            height: calc(100vh - 180px);
+            min-height: 500px;
+        }
+
+        /* Sidebar: device selector + controls */
+        .log-sidebar {
+            width: 260px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .log-sidebar .card {
+            background: var(--bg-card, #1e1e2e);
+            border: 1px solid var(--border-color, #333);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .log-sidebar h3 {
+            margin: 0 0 0.75rem 0;
+            font-size: 0.95rem;
+            color: var(--text-secondary, #aaa);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .device-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .device-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.15s;
+            border: 1px solid transparent;
+        }
+
+        .device-item:hover {
+            background: var(--bg-hover, #2a2a3e);
+        }
+
+        .device-item.active {
+            background: var(--accent-bg, #1a3a5c);
+            border-color: var(--accent-color, #4a9eff);
+        }
+
+        .device-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .device-dot.connected { background: #4caf50; }
+        .device-dot.disconnected { background: #666; }
+
+        .device-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .log-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .log-controls label {
+            font-size: 0.85rem;
+            color: var(--text-secondary, #aaa);
+        }
+
+        .log-controls select,
+        .log-controls input[type="number"] {
+            width: 100%;
+            padding: 0.4rem 0.6rem;
+            background: var(--bg-input, #151520);
+            border: 1px solid var(--border-color, #333);
+            border-radius: 4px;
+            color: var(--text-primary, #eee);
+            font-size: 0.9rem;
+        }
+
+        .log-controls .btn {
+            width: 100%;
+            margin-top: 0.25rem;
+        }
+
+        /* Main log area */
+        .log-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .log-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 1rem;
+            background: var(--bg-card, #1e1e2e);
+            border: 1px solid var(--border-color, #333);
+            border-radius: 8px 8px 0 0;
+            border-bottom: none;
+        }
+
+        .log-header-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .log-header-status {
+            font-size: 0.8rem;
+            color: var(--text-secondary, #888);
+        }
+
+        .log-header-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .log-header-actions .btn {
+            padding: 0.3rem 0.75rem;
+            font-size: 0.8rem;
+        }
+
+        .log-output-wrap {
+            flex: 1;
+            background: #0d0d14;
+            border: 1px solid var(--border-color, #333);
+            border-radius: 0 0 8px 8px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .log-output {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            padding: 0.75rem 1rem;
+            font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.82rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: #ccc;
+            scrollbar-width: thin;
+        }
+
+        .log-output::-webkit-scrollbar {
+            width: 8px;
+        }
+        .log-output::-webkit-scrollbar-track {
+            background: #0d0d14;
+        }
+        .log-output::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        /* Log level coloring */
+        .log-line { margin: 0; padding: 1px 0; }
+        .log-line.log-error { color: #ff6b6b; }
+        .log-line.log-warn { color: #ffa726; }
+        .log-line.log-info { color: #81c784; }
+        .log-line.log-debug { color: #64b5f6; }
+        .log-line.log-verbose { color: #888; }
+
+        /* Timestamp styling */
+        .log-ts { color: #666; }
+        .log-tag { color: #bb86fc; font-weight: 600; }
+        .log-device-tag { color: #03dac6; font-weight: 600; }
+
+        /* Empty state */
+        .log-empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #555;
+            font-size: 1rem;
+        }
+
+        /* Auto-scroll indicator */
+        .autoscroll-badge {
+            position: absolute;
+            bottom: 12px;
+            right: 16px;
+            background: var(--accent-color, #4a9eff);
+            color: #fff;
+            padding: 0.25rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 1;
+        }
+        .autoscroll-badge.visible { opacity: 0.8; }
+        .autoscroll-badge:hover { opacity: 1; }
+
+        /* Search bar */
+        .log-search {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .log-search input {
+            flex: 1;
+            padding: 0.3rem 0.6rem;
+            background: var(--bg-input, #151520);
+            border: 1px solid var(--border-color, #333);
+            border-radius: 4px;
+            color: var(--text-primary, #eee);
+            font-size: 0.85rem;
+        }
+
+        .log-search .match-count {
+            font-size: 0.8rem;
+            color: var(--text-secondary, #888);
+            white-space: nowrap;
+        }
+
+        /* Highlighted search match */
+        .log-highlight {
+            background: rgba(255, 213, 0, 0.3);
+            border-radius: 2px;
+        }
+
+        @media (max-width: 768px) {
+            .log-viewer-layout {
+                flex-direction: column;
+                height: auto;
+            }
+            .log-sidebar {
+                width: 100%;
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+            .log-output-wrap {
+                min-height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" style="max-width: 1600px;">
+        <header>
+            <div class="breadcrumb">
+                <a href="{% url 'index' %}">← Back to Dashboard</a>
+            </div>
+            <h1>📋 ESP32 Log Viewer</h1>
+            <p class="subtitle">Real-time ESP_LOG output from connected devices</p>
+        </header>
+
+        <main>
+            <div class="log-viewer-layout">
+                <!-- Sidebar -->
+                <div class="log-sidebar">
+                    <div class="card">
+                        <h3>📡 Devices</h3>
+                        <div class="device-list" id="device-list">
+                            <div class="device-item active" data-ip="all" onclick="selectDevice('all')">
+                                <span class="device-dot connected"></span>
+                                <span class="device-name">All Devices</span>
+                            </div>
+                            <!-- Devices populated dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>⚙️ Controls</h3>
+                        <div class="log-controls">
+                            <label>Lines to show</label>
+                            <input type="number" id="tail-lines" value="200" min="10" max="500" step="50"
+                                   onchange="refreshLogs()">
+
+                            <label style="margin-top: 0.5rem;">Auto-refresh</label>
+                            <select id="refresh-rate" onchange="setRefreshRate()">
+                                <option value="1000">Every 1s</option>
+                                <option value="2000" selected>Every 2s</option>
+                                <option value="5000">Every 5s</option>
+                                <option value="0">Manual only</option>
+                            </select>
+
+                            <button class="btn btn-secondary" onclick="refreshLogs()" style="margin-top: 0.75rem;">
+                                🔄 Refresh Now
+                            </button>
+                            <button class="btn btn-secondary" onclick="clearLogs()" style="color: #ff6b6b;">
+                                🗑️ Clear Logs
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main log area -->
+                <div class="log-main">
+                    <div class="log-header">
+                        <span class="log-header-title" id="log-title">All Devices</span>
+                        <div class="log-header-actions">
+                            <div class="log-search">
+                                <input type="text" id="log-search-input" placeholder="🔍 Filter logs..."
+                                       oninput="filterLogs()">
+                                <span class="match-count" id="match-count"></span>
+                            </div>
+                            <button class="btn btn-secondary" onclick="downloadLogs()" title="Download log file">
+                                📥 Download
+                            </button>
+                            <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+                                <input type="checkbox" id="autoscroll-toggle" checked onchange="toggleAutoscroll()">
+                                Auto-scroll
+                            </label>
+                        </div>
+                        <span class="log-header-status" id="log-status">Connecting...</span>
+                    </div>
+                    <div class="log-output-wrap">
+                        <div class="log-output" id="log-output">
+                            <div class="log-empty">Connecting to Central Hub...</div>
+                        </div>
+                        <div class="autoscroll-badge" id="autoscroll-badge" onclick="scrollToBottom()">
+                            ↓ New logs below
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+    // ========================================================================
+    // State
+    // ========================================================================
+    let hubWs = null;
+    let currentDevice = 'all';
+    let autoScroll = true;
+    let refreshTimer = null;
+    let refreshInterval = 2000;
+    let rawLogContent = '';
+    let hubMsgId = 1;
+    const pendingRequests = {};
+
+    // ========================================================================
+    // Central Hub WebSocket connection (auto-discover like index.html)
+    // ========================================================================
+    async function connectToHub() {
+        if (hubWs && hubWs.readyState === WebSocket.OPEN) return;
+
+        const statusEl = document.getElementById('log-status');
+        const candidates = [];
+
+        // Check Django's device list for central-hub entries
+        {% for name, device in devices.items %}
+            {% if 'central' in name|lower or 'hub' in name|lower %}
+            candidates.push('{{ device.host }}:{{ device.port }}');
+            {% endif %}
+        {% endfor %}
+
+        // Also try localhost (if running on the same machine as the hub)
+        candidates.push('localhost:80');
+        candidates.push('127.0.0.1:80');
+
+        // Try to discover local IP from Django backend
+        try {
+            const resp = await fetch('/api/local-ip/');
+            const data = await resp.json();
+            if (data.ip) candidates.unshift(data.ip + ':80');
+        } catch (e) {}
+
+        for (const candidate of candidates) {
+            try {
+                statusEl.textContent = `Trying ${candidate}...`;
+                statusEl.style.color = '#ffa726';
+
+                const ws = new WebSocket(`ws://${candidate}/ws`);
+
+                const connected = await new Promise((resolve) => {
+                    const timeout = setTimeout(() => { ws.close(); resolve(false); }, 2000);
+                    ws.onopen = () => { clearTimeout(timeout); resolve(true); };
+                    ws.onerror = () => { clearTimeout(timeout); resolve(false); };
+                });
+
+                if (connected) {
+                    hubWs = ws;
+                    statusEl.textContent = `Connected (${candidate})`;
+                    statusEl.style.color = '#4caf50';
+                    console.log('[LogViewer] Connected to Central Hub at', candidate);
+
+                    ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.id && pendingRequests[data.id]) {
+                                pendingRequests[data.id](data);
+                                delete pendingRequests[data.id];
+                            }
+                        } catch (e) {
+                            console.error('[LogViewer] Parse error:', e);
+                        }
+                    };
+
+                    ws.onclose = () => {
+                        statusEl.textContent = 'Disconnected';
+                        statusEl.style.color = '#ff6b6b';
+                        hubWs = null;
+                        stopAutoRefresh();
+                        setTimeout(connectToHub, 3000);
+                    };
+
+                    loadDeviceList();
+                    refreshLogs();
+                    startAutoRefresh();
+                    return;
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+
+        statusEl.textContent = 'Hub not found - retrying...';
+        statusEl.style.color = '#ff6b6b';
+        setTimeout(connectToHub, 5000);
+    }
+
+    function sendHubRequest(message) {
+        return new Promise((resolve, reject) => {
+            if (!hubWs || hubWs.readyState !== WebSocket.OPEN) {
+                reject(new Error('Not connected'));
+                return;
+            }
+            const id = hubMsgId++;
+            message.id = id;
+            pendingRequests[id] = resolve;
+            hubWs.send(JSON.stringify(message));
+
+            // Timeout
+            setTimeout(() => {
+                if (pendingRequests[id]) {
+                    delete pendingRequests[id];
+                    reject(new Error('Timeout'));
+                }
+            }, 10000);
+        });
+    }
+
+    // ========================================================================
+    // Device list
+    // ========================================================================
+    async function loadDeviceList() {
+        try {
+            // Get LogCollector's log_devices param
+            const resp = await sendHubRequest({
+                type: 'get_param',
+                comp: 'LogCollector',
+                param: 'log_devices'
+            });
+
+            if (resp.value) {
+                const devices = JSON.parse(resp.value);
+                renderDeviceList(devices);
+            }
+        } catch (e) {
+            console.error('[LogViewer] Failed to load device list:', e);
+        }
+    }
+
+    function renderDeviceList(devices) {
+        const list = document.getElementById('device-list');
+        // Keep the "All Devices" entry
+        list.innerHTML = `
+            <div class="device-item ${currentDevice === 'all' ? 'active' : ''}"
+                 data-ip="all" onclick="selectDevice('all')">
+                <span class="device-dot connected"></span>
+                <span class="device-name">All Devices</span>
+            </div>
+        `;
+
+        for (const dev of devices) {
+            const isActive = currentDevice === dev.ip;
+            const dotClass = dev.connected ? 'connected' : 'disconnected';
+            const displayName = dev.name || dev.ip;
+
+            list.innerHTML += `
+                <div class="device-item ${isActive ? 'active' : ''}"
+                     data-ip="${dev.ip}" onclick="selectDevice('${dev.ip}')">
+                    <span class="device-dot ${dotClass}"></span>
+                    <span class="device-name" title="${dev.ip}">${displayName}</span>
+                </div>
+            `;
+        }
+    }
+
+    function selectDevice(ip) {
+        currentDevice = ip;
+
+        // Update active state in sidebar
+        document.querySelectorAll('.device-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.ip === ip);
+        });
+
+        // Update title
+        const activeEl = document.querySelector(`.device-item[data-ip="${ip}"]`);
+        const name = activeEl ? activeEl.querySelector('.device-name').textContent : ip;
+        document.getElementById('log-title').textContent = name;
+
+        refreshLogs();
+    }
+
+    // ========================================================================
+    // Log content fetching
+    // ========================================================================
+    async function refreshLogs() {
+        const numLines = parseInt(document.getElementById('tail-lines').value) || 200;
+
+        try {
+            // Set the device filter on the LogCollector
+            await sendHubRequest({
+                type: 'set_param',
+                comp: 'LogCollector',
+                param: 'device_filter',
+                value: currentDevice
+            });
+
+            // Set line count
+            await sendHubRequest({
+                type: 'set_param',
+                comp: 'LogCollector',
+                param: 'tail_lines',
+                value: numLines
+            });
+
+            // Fetch the log content
+            const resp = await sendHubRequest({
+                type: 'get_param',
+                comp: 'LogCollector',
+                param: 'log_content'
+            });
+
+            if (resp.value !== undefined) {
+                rawLogContent = resp.value || '';
+                renderLogs(rawLogContent);
+            }
+
+            // Also refresh device list periodically
+            loadDeviceList();
+
+        } catch (e) {
+            console.error('[LogViewer] Refresh failed:', e);
+        }
+    }
+
+    // ========================================================================
+    // Log rendering with syntax highlighting
+    // ========================================================================
+    function renderLogs(content) {
+        const output = document.getElementById('log-output');
+        const searchTerm = document.getElementById('log-search-input').value.toLowerCase();
+
+        if (!content || content.trim() === '') {
+            output.innerHTML = '<div class="log-empty">No log output yet. Waiting for ESP32 activity...</div>';
+            document.getElementById('match-count').textContent = '';
+            return;
+        }
+
+        const lines = content.split('\n');
+        let matchCount = 0;
+        let html = '';
+
+        for (const line of lines) {
+            // Skip empty lines
+            if (!line.trim()) continue;
+
+            // Search filter
+            if (searchTerm && !line.toLowerCase().includes(searchTerm)) continue;
+
+            // Determine log level for coloring
+            let levelClass = '';
+            if (line.includes(' E (') || line.includes('] E (') || line.includes('ERROR')) {
+                levelClass = 'log-error';
+            } else if (line.includes(' W (') || line.includes('] W (') || line.includes('WARN')) {
+                levelClass = 'log-warn';
+            } else if (line.includes(' I (') || line.includes('] I (') || line.includes('INFO')) {
+                levelClass = 'log-info';
+            } else if (line.includes(' D (') || line.includes('] D (') || line.includes('DEBUG')) {
+                levelClass = 'log-debug';
+            } else if (line.includes(' V (') || line.includes('] V (')) {
+                levelClass = 'log-verbose';
+            }
+
+            // Highlight search matches
+            let displayLine = escapeHtml(line);
+            if (searchTerm) {
+                const regex = new RegExp(escapeRegex(searchTerm), 'gi');
+                displayLine = displayLine.replace(regex, match =>
+                    `<span class="log-highlight">${match}</span>`
+                );
+                matchCount++;
+            }
+
+            // Highlight timestamps [YYYY-MM-DD HH:MM:SS.mmm]
+            displayLine = displayLine.replace(
+                /\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\]/,
+                '<span class="log-ts">[$1]</span>'
+            );
+
+            // Highlight device tags [device_name]
+            displayLine = displayLine.replace(
+                /\[(esp32[^\]]*)\]/gi,
+                '<span class="log-device-tag">[$1]</span>'
+            );
+
+            // Highlight component tags (e.g., "GUI:" or "TouchSensor:")
+            displayLine = displayLine.replace(
+                /(\w+):/,
+                '<span class="log-tag">$1</span>:'
+            );
+
+            html += `<div class="log-line ${levelClass}">${displayLine}</div>`;
+        }
+
+        output.innerHTML = html || '<div class="log-empty">No matching log lines</div>';
+
+        // Update match count
+        if (searchTerm) {
+            document.getElementById('match-count').textContent = `${matchCount} matches`;
+        } else {
+            document.getElementById('match-count').textContent = '';
+        }
+
+        // Auto-scroll
+        if (autoScroll) {
+            scrollToBottom();
+        }
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function escapeRegex(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    // ========================================================================
+    // Controls
+    // ========================================================================
+    function filterLogs() {
+        renderLogs(rawLogContent);
+    }
+
+    function toggleAutoscroll() {
+        autoScroll = document.getElementById('autoscroll-toggle').checked;
+    }
+
+    function scrollToBottom() {
+        const output = document.getElementById('log-output');
+        output.scrollTop = output.scrollHeight;
+    }
+
+    // Monitor scroll position to show "new logs below" badge
+    function setupScrollMonitor() {
+        const output = document.getElementById('log-output');
+        const badge = document.getElementById('autoscroll-badge');
+
+        output.addEventListener('scroll', () => {
+            const atBottom = output.scrollHeight - output.scrollTop - output.clientHeight < 50;
+            badge.classList.toggle('visible', !atBottom && !autoScroll);
+            if (atBottom) autoScroll = true;
+            document.getElementById('autoscroll-toggle').checked = autoScroll;
+        });
+    }
+
+    function setRefreshRate() {
+        refreshInterval = parseInt(document.getElementById('refresh-rate').value);
+        stopAutoRefresh();
+        if (refreshInterval > 0) {
+            startAutoRefresh();
+        }
+    }
+
+    function startAutoRefresh() {
+        stopAutoRefresh();
+        if (refreshInterval > 0) {
+            refreshTimer = setInterval(refreshLogs, refreshInterval);
+        }
+    }
+
+    function stopAutoRefresh() {
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
+    }
+
+    async function clearLogs() {
+        if (!confirm('Clear all logs for the selected device?')) return;
+
+        try {
+            // We can't directly call clear_logs() on the hub from here,
+            // so we'll use a convention: set device_filter to "clear:<ip>"
+            // The LogCollector will handle this as a clear command
+            await sendHubRequest({
+                type: 'set_param',
+                comp: 'LogCollector',
+                param: 'device_filter',
+                value: `clear:${currentDevice}`
+            });
+
+            // Reset to normal filter
+            await sendHubRequest({
+                type: 'set_param',
+                comp: 'LogCollector',
+                param: 'device_filter',
+                value: currentDevice
+            });
+
+            rawLogContent = '';
+            renderLogs('');
+            if (window.notificationManager) {
+                window.notificationManager.show('Logs cleared', 'success');
+            }
+        } catch (e) {
+            console.error('[LogViewer] Clear failed:', e);
+        }
+    }
+
+    function downloadLogs() {
+        if (!rawLogContent) {
+            alert('No logs to download');
+            return;
+        }
+
+        const name = currentDevice === 'all' ? 'all_devices' : currentDevice.replace(/\./g, '_');
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const filename = `esp32_logs_${name}_${timestamp}.log`;
+
+        const blob = new Blob([rawLogContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // ========================================================================
+    // Init
+    // ========================================================================
+    setupScrollMonitor();
+    connectToHub();
+    </script>
+</body>
+</html>

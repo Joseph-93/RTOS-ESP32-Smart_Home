@@ -237,7 +237,7 @@ void RgbLedComponent::giveMutex() {
 }
 
 void RgbLedComponent::onInitialize() {
-    // Create mutex first — needed before the task starts
+    // Create mutex first - needed before the task starts
     strip_mutex = xSemaphoreCreateMutex();
     if (!strip_mutex) {
         ESP_LOGE(TAG, "Failed to create mutex");
@@ -460,7 +460,7 @@ void RgbLedComponent::onInitialize() {
     
     // Pin LED task to core 1 so that led_strip_new_rmt_device() (called
     // inside the task) registers the RMT refill ISR on core 1.  WiFi runs
-    // on core 0, so the two can never preempt each other — eliminating the
+    // on core 0, so the two can never preempt each other - eliminating the
     // RMT buffer underflow that causes LED flicker.
     BaseType_t result = xTaskCreatePinnedToCore(
         ledTaskWrapper,
@@ -469,7 +469,7 @@ void RgbLedComponent::onInitialize() {
         this,
         tskIDLE_PRIORITY + 1,
         &led_task_handle,
-        1   // Core 1 — away from WiFi (core 0)
+        1   // Core 1 - away from WiFi (core 0)
     );
     
     if (result != pdPASS) {
@@ -896,7 +896,7 @@ void RgbLedComponent::playFrame() {
             memset(color_buffer.data() + anim_color_bytes, 0, buf_color_bytes - anim_color_bytes);
         }
     } else {
-        // Preset has more LEDs than the strip — truncate
+        // Preset has more LEDs than the strip - truncate
         memcpy(color_buffer.data(), frame_data, buf_color_bytes);
     }
     
@@ -1178,7 +1178,7 @@ void RgbLedComponent::ledTask() {
     last_brightness_update_ms = (uint32_t)(esp_timer_get_time() / 1000);
     
     task_running.store(true);
-    const uint32_t update_interval_ms = 1;  // ~1000 FPS max — core 1 is dedicated to this
+    const uint32_t update_interval_ms = 1;  // ~1000 FPS max - core 1 is dedicated to this
     bool was_playing = false;
     
     while (!stop_requested.load()) {

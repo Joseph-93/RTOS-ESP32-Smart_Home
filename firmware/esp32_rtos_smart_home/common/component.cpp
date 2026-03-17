@@ -1,11 +1,14 @@
 #include "component.h"
 #include "nvs_flash.h"
 #include "nvs.h"
+#include <cstdarg>
 
 // Static member initialization
 uint32_t Component::nextComponentId = 1;
 uint32_t Component::nextParameterId = 1;
 bool Component::nvsLoaded = false;
+
+static const char* TAG = "Component";
 
 // NVS namespace and keys
 static const char* NVS_NAMESPACE = "component_ids";
@@ -116,8 +119,23 @@ void Component::initialize() {
     // Setup hub store BEFORE component-specific init
     setupHubStore();
     
+    // Add built-in "log" parameter for remote log streaming
+    logParam = addStringParam("log", 1, 1, "", true);
+    
     onInitialize();
     initialized = true;
+}
+
+void Component::writeLog(const char* fmt, ...) {
+    if (!logParam) return;
+    
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    
+    logParam->setValue(0, 0, std::string(buf));
 }
 
 const std::string& Component::getName() const {

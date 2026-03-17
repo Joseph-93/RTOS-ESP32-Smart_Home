@@ -35,7 +35,8 @@ from components import (
     NetworkActionsComponent,
     ActionManagerComponent, 
     WatcherComponent,
-    WebServerComponent
+    WebServerComponent,
+    LogCollectorComponent
 )
 from persistence import PersistenceManager
 
@@ -157,12 +158,14 @@ class CentralHub:
         self.action_manager = ActionManagerComponent()
         self.watcher = WatcherComponent()
         self.web_server = WebServerComponent(port=self.ws_port)
+        self.log_collector = LogCollectorComponent()
         
         # Register them
         self.local_components['NetworkActions'] = self.network_actions
         self.local_components['ActionManager'] = self.action_manager
         self.local_components['Watcher'] = self.watcher
         self.local_components['WebServer'] = self.web_server
+        self.local_components['LogCollector'] = self.log_collector
         
         # Set hub reference on each component
         for comp in self.local_components.values():
@@ -175,6 +178,10 @@ class CentralHub:
         # Register Watcher to be notified when devices reconnect
         # This clears stale variable tracking so it gets fresh values immediately
         self.on_device_connected(self.watcher.on_device_reconnected)
+        
+        # Register LogCollector to subscribe to log params on connect/disconnect
+        self.on_device_connected(self.log_collector.on_device_connected)
+        self.on_device_disconnected(self.log_collector.on_device_disconnected)
         
         # Initialize persistence manager
         self.persistence = PersistenceManager(self)
@@ -283,6 +290,7 @@ class CentralHub:
         await self.web_server.stop()
         await self.watcher.stop()
         await self.action_manager.stop()
+        await self.log_collector.stop()
         
         # Close all connections
         for device in self.devices.values():
@@ -393,6 +401,85 @@ class CentralHub:
         finally:
             device.pending_requests.pop(msg_id, None)
     
+    # ========================================================================
+    # OTA Firmware Update
+    # ========================================================================
+    
+    async def trigger_ota_update(self, device_ip: str, firmware_url: str) -> dict:
+        """
+        Trigger an OTA firmware update on a connected ESP32 device.
+        
+        Args:
+            device_ip: IP address of the target ESP32
+            firmware_url: HTTP URL where the firmware .bin file is hosted
+                         e.g. "http://192.168.1.5:8080/firmware.bin"
+        
+        Returns:
+            Response dict from the ESP32 (contains 'success' bool)
+        
+        Usage:
+            # Host the firmware binary (e.g. from build/esp32_rtos_smart_home.bin):
+            #   cd firmware/esp32_rtos_smart_home/build
+            #   python -m http.server 8080
+            #
+            # Then trigger OTA:
+            #   await hub.trigger_ota_update("192.168.1.100", "http://192.168.1.5:8080/esp32_rtos_smart_home.bin")
+            #
+            # The ESP32 will download, verify, and reboot into the new firmware.
+            # Subscribe to the OTA component's 'status' and 'progress' parameters
+            # for real-time update tracking.
+        """
+        device = self.devices.get(device_ip)
+        if not device or not device.connected:
+            raise ConnectionError(f"Device {device_ip} not connected")
+        
+        logger.info(f"[{device_ip}] Triggering OTA update from: {firmware_url}")
+        
+        response = await self._send_request(
+            device, 
+            {'type': 'start_ota', 'url': firmware_url},
+            timeout=15.0
+        )
+        
+        if response.get('success'):
+            logger.info(f"[{device_ip}] OTA update started successfully")
+            logger.info(f"[{device_ip}] Device will reboot when complete - expect temporary disconnect")
+        else:
+            logger.error(f"[{device_ip}] OTA update failed to start: {response.get('error', 'unknown')}")
+        
+        return response
+    
+    async def trigger_ota_update_all(self, firmware_url: str) -> dict:
+        """
+        Trigger OTA update on ALL connected ESP32 devices (sequentially).
+        
+        Args:
+            firmware_url: HTTP URL where the firmware .bin file is hosted
+            
+        Returns:
+            Dict of {ip: response} for each device
+        """
+        results = {}
+        connected_devices = [
+            (ip, dev) for ip, dev in self.devices.items() 
+            if dev.connected
+        ]
+        
+        if not connected_devices:
+            logger.warning("No connected devices to update")
+            return results
+        
+        logger.info(f"Starting OTA update for {len(connected_devices)} device(s)")
+        
+        for ip, device in connected_devices:
+            try:
+                results[ip] = await self.trigger_ota_update(ip, firmware_url)
+            except Exception as e:
+                logger.error(f"[{ip}] OTA trigger failed: {e}")
+                results[ip] = {'success': False, 'error': str(e)}
+        
+        return results
+
     async def _query_device_info(self, device: ESP32Device):
         """Query device identity info for IP change detection."""
         ip = device.ip
@@ -744,6 +831,12 @@ class CentralHub:
         old_value = param.get_value(row, col)
         param.set_value(row, col, value)
         
+        # Route any component's 'log' parameter updates to LogCollector
+        if param.name == 'log' and value:
+            device_name = device.name or device.hostname or ip
+            logger.info(f"[{ip}] 📝 Log from {component.name}: {str(value)[:120]}")
+            self.log_collector.process_log_update(ip, device_name, str(value), component.name)
+        
         # Update remote state cache for Watcher
         if ip not in self.remote_state_cache:
             self.remote_state_cache[ip] = {}
@@ -1001,4 +1094,11 @@ async def main():
 
 
 if __name__ == '__main__':
+    import sys
+    # On Windows, the default ProactorEventLoop has a bug where [WinError 64]
+    # ("specified network name no longer available") from one socket can corrupt
+    # other pending IOCP operations, killing unrelated connections.
+    # The SelectorEventLoop doesn't have this issue.
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())

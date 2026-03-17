@@ -1,6 +1,6 @@
 # Build required components list based on configuration
 # Base components always required
-set(REQUIRED_COMPONENTS common web_server wifi)
+set(REQUIRED_COMPONENTS common web_server wifi ota)
 
 # Debug: show what's enabled
 message(STATUS "ENABLE_HEARTBEAT = ${ENABLE_HEARTBEAT}")

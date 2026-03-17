@@ -90,7 +90,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
                 s_retry_num++;
                 ESP_LOGI(TAG, "Retry connecting to AP (attempt %d/%d)", s_retry_num, MAX_RETRY);
             } else {
-                ESP_LOGE(TAG, "Initial connection failed after %d attempts — starting periodic reconnect", MAX_RETRY);
+                ESP_LOGE(TAG, "Initial connection failed after %d attempts - starting periodic reconnect", MAX_RETRY);
                 xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
                 // Fall through to start the periodic reconnect timer
                 if (s_reconnect_timer) {
@@ -99,7 +99,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
             }
         } else {
             // After initial connection: always attempt reconnect on a timer
-            ESP_LOGW(TAG, "WiFi disconnected — will retry every %d ms", RECONNECT_INTERVAL_MS);
+            ESP_LOGW(TAG, "WiFi disconnected - will retry every %d ms", RECONNECT_INTERVAL_MS);
             s_retry_num = 0;
             if (s_reconnect_timer) {
                 xTimerStart(s_reconnect_timer, 0);
@@ -114,7 +114,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         s_retry_num = 0;
         s_initial_connect_done = true;
 
-        // Stop reconnect timer — we're connected
+        // Stop reconnect timer - we're connected
         if (s_reconnect_timer) {
             xTimerStop(s_reconnect_timer, 0);
         }
@@ -184,7 +184,7 @@ bool wifi_init_sta(const char* ssid, const char* password)
         reconnect_timer_callback
     );
     if (!s_reconnect_timer) {
-        ESP_LOGW(TAG, "Failed to create reconnect timer — will use immediate retries");
+        ESP_LOGW(TAG, "Failed to create reconnect timer - will use immediate retries");
     }
 
     ESP_ERROR_CHECK(esp_wifi_start());

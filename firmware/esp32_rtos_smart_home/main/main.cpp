@@ -49,6 +49,7 @@
 
 #include "web_server.h"
 #include "wifi_init.h"
+#include "ota_update.h"
 #include <vector>
 
 static const char *TAG = "main";
@@ -89,6 +90,7 @@ static TouchSensorComponent touch_sensor_component;
 static RgbLedComponent rgb_led_component;
 #endif
 static WebServerComponent web_server_component;
+static OtaUpdateComponent ota_component;
 
 extern "C" void app_main(void)
 {
@@ -136,6 +138,7 @@ extern "C" void app_main(void)
 #endif
 
     component_graph->registerComponent(&web_server_component);
+    component_graph->registerComponent(&ota_component);
     
     // Initialize all components (graph handles setUpDependencies + initialize)
     component_graph->initializeAll();

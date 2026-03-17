@@ -66,6 +66,11 @@ def index(request):
     return render(request, 'dashboard/index.html', {'devices': devices})
 
 
+def logs_view(request):
+    """Log viewer - real-time ESP32 log output via Central Hub"""
+    return render(request, 'dashboard/logs.html', {'devices': devices})
+
+
 def add_device(request):
     """Add a new ESP32 device (just stores the IP/host info)"""
     if request.method == 'POST':

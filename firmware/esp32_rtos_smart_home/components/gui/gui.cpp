@@ -127,7 +127,7 @@ void GUIComponent::onInitialize() {
     // Add string parameter for button names (6 rows, 1 column) and store pointer
     buttonNames = addStringParam("button_names", NUM_BUTTONS, 1, "Button");
 
-    // Background color [R, G, B] — default black (0, 0, 0)
+    // Background color [R, G, B] - default black (0, 0, 0)
     bgColor = addIntParam("bg_color", 1, 3, 0, 255, 0);
     if (bgColor) {
         bgColor->setOnChange([this](size_t, size_t, int32_t) {
@@ -135,7 +135,7 @@ void GUIComponent::onInitialize() {
         });
     }
 
-    // Button colors [R, G, B] per button — default colors matching the hardcoded originals
+    // Button colors [R, G, B] per button - default colors matching the hardcoded originals
     // Layout: row=button index (0-5), col=channel (0=R, 1=G, 2=B)
     buttonColors = addIntParam("button_colors", NUM_BUTTONS, 3, 0, 255, 0);
     if (buttonColors) {
@@ -159,7 +159,7 @@ void GUIComponent::onInitialize() {
         buttonColors->setValue(5, 0, 0);   buttonColors->setValue(5, 1, 200);  buttonColors->setValue(5, 2, 0);
     }
     
-    // Button text colors [R, G, B] per button — default white (255, 255, 255)
+    // Button text colors [R, G, B] per button - default white (255, 255, 255)
     buttonTextColors = addIntParam("button_text_colors", NUM_BUTTONS, 3, 0, 255, 255);
     if (buttonTextColors) {
         buttonTextColors->setOnChange([this](size_t, size_t, int32_t) {
@@ -259,6 +259,10 @@ void GUIComponent::onInitialize() {
     panel_handle_ref = lcd_init();
     touch_handle_ref = touch_init();
     
+    ESP_LOGI(TAG, "HW init: lcd=%s touch=%s",
+             panel_handle_ref ? "OK" : "FAIL",
+             touch_handle_ref ? "OK" : "FAIL");
+    
     // Check if hardware is available
     if (!panel_handle_ref) {
         ESP_LOGW(TAG, "LCD hardware not available - GUI will run in headless mode");
@@ -287,6 +291,9 @@ void GUIComponent::onInitialize() {
     }
     if (touch_handle_ref) {
         gpio_isr_handler_add(TOUCH_IRQ_GPIO, GUIComponent::touch_irq_handler, NULL);
+        ESP_LOGI(TAG, "Touch IRQ on GPIO %d: ISR installed", TOUCH_IRQ_GPIO);
+    } else {
+        ESP_LOGW(TAG, "Touch IRQ SKIPPED - no touch handle");
     }
     
     // Initialize LVGL
@@ -329,6 +336,7 @@ void GUIComponent::onInitialize() {
     lvgl_indev_drv.read_cb = GUIComponent::lvgl_touch_read_cb;
     lvgl_indev_drv.user_data = this; // Store GUIComponent instance for callback
     lv_indev_drv_register(&lvgl_indev_drv);
+    ESP_LOGI(TAG, "LVGL indev registered: touch read_cb set");
     
     // Store the component instance BEFORE creating the LVGL task,
     // so the task doesn't see a null g_gui_component on startup.
@@ -752,6 +760,9 @@ void GUIComponent::simple_button_event_cb(lv_event_t* e) {
     // Get button index from user data
     int button_index = (int)(intptr_t)lv_event_get_user_data(e);
     
+    // Log the button press
+    ESP_LOGI(TAG, "BUTTON %d CLICKED", button_index);
+    
     // Pulse the button pressed state: set to true, notify subscribers
     // External systems can subscribe to this and react accordingly
     if (g_gui_component && g_gui_component->buttonPressed[button_index]) {
@@ -872,45 +883,63 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
     static uint16_t touchpad_y[1] = {0};
     static uint8_t touchpad_cnt = 0;
     static BoolParameter* lcd_screen_on_param = nullptr;
+    static uint32_t irq_count = 0;
+    static uint32_t last_log_tick = 0;
     
     // Initialize screen on parameter once
     if (!lcd_screen_on_param) {
         lcd_screen_on_param = getBoolParam("lcd_screen_on");
+        ESP_LOGI(TAG, "lcd_screen_on param: %s", lcd_screen_on_param ? "found" : "NULL");
     }
     
     // STATE MACHINE
     switch (state) {
         case IDLE: {
-            // Waiting for touch interrupt
+            // Use IRQ as a hint if available, otherwise fall back to direct polling.
+            // If PENIRQ is wired: irq_count will increment and level will read 0 on touch.
+            // If PENIRQ is broken/unwired: we still detect touch via direct poll every frame.
+            bool do_read = touch_irq_triggered;
             if (touch_irq_triggered) {
-                touch_irq_triggered = false;  // Clear flag immediately
-                
-                // Read touch controller
-                esp_lcd_touch_read_data(touch_handle_ref);
-                bool touched = esp_lcd_touch_get_coordinates(touch_handle_ref, touchpad_x, touchpad_y, NULL, &touchpad_cnt, 1);
-                
-                if (touched && touchpad_cnt > 0) {
-                    // Check if screen is off
-                    if (lcd_screen_on_param && !lcd_screen_on_param->getValue(0, 0)) {
-                        // Screen off - wake it up and block this touch gesture
-                        last_interaction_tick = xTaskGetTickCount();  // Wake screen by updating interaction time
-                        state = BLOCKED;
-                        data->state = LV_INDEV_STATE_RELEASED;
-                    } else {
-                        // Screen on - start tracking touch
-                        state = TOUCHING;
-                        last_interaction_tick = xTaskGetTickCount();
-                        data->state = LV_INDEV_STATE_PRESSED;
-                        data->point.x = touchpad_x[0];
-                        data->point.y = touchpad_y[0];
-                        GUIComponent::create_touch_feedback(touchpad_x[0], touchpad_y[0]);
-                    }
-                } else {
-                    // False alarm - stay IDLE
+                touch_irq_triggered = false;
+                irq_count++;
+            }
+
+            // Always poll - IRQ just saves us a SPI read on quiet frames
+            esp_lcd_touch_read_data(touch_handle_ref);
+            bool touched = esp_lcd_touch_get_coordinates(touch_handle_ref, touchpad_x, touchpad_y, NULL, &touchpad_cnt, 1);
+
+            if (touched && touchpad_cnt > 0) {
+                if (do_read) {
+                    ESP_LOGI(TAG, "IRQ #%lu: x=%d y=%d screen_on=%d",
+                             irq_count, touchpad_x[0], touchpad_y[0],
+                             lcd_screen_on_param ? lcd_screen_on_param->getValue(0, 0) : -1);
+                }
+                // Check if screen is off
+                if (lcd_screen_on_param && !lcd_screen_on_param->getValue(0, 0)) {
+                    // Screen off - wake it up and block this touch gesture
+                    last_interaction_tick = xTaskGetTickCount();
+                    state = BLOCKED;
                     data->state = LV_INDEV_STATE_RELEASED;
+                    ESP_LOGI(TAG, "BLOCKED - screen was off, waking");
+                } else {
+                    // Screen on - start tracking touch
+                    state = TOUCHING;
+                    last_interaction_tick = xTaskGetTickCount();
+                    data->state = LV_INDEV_STATE_PRESSED;
+                    data->point.x = touchpad_x[0];
+                    data->point.y = touchpad_y[0];
+                    GUIComponent::create_touch_feedback(touchpad_x[0], touchpad_y[0]);
+                    ESP_LOGI(TAG, "PRESSED at (%d,%d) -> TOUCHING (irq=%s)", touchpad_x[0], touchpad_y[0], do_read ? "yes" : "polled");
                 }
             } else {
-                // No interrupt, no touch
+                // No touch - log periodically to confirm polling is alive
+                uint32_t now = (uint32_t)(esp_timer_get_time() / 1000000);
+                if (now - last_log_tick >= 10) {
+                    last_log_tick = now;
+                    int gpio_level = gpio_get_level((gpio_num_t)TOUCH_IRQ_GPIO);
+                    ESP_LOGI(TAG, "touch poll alive: state=IDLE irqs=%lu IRQ_GPIO=%d level=%d",
+                             irq_count, TOUCH_IRQ_GPIO, gpio_level);
+                }
                 data->state = LV_INDEV_STATE_RELEASED;
             }
             break;
@@ -929,6 +958,7 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
                 data->point.y = touchpad_y[0];
             } else {
                 // Touch released - return to IDLE
+                ESP_LOGI(TAG, "RELEASED -> IDLE");
                 state = IDLE;
                 data->state = LV_INDEV_STATE_RELEASED;
             }
@@ -942,6 +972,7 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
             
             if (!still_touched || touchpad_cnt == 0) {
                 // Touch released - return to IDLE
+                ESP_LOGI(TAG, "BLOCKED touch released -> IDLE");
                 state = IDLE;
             }
             // Always report released to LVGL (touch blocked)
