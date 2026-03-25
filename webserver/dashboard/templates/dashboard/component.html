@@ -110,8 +110,131 @@
 
             <!-- Special controls for StepperMotor component -->
             <div id="stepper-motor-controls" class="special-controls" style="display:none;">
-                <h3>🎛️ Manual Jog Control</h3>
-                <p class="help-text">Manually jog each motor to home position. Hold buttons to move motors. Release when limit switch triggers.</p>
+                <h3>🎛️ Stepper Motor Control</h3>
+                
+                <!-- State Banner -->
+                <div id="stepper-state-banner" style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px; padding: 12px 18px; background: #263238; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <span style="font-weight: 600; font-size: 15px;">State:</span>
+                    <span id="stepper-state-label" style="font-size: 15px; font-weight: 600; color: #4CAF50;">IDLE</span>
+                    <span style="margin-left: auto;"></span>
+                    <button id="stepper-estop-btn" onclick="triggerEStop()"
+                        style="padding: 8px 20px; border: 2px solid #f44336; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 700; background: #f44336; color: white; letter-spacing: 1px;">
+                        ⛔ E-STOP
+                    </button>
+                    <button id="stepper-estop-clear-btn" onclick="clearEStop()" style="display: none; padding: 8px 16px; border: 2px solid #FF9800; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; background: transparent; color: #FF9800;">
+                        Clear E-Stop
+                    </button>
+                </div>
+                
+                <!-- Error Display -->
+                <div id="stepper-error-banner" style="display: none; margin-bottom: 15px; padding: 12px 18px; background: #4a1515; border: 1px solid #f44336; border-radius: 8px; color: #ff8a80; font-size: 14px;">
+                    <strong>⚠️ Error:</strong> <span id="stepper-error-text"></span>
+                </div>
+                
+                <!-- Enable Drivers toggle -->
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color);">
+                    <span style="font-weight: 600; font-size: 15px;">⚡ Motor Drivers</span>
+                    <button id="stepper-enable-btn" onclick="toggleStepperDrivers()"
+                        style="padding: 8px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; background: #4CAF50; color: white; transition: background 0.2s;">
+                        Enable Drivers
+                    </button>
+                    <span id="stepper-enable-status" style="font-size: 13px; color: #999;">○ Disabled</span>
+                    <span style="margin-left: auto; font-size: 12px; color: #aaa;">Drivers must be enabled before jogging</span>
+                </div>
+                
+                <!-- Motor Settings -->
+                <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; cursor: pointer;" onclick="document.getElementById('stepper-settings-body').style.display = document.getElementById('stepper-settings-body').style.display === 'none' ? 'block' : 'none'">
+                        <span style="font-weight: 600; font-size: 15px;">⚙️ Motor Settings</span>
+                        <span style="font-size: 12px; color: #888;">▼ click to expand</span>
+                    </div>
+                    <div id="stepper-settings-body" style="display: none;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <!-- Jog Speed -->
+                            <div>
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                                    <label style="font-size: 13px; color: #aaa;">Jog Speed</label>
+                                    <select id="jog-unit-select" onchange="onJogUnitChange(this.value)"
+                                        style="padding: 2px 6px; font-size: 12px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: inherit;">
+                                        <option value="steps">steps/sec</option>
+                                        <option value="rpm" selected>RPM</option>
+                                        <option value="mms">mm/s</option>
+                                    </select>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="range" id="stepper-jog-speed" min="0.2" max="100" value="9.4" step="0.5"
+                                        style="flex: 1;"
+                                        oninput="onJogSliderInput(this.value)"
+                                        onchange="onJogSliderChange(this.value)">
+                                    <span id="stepper-jog-speed-val" style="font-family: monospace; min-width: 75px; text-align: right;">9.4 RPM</span>
+                                </div>
+                            </div>
+                            <!-- Jog Acceleration -->
+                            <div>
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                                    <label style="font-size: 13px; color: #aaa;">Jog Acceleration</label>
+                                    <span id="jog-accel-unit-label" style="font-size: 12px; color: #888;">RPM/s</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="range" id="stepper-jog-accel" min="0.5" max="500" value="18.8" step="0.5"
+                                        style="flex: 1;"
+                                        oninput="onJogAccelSliderInput(this.value)"
+                                        onchange="onJogAccelSliderChange(this.value)">
+                                    <span id="stepper-jog-accel-val" style="font-family: monospace; min-width: 75px; text-align: right;">18.8 RPM/s</span>
+                                </div>
+                            </div>
+                            <!-- Microstepping -->
+                            <div>
+                                <label style="font-size: 13px; color: #aaa; display: block; margin-bottom: 4px;">Microstepping</label>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <select id="stepper-microstep" onchange="sendStepperSetting('microstepping', parseInt(this.value))"
+                                        style="flex: 1; padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: inherit; font-size: 14px;">
+                                        <option value="1">Full step (1)</option>
+                                        <option value="2">1/2 step</option>
+                                        <option value="4">1/4 step</option>
+                                        <option value="8">1/8 step</option>
+                                        <option value="16" selected>1/16 step</option>
+                                        <option value="32">1/32 step</option>
+                                    </select>
+                                    <span id="stepper-microstep-configurable" style="font-size: 11px; color: #888;"></span>
+                                </div>
+                            </div>
+                            <!-- Backoff Distance -->
+                            <div>
+                                <label style="font-size: 13px; color: #aaa; display: block; margin-bottom: 4px;">Limit Backoff (steps)</label>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="range" id="stepper-backoff" min="10" max="200" value="50" step="5"
+                                        style="flex: 1;" oninput="document.getElementById('stepper-backoff-val').textContent=this.value"
+                                        onchange="sendStepperSetting('backoffDistance', parseInt(this.value))">
+                                    <span id="stepper-backoff-val" style="font-family: monospace; min-width: 35px; text-align: right;">50</span>
+                                </div>
+                            </div>
+                            <!-- Max RPM -->
+                            <div>
+                                <label style="font-size: 13px; color: #aaa; display: block; margin-bottom: 4px;">Max RPM</label>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="range" id="stepper-max-rpm" min="1" max="3000" value="1200" step="10"
+                                        style="flex: 1;" oninput="document.getElementById('stepper-max-rpm-val').textContent=this.value"
+                                        onchange="sendStepperSetting('maxRpm', parseInt(this.value))">
+                                    <span id="stepper-max-rpm-val" style="font-family: monospace; min-width: 45px; text-align: right;">1200</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- ISR Rate (read-only) -->
+                        <div style="margin-top: 10px; padding: 8px 12px; background: #1a1a2e; border-radius: 4px; font-size: 12px; color: #888; display: flex; gap: 20px; align-items: center;">
+                            <span>ISR Rate: <span id="stepper-isr-rate" style="font-family: monospace; color: #4CAF50;">—</span> Hz</span>
+                            <span style="display: flex; align-items: center; gap: 6px;">
+                                Spool Radius:
+                                <input type="number" id="stepper-spool-radius" min="5" max="100" value="15" step="0.5"
+                                    style="width: 60px; padding: 2px 4px; font-size: 12px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--bg-primary); color: inherit; font-family: monospace;"
+                                    onchange="onSpoolRadiusChange(this.value)">
+                                mm
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <p class="help-text">Hold jog buttons to move motors. Release when limit switch triggers.</p>
                 
                 <div id="stepper-jog-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom: 20px;">
                     <!-- Motor cards will be inserted here by JavaScript -->
@@ -852,10 +975,23 @@
         // STEPPER MOTOR FUNCTIONS
         // ========================================
         
+        const STATE_NAMES = ['IDLE', 'PRECOMPUTING', 'HOMING', 'ARMED', 'PLAYING', 'E_STOP'];
+        const STATE_COLORS = ['#4CAF50', '#FF9800', '#2196F3', '#9C27B0', '#f44336'];
+        
         let stepperMotorState = {
             motorHomed: [false, false, false, false],
             motorPositions: [0, 0, 0, 0],
-            updateInterval: null
+            limitMinState: [false, false, false, false],
+            limitMaxState: [false, false, false, false],
+            driversEnabled: false,
+            playbackState: 0,
+            errorMessage: '',
+            jogSpeed: 500,
+            jogAcceleration: 1000,
+            microstepping: 16,
+            spoolRadius: 0.015,
+            paramIds: {},
+            stepperSubs: [],
         };
         
         function initStepperMotorJog(ws, component) {
@@ -889,8 +1025,6 @@
                     <div style="display: flex; gap: 10px; margin-bottom: 12px;">
                         <button 
                             class="stepper-jog-btn retract" 
-                            data-motor="${motorId}"
-                            data-direction="-1"
                             style="flex: 1; padding: 20px; font-size: 16px; font-weight: 600; border: 2px solid #2196F3; background: white; border-radius: 6px; cursor: pointer; user-select: none;"
                             onmousedown="startStepperJog(${motorId}, -1)"
                             onmouseup="stopStepperJog(${motorId})"
@@ -901,8 +1035,6 @@
                         </button>
                         <button 
                             class="stepper-jog-btn payout" 
-                            data-motor="${motorId}"
-                            data-direction="1"
                             style="flex: 1; padding: 20px; font-size: 16px; font-weight: 600; border: 2px solid #2196F3; background: white; border-radius: 6px; cursor: pointer; user-select: none;"
                             onmousedown="startStepperJog(${motorId}, 1)"
                             onmouseup="stopStepperJog(${motorId})"
@@ -913,8 +1045,20 @@
                         </button>
                     </div>
                     
-                    <div id="motor-${motorId}-position" style="font-family: monospace; color: #666; font-size: 14px;">
-                        Position: 0 steps
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div id="motor-${motorId}-position" style="font-family: monospace; color: #666; font-size: 14px;">
+                            Position: 0 steps
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 11px; color: #888;">MIN</span>
+                            <span id="motor-${motorId}-limit-min-led"
+                                style="width: 13px; height: 13px; border-radius: 50%; background: #4CAF50; display: inline-block; transition: background 0.15s; flex-shrink: 0;"
+                                title="Min limit clear"></span>
+                            <span style="font-size: 11px; color: #888;">MAX</span>
+                            <span id="motor-${motorId}-limit-max-led"
+                                style="width: 13px; height: 13px; border-radius: 50%; background: #4CAF50; display: inline-block; transition: background 0.15s; flex-shrink: 0;"
+                                title="Max limit clear"></span>
+                        </div>
                     </div>
                 `;
                 
@@ -935,9 +1079,8 @@
             `;
             document.head.appendChild(style);
             
-            // Start polling for status updates
-            updateStepperMotorStatus();
-            stepperMotorState.updateInterval = setInterval(updateStepperMotorStatus, 1000);
+            // Subscribe to ALL stepper parameters for live push updates
+            initStepperSubscriptions();
         }
         
         async function startStepperJog(motorId, direction) {
@@ -947,6 +1090,17 @@
             }
             
             try {
+                // Auto-enable drivers on first jog if not already on
+                if (!stepperMotorState.driversEnabled) {
+                    await esp32ws.send({
+                        type: 'set_param',
+                        comp: 'StepperMotor',
+                        param: 'enableDrivers',
+                        row: 0, col: 0,
+                        value: true
+                    });
+                }
+                
                 await esp32ws.send({
                     type: 'set_param',
                     comp: 'StepperMotor',
@@ -977,70 +1131,6 @@
             }
         }
         
-        async function updateStepperMotorStatus() {
-            if (!esp32ws || !esp32ws.connected) return;
-            
-            try {
-                let homedCount = 0;
-                
-                for (let i = 0; i < 4; i++) {
-                    // Get homed status
-                    const homedResp = await esp32ws.send({
-                        type: 'get_param',
-                        comp: 'StepperMotor',
-                        param: `motor${i}Homed`,
-                        row: 0,
-                        col: 0
-                    });
-                    
-                    // Get position
-                    const posResp = await esp32ws.send({
-                        type: 'get_param',
-                        comp: 'StepperMotor',
-                        param: 'motorPositions',
-                        row: i,
-                        col: 0
-                    });
-                    
-                    const isHomed = homedResp.value;
-                    const position = posResp.value || 0;
-                    
-                    stepperMotorState.motorHomed[i] = isHomed;
-                    stepperMotorState.motorPositions[i] = position;
-                    
-                    // Update UI
-                    const statusEl = document.getElementById(`motor-${i}-status`);
-                    const posEl = document.getElementById(`motor-${i}-position`);
-                    
-                    if (statusEl) {
-                        statusEl.textContent = isHomed ? '✓ Homed' : 'Not Homed';
-                        statusEl.classList.toggle('homed', isHomed);
-                    }
-                    
-                    if (posEl) {
-                        posEl.textContent = `Position: ${position} steps`;
-                    }
-                    
-                    if (isHomed) homedCount++;
-                }
-                
-                // Update overall status
-                const statusText = document.getElementById('stepper-status-text');
-                if (statusText) {
-                    statusText.textContent = `${homedCount} motors homed. ${4 - homedCount} remaining.`;
-                }
-                
-                // Show/hide move-home button
-                const moveHomeSection = document.getElementById('stepper-move-home-section');
-                if (moveHomeSection) {
-                    moveHomeSection.style.display = (homedCount === 4) ? 'block' : 'none';
-                }
-                
-            } catch (e) {
-                console.error('Failed to update stepper status:', e);
-            }
-        }
-        
         async function moveSteppersToHome() {
             if (!esp32ws || !esp32ws.connected) {
                 showNotification('Connect to device first', 'error');
@@ -1052,14 +1142,529 @@
                     type: 'set_param',
                     comp: 'StepperMotor',
                     param: 'moveToHome',
-                    row: 0,
-                    col: 0,
+                    row: 0, col: 0,
                     value: true
                 });
                 showNotification('Moving motors to home position...', 'success');
             } catch (e) {
                 console.error('Failed to move to home:', e);
                 showNotification('Failed to move to home', 'error');
+            }
+        }
+        
+        async function toggleStepperDrivers() {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            const newVal = !stepperMotorState.driversEnabled;
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: 'enableDrivers',
+                    row: 0, col: 0,
+                    value: newVal
+                });
+            } catch (e) {
+                console.error('Failed to toggle drivers:', e);
+                showNotification('Failed to toggle motor drivers', 'error');
+            }
+        }
+        
+        async function triggerEStop() {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: 'eStopCommand',
+                    row: 0, col: 0,
+                    value: true
+                });
+            } catch (e) {
+                showNotification('Failed to send E-Stop', 'error');
+            }
+        }
+        
+        async function clearEStop() {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: 'eStopClear',
+                    row: 0, col: 0,
+                    value: true
+                });
+            } catch (e) {
+                showNotification('Failed to clear E-Stop', 'error');
+            }
+        }
+        
+        // ============================================================
+        // Subscribe to ALL stepper params — zero polling
+        // ============================================================
+        async function initStepperSubscriptions() {
+            if (!esp32ws || !esp32ws.connected) return;
+            
+            try {
+                const resp = await esp32ws.send({ type: 'get_component_params', comp: 'StepperMotor' });
+                const params = resp.params || [];
+                const paramIds = {};
+                for (const p of params) {
+                    paramIds[p.name] = p;
+                }
+                stepperMotorState.paramIds = paramIds;
+                
+                // Helper: subscribe and track
+                async function sub(name, row, col) {
+                    const info = paramIds[name];
+                    if (!info) return undefined;
+                    const val = await esp32ws.subscribeById(info.id, row, col);
+                    // Track ONLY in stepperSubs — NOT in activeSubscriptions.
+                    // activeSubscriptions is cleared by renderCurrentPage() whenever the
+                    // parameter table changes pages, which would nuke these subscriptions.
+                    stepperMotorState.stepperSubs.push({ param_id: info.id, row, col });
+                    return val;
+                }
+                
+                // limitMinState (1×4) and limitMaxState (1×4)
+                for (let col = 0; col < 4; col++) {
+                    const minVal = await sub('limitMinState', 0, col);
+                    stepperMotorState.limitMinState[col] = minVal;
+                    updateLimitLedUI(col, minVal, false);
+                    
+                    const maxVal = await sub('limitMaxState', 0, col);
+                    stepperMotorState.limitMaxState[col] = maxVal;
+                    updateLimitLedUI(col, maxVal, true);
+                }
+                
+                // enableDrivers (1×1)
+                const enableVal = await sub('enableDrivers', 0, 0);
+                stepperMotorState.driversEnabled = enableVal;
+                updateEnableButtonUI(enableVal);
+                
+                // state (1×1)
+                const stateVal = await sub('state', 0, 0);
+                stepperMotorState.playbackState = stateVal;
+                updateStateUI(stateVal);
+                
+                // errorMessage (1×1)
+                const errVal = await sub('errorMessage', 0, 0);
+                updateErrorUI(errVal);
+                
+                // motorPositions (4 rows × 1 col)
+                for (let row = 0; row < 4; row++) {
+                    const val = await sub('motorPositions', row, 0);
+                    stepperMotorState.motorPositions[row] = val || 0;
+                    updatePositionUI(row, val || 0);
+                }
+                
+                // motor{0..3}Homed (each 1×1)
+                for (let i = 0; i < 4; i++) {
+                    const val = await sub(`motor${i}Homed`, 0, 0);
+                    stepperMotorState.motorHomed[i] = val;
+                    updateHomedUI(i, val);
+                }
+                
+                // jogSpeed (1×1)
+                const jogSpeedVal = await sub('jogSpeed', 0, 0);
+                updateSettingUI('jogSpeed', jogSpeedVal);
+                // jogAcceleration (1×1)
+                const jogAccelVal = await sub('jogAcceleration', 0, 0);
+                updateSettingUI('jogAcceleration', jogAccelVal);
+                
+                // backoffDistance (1×1)
+                const backoffVal = await sub('backoffDistance', 0, 0);
+                updateSettingUI('backoffDistance', backoffVal);
+                
+                // maxRpm (1×1)
+                const rpmVal = await sub('maxRpm', 0, 0);
+                updateSettingUI('maxRpm', rpmVal);
+                
+                // microstepping (1×1)
+                const msVal = await sub('microstepping', 0, 0);
+                updateSettingUI('microstepping', msVal);
+                
+                // isrRateHz (1×1, read-only)
+                const isrVal = await sub('isrRateHz', 0, 0);
+                updateSettingUI('isrRateHz', isrVal);
+                
+                // microsteppingConfigurable (1×1, read-only)
+                const msConfigVal = await sub('microsteppingConfigurable', 0, 0);
+                updateSettingUI('microsteppingConfigurable', msConfigVal);
+                
+                // spoolRadius (1×1)
+                const spoolVal = await sub('spoolRadius', 0, 0);
+                updateSettingUI('spoolRadius', spoolVal);
+                
+                // Update aggregate status from initial values
+                updateHomingStatusUI();
+                
+                // Listen for push updates
+                window.removeEventListener('esp32-push', handleStepperPush);
+                window.addEventListener('esp32-push', handleStepperPush);
+                
+            } catch (e) {
+                console.error('Failed to init stepper subscriptions:', e);
+            }
+        }
+        
+        // ============================================================
+        // Push handler — routes every param update to the right UI
+        // ============================================================
+        function handleStepperPush(event) {
+            const data = event.detail;
+            if (data.type !== 'param_update') return;
+            
+            const { param_id, row, col, value } = data;
+            const ids = stepperMotorState.paramIds;
+            
+            // limitMinState
+            if (ids.limitMinState && param_id === ids.limitMinState.id) {
+                stepperMotorState.limitMinState[col] = value;
+                updateLimitLedUI(col, value, false);
+                return;
+            }
+            // limitMaxState
+            if (ids.limitMaxState && param_id === ids.limitMaxState.id) {
+                stepperMotorState.limitMaxState[col] = value;
+                updateLimitLedUI(col, value, true);
+                return;
+            }
+            
+            // enableDrivers
+            if (ids.enableDrivers && param_id === ids.enableDrivers.id) {
+                stepperMotorState.driversEnabled = value;
+                updateEnableButtonUI(value);
+                return;
+            }
+            
+            // state
+            if (ids.state && param_id === ids.state.id) {
+                stepperMotorState.playbackState = value;
+                updateStateUI(value);
+                return;
+            }
+            
+            // errorMessage
+            if (ids.errorMessage && param_id === ids.errorMessage.id) {
+                updateErrorUI(value);
+                return;
+            }
+            
+            // motorPositions
+            if (ids.motorPositions && param_id === ids.motorPositions.id) {
+                stepperMotorState.motorPositions[row] = value;
+                updatePositionUI(row, value);
+                return;
+            }
+            
+            // motor{0..3}Homed
+            for (let i = 0; i < 4; i++) {
+                const key = `motor${i}Homed`;
+                if (ids[key] && param_id === ids[key].id) {
+                    stepperMotorState.motorHomed[i] = value;
+                    updateHomedUI(i, value);
+                    updateHomingStatusUI();
+                    return;
+                }
+            }
+            
+            // Settings params
+            const settingNames = ['jogSpeed', 'jogAcceleration', 'backoffDistance', 'maxRpm', 'microstepping', 'isrRateHz', 'microsteppingConfigurable', 'spoolRadius'];
+            for (const name of settingNames) {
+                if (ids[name] && param_id === ids[name].id) {
+                    updateSettingUI(name, value);
+                    return;
+                }
+            }
+        }
+        
+        // ============================================================
+        // Send a stepper setting to the ESP32
+        // ============================================================
+        async function sendStepperSetting(paramName, value) {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: paramName,
+                    row: 0, col: 0,
+                    value: value
+                });
+            } catch (e) {
+                console.error(`Failed to set ${paramName}:`, e);
+                showNotification(`Failed to set ${paramName}`, 'error');
+            }
+        }
+        
+        // ============================================================
+        // Update settings UI from push or initial subscription
+        // ============================================================
+        function updateSettingUI(name, value) {
+            switch (name) {
+                case 'jogSpeed': {
+                    stepperMotorState.jogSpeed = value || 500;
+                    refreshJogSpeedDisplay();
+                    break;
+                }
+                case 'jogAcceleration': {
+                    stepperMotorState.jogAcceleration = value || 1000;
+                    refreshJogAccelDisplay();
+                    break;
+                }
+                case 'backoffDistance': {
+                    const slider = document.getElementById('stepper-backoff');
+                    const label = document.getElementById('stepper-backoff-val');
+                    if (slider) slider.value = value;
+                    if (label) label.textContent = value;
+                    break;
+                }
+                case 'maxRpm': {
+                    const slider = document.getElementById('stepper-max-rpm');
+                    const label = document.getElementById('stepper-max-rpm-val');
+                    if (slider) slider.value = value;
+                    if (label) label.textContent = value;
+                    break;
+                }
+                case 'microstepping': {
+                    stepperMotorState.microstepping = value || 16;
+                    const select = document.getElementById('stepper-microstep');
+                    if (select) select.value = value;
+                    refreshJogSpeedDisplay();  // Recompute display since totalStepsPerRev changed
+                    break;
+                }
+                case 'isrRateHz': {
+                    const el = document.getElementById('stepper-isr-rate');
+                    if (el) el.textContent = value ? value.toLocaleString() : '—';
+                    break;
+                }
+                case 'microsteppingConfigurable': {
+                    const el = document.getElementById('stepper-microstep-configurable');
+                    const select = document.getElementById('stepper-microstep');
+                    if (el) el.textContent = value ? '' : '(hardware fixed)';
+                    if (select) select.disabled = !value;
+                    break;
+                }
+                case 'spoolRadius': {
+                    stepperMotorState.spoolRadius = value || 0.015;
+                    const inp = document.getElementById('stepper-spool-radius');
+                    if (inp) inp.value = (stepperMotorState.spoolRadius * 1000).toFixed(1);
+                    refreshJogSpeedDisplay();
+                    break;
+                }
+            }
+        }
+        
+        // ============================================================
+        // Jog speed unit conversion helpers
+        // ============================================================
+        function getJogUnitConfig(unit) {
+            if (unit === 'rpm') return { min: 0.2,  max: 150,  step: 0.5, suffix: 'RPM',     decimals: 1 };
+            if (unit === 'mms') return { min: 0.5,  max: 200,  step: 0.5, suffix: 'mm/s',    decimals: 1 };
+            return                       { min: 10,   max: 5000, step: 10,  suffix: 'steps/s', decimals: 0 };
+        }
+        
+        function stepsToUnit(stepsPerSec, unit) {
+            const totalSteps = 200 * (stepperMotorState.microstepping || 16);
+            const circ = 2 * Math.PI * (stepperMotorState.spoolRadius || 0.015);
+            if (unit === 'rpm') return (stepsPerSec * 60) / totalSteps;
+            if (unit === 'mms') return (stepsPerSec / totalSteps) * circ * 1000;
+            return stepsPerSec;
+        }
+        
+        function unitToSteps(val, unit) {
+            const totalSteps = 200 * (stepperMotorState.microstepping || 16);
+            const circ = 2 * Math.PI * (stepperMotorState.spoolRadius || 0.015);
+            if (unit === 'rpm') return Math.round((val * totalSteps) / 60);
+            if (unit === 'mms') return Math.round((val / 1000 / circ) * totalSteps);
+            return Math.round(val);
+        }
+        
+        function refreshJogSpeedDisplay() {
+            const unit = document.getElementById('jog-unit-select')?.value || 'rpm';
+            const cfg = getJogUnitConfig(unit);
+            const displayVal = stepsToUnit(stepperMotorState.jogSpeed, unit);
+            const slider = document.getElementById('stepper-jog-speed');
+            const label = document.getElementById('stepper-jog-speed-val');
+            if (slider) {
+                slider.min = cfg.min; slider.max = cfg.max; slider.step = cfg.step;
+                slider.value = displayVal.toFixed(cfg.decimals);
+            }
+            if (label) label.textContent = `${displayVal.toFixed(cfg.decimals)} ${cfg.suffix}`;
+        }
+        
+        function onJogUnitChange(unit) {
+            const cfg = getJogUnitConfig(unit);
+            const displayVal = stepsToUnit(stepperMotorState.jogSpeed, unit);
+            const slider = document.getElementById('stepper-jog-speed');
+            const label = document.getElementById('stepper-jog-speed-val');
+            if (slider) {
+                slider.min = cfg.min; slider.max = cfg.max; slider.step = cfg.step;
+                slider.value = displayVal.toFixed(cfg.decimals);
+            }
+            if (label) label.textContent = `${displayVal.toFixed(cfg.decimals)} ${cfg.suffix}`;
+            // Also refresh acceleration display since the unit suffix changes
+            refreshJogAccelDisplay();
+        }
+        
+        function onJogSliderInput(val) {
+            const unit = document.getElementById('jog-unit-select')?.value || 'rpm';
+            const cfg = getJogUnitConfig(unit);
+            const label = document.getElementById('stepper-jog-speed-val');
+            if (label) label.textContent = `${parseFloat(val).toFixed(cfg.decimals)} ${cfg.suffix}`;
+        }
+        
+        async function onJogSliderChange(val) {
+            const unit = document.getElementById('jog-unit-select')?.value || 'rpm';
+            const stepsPerSec = unitToSteps(parseFloat(val), unit);
+            stepperMotorState.jogSpeed = stepsPerSec;
+            await sendStepperSetting('jogSpeed', stepsPerSec);
+        }
+        
+        async function onSpoolRadiusChange(mm) {
+            const meters = parseFloat(mm) / 1000;
+            stepperMotorState.spoolRadius = meters;
+            refreshJogSpeedDisplay();
+            refreshJogAccelDisplay();
+            await sendStepperSetting('spoolRadius', meters);
+        }
+
+        // ============================================================
+        // Jog acceleration helpers (shares the same unit as jog speed)
+        // ============================================================
+        function getJogAccelUnitConfig(unit) {
+            // Acceleration unit = jog-speed-unit per second
+            if (unit === 'rpm')   return { min: 0.5,  max: 1000,  step: 0.5,  suffix: 'RPM/s',   decimals: 1 };
+            if (unit === 'mms')   return { min: 1,    max: 5000,  step: 1,    suffix: 'mm/s²',   decimals: 0 };
+            return                        { min: 10,   max: 100000, step: 10,  suffix: 'steps/s²', decimals: 0 };
+        }
+
+        function refreshJogAccelDisplay() {
+            const unit = document.getElementById('jog-unit-select')?.value || 'rpm';
+            const cfg  = getJogAccelUnitConfig(unit);
+            // Acceleration in display units = same conversion factor as speed
+            const displayVal = stepsToUnit(stepperMotorState.jogAcceleration, unit);
+            const slider = document.getElementById('stepper-jog-accel');
+            const label  = document.getElementById('stepper-jog-accel-val');
+            const unitEl = document.getElementById('jog-accel-unit-label');
+            if (slider) {
+                slider.min = cfg.min; slider.max = cfg.max; slider.step = cfg.step;
+                slider.value = displayVal.toFixed(cfg.decimals);
+            }
+            if (label)  label.textContent  = `${displayVal.toFixed(cfg.decimals)} ${cfg.suffix}`;
+            if (unitEl) unitEl.textContent  = cfg.suffix;
+        }
+
+        function onJogAccelSliderInput(val) {
+            const unit = document.getElementById('jog-unit-select')?.value || 'rpm';
+            const cfg  = getJogAccelUnitConfig(unit);
+            const label = document.getElementById('stepper-jog-accel-val');
+            if (label) label.textContent = `${parseFloat(val).toFixed(cfg.decimals)} ${cfg.suffix}`;
+        }
+
+        async function onJogAccelSliderChange(val) {
+            const unit = document.getElementById('jog-unit-select')?.value || 'rpm';
+            const stepsPerSec2 = unitToSteps(parseFloat(val), unit);  // same factor as speed
+            stepperMotorState.jogAcceleration = stepsPerSec2;
+            await sendStepperSetting('jogAcceleration', stepsPerSec2);
+        }
+        
+        // ============================================================
+        // Individual UI update functions
+        // ============================================================
+        function updateEnableButtonUI(enabled) {
+            const btn = document.getElementById('stepper-enable-btn');
+            const status = document.getElementById('stepper-enable-status');
+            if (btn) {
+                btn.textContent = enabled ? 'Disable Drivers' : 'Enable Drivers';
+                btn.style.background = enabled ? '#f44336' : '#4CAF50';
+            }
+            if (status) {
+                status.textContent = enabled ? '● Enabled' : '○ Disabled';
+                status.style.color = enabled ? '#4CAF50' : '#999';
+                status.style.fontWeight = enabled ? '600' : 'normal';
+            }
+        }
+        
+        function updateLimitLedUI(motorId, triggered, isMax) {
+            const id = isMax ? `motor-${motorId}-limit-max-led` : `motor-${motorId}-limit-min-led`;
+            const led = document.getElementById(id);
+            if (led) {
+                led.style.background = triggered ? '#f44336' : '#4CAF50';
+                led.title = triggered
+                    ? `${isMax ? 'MAX' : 'MIN'} limit TRIGGERED`
+                    : `${isMax ? 'MAX' : 'MIN'} limit clear`;
+            }
+        }
+        
+        function updateStateUI(stateVal) {
+            const label = document.getElementById('stepper-state-label');
+            const clearBtn = document.getElementById('stepper-estop-clear-btn');
+            if (label) {
+                const name = STATE_NAMES[stateVal] || `UNKNOWN(${stateVal})`;
+                const color = STATE_COLORS[stateVal] || '#999';
+                label.textContent = name;
+                label.style.color = color;
+            }
+            // Show/hide E-Stop clear button
+            if (clearBtn) {
+                clearBtn.style.display = (stateVal === 5) ? 'inline-block' : 'none'; // 5 = E_STOP
+            }
+        }
+        
+        function updateErrorUI(errMsg) {
+            stepperMotorState.errorMessage = errMsg || '';
+            const banner = document.getElementById('stepper-error-banner');
+            const text = document.getElementById('stepper-error-text');
+            if (banner && text) {
+                if (errMsg && errMsg.length > 0) {
+                    text.textContent = errMsg;
+                    banner.style.display = 'block';
+                } else {
+                    banner.style.display = 'none';
+                }
+            }
+        }
+        
+        function updatePositionUI(motorId, position) {
+            const posEl = document.getElementById(`motor-${motorId}-position`);
+            if (posEl) {
+                posEl.textContent = `Position: ${position} steps`;
+            }
+        }
+        
+        function updateHomedUI(motorId, isHomed) {
+            const statusEl = document.getElementById(`motor-${motorId}-status`);
+            if (statusEl) {
+                statusEl.textContent = isHomed ? '✓ Homed' : 'Not Homed';
+                statusEl.classList.toggle('homed', isHomed);
+            }
+        }
+        
+        function updateHomingStatusUI() {
+            const homedCount = stepperMotorState.motorHomed.filter(Boolean).length;
+            
+            const statusText = document.getElementById('stepper-status-text');
+            if (statusText) {
+                statusText.textContent = `${homedCount} motors homed. ${4 - homedCount} remaining.`;
+            }
+            
+            const moveHomeSection = document.getElementById('stepper-move-home-section');
+            if (moveHomeSection) {
+                moveHomeSection.style.display = (homedCount === 4) ? 'block' : 'none';
             }
         }
     </script>

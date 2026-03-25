@@ -9,12 +9,11 @@ class ParameterUpdateConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         """Handle WebSocket connection"""
         await self.accept()
-        self.subscriptions = set()  # Track which device/component pairs we're subscribed to
+        self.subscriptions = set()
         print(f"[WS] Client connected: {self.channel_name}")
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection"""
-        # Leave all subscription groups
         for group_name in self.subscriptions:
             await self.channel_layer.group_discard(group_name, self.channel_name)
         print(f"[WS] Client disconnected: {self.channel_name}")
@@ -64,7 +63,6 @@ class ParameterUpdateConsumer(AsyncWebsocketConsumer):
 
     async def param_update(self, event):
         """Handle parameter update broadcast from channel layer"""
-        # Forward the update to the WebSocket client
         await self.send(text_data=json.dumps({
             'type': 'param_update',
             'component': event['component'],
