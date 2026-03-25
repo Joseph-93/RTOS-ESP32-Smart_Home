@@ -89,13 +89,19 @@
 #define PIN_STEPPER_MS1             GPIO_NUM_27  // Microstepping select (shared)
 #define PIN_STEPPER_MS2             GPIO_NUM_14  // Microstepping select (shared)
 #define PIN_STEPPER_MS3             GPIO_NUM_12  // Microstepping select (shared)
-#define PIN_STEPPER_LIMIT0          GPIO_NUM_34  // Input only
-#define PIN_STEPPER_LIMIT1          GPIO_NUM_35  // Input only
-#define PIN_STEPPER_LIMIT2          GPIO_NUM_36  // Input only
-#define PIN_STEPPER_LIMIT3          GPIO_NUM_39  // Input only
+#define PIN_STEPPER_LIMIT_MIN0      GPIO_NUM_34  // Min (retract) limit, input only
+#define PIN_STEPPER_LIMIT_MIN1      GPIO_NUM_35  // Min (retract) limit, input only
+#define PIN_STEPPER_LIMIT_MIN2      GPIO_NUM_36  // Min (retract) limit, input only
+#define PIN_STEPPER_LIMIT_MIN3      GPIO_NUM_39  // Min (retract) limit, input only
+#define PIN_STEPPER_LIMIT_MAX0      GPIO_NUM_4   // Max (pay-out) limit, supports internal pullup
+#define PIN_STEPPER_LIMIT_MAX1      GPIO_NUM_5   // Max (pay-out) limit, supports internal pullup
+#define PIN_STEPPER_LIMIT_MAX2      GPIO_NUM_13  // Max (pay-out) limit, supports internal pullup
+#define PIN_STEPPER_LIMIT_MAX3      GPIO_NUM_33  // Max (pay-out) limit, supports internal pullup
 //
-// NOTE: Limit switch GPIOs (34-39) have no internal pullup.
-// External 10K pullup resistors to 3.3V required.
+// NOTE: Min limit GPIOs (34-39) have NO internal pullup.
+// External 10K pullup resistors to 3.3V required on min limit pins.
+// Max limit GPIOs (4, 5, 13, 33) use internal pullup (no external resistor needed).
+// All limit switches: active LOW (switch closes to GND when triggered).
 // NOTE: GPIO 12 (MS3) is a boot strapping pin - must be LOW at boot.
 // This is fine since 1/16 microstepping (default) sets MS3=HIGH after boot.
 
@@ -129,10 +135,14 @@
  * 27    | Motion Sensor    | ENABLE_MOTION_SENSOR
  * 32    | Door Sensor      | ENABLE_DOOR_SENSOR
  * 33    | LCD Backlight    | ENABLE_GUI
- * 34    | Motor 0 LIMIT    | ENABLE_STEPPER_MOTOR (input only)
- * 35    | Motor 1 LIMIT    | ENABLE_STEPPER_MOTOR (input only)
- * 36    | Light Sensor / M2 LIMIT | ENABLE_LIGHT_SENSOR / ENABLE_STEPPER_MOTOR
- * 39    | Motor 3 LIMIT    | ENABLE_STEPPER_MOTOR (input only)
+ *  4    | Motor 0 LIMIT MAX| ENABLE_STEPPER_MOTOR
+ *  5    | Motor 1 LIMIT MAX| ENABLE_STEPPER_MOTOR
+ * 13    | RGB LED / M2 MAX | ENABLE_RGB_LED / ENABLE_STEPPER_MOTOR
+ * 33    | LCD BL / M3 MAX  | ENABLE_GUI / ENABLE_STEPPER_MOTOR
+ * 34    | Motor 0 LIMIT MIN| ENABLE_STEPPER_MOTOR (input only)
+ * 35    | Motor 1 LIMIT MIN| ENABLE_STEPPER_MOTOR (input only)
+ * 36    | Light Sensor / M2 MIN | ENABLE_LIGHT_SENSOR / ENABLE_STEPPER_MOTOR
+ * 39    | Motor 3 LIMIT MIN| ENABLE_STEPPER_MOTOR (input only)
  *
  * Floating Candle build: ONLY heartbeat + webserver + stepper_motor enabled.
  * No conflicts with GUI, touch sensor, or other components.

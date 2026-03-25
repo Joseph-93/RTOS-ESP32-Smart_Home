@@ -6,7 +6,8 @@
 // Static constexpr member definitions (required for ODR-use in C++14)
 constexpr gpio_num_t A4988StepperMotorHAL::STEP_PINS[];
 constexpr gpio_num_t A4988StepperMotorHAL::DIR_PINS[];
-constexpr gpio_num_t A4988StepperMotorHAL::LIMIT_PINS[];
+constexpr gpio_num_t A4988StepperMotorHAL::LIMIT_MIN_PINS[];
+constexpr gpio_num_t A4988StepperMotorHAL::LIMIT_MAX_PINS[];
 
 // ============================================================================
 // Constructor / Destructor
@@ -73,7 +74,7 @@ esp_err_t A4988StepperMotorHAL::init() {
     
     // Configure ENABLE pin as output (shared for all motors)
     gpio_config_t enable_conf = {
-        .pin_bit_mask = (1ULL << A4988_ENABLE_PIN),
+        .pin_bit_mask = (1ULL << PIN_STEPPER_ENABLE),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -84,12 +85,12 @@ esp_err_t A4988StepperMotorHAL::init() {
         ESP_LOGE(TAG, "Failed to configure ENABLE pin: %d", err);
         return err;
     }
-    gpio_set_level(A4988_ENABLE_PIN, 1);  // Start DISABLED (HIGH = disabled for A4988)
-    ESP_LOGI(TAG, "ENABLE pin: GPIO%d (starting disabled)", A4988_ENABLE_PIN);
+    gpio_set_level(PIN_STEPPER_ENABLE, 1);  // Start DISABLED (HIGH = disabled for A4988)
+    ESP_LOGI(TAG, "ENABLE pin: GPIO%d (starting disabled)", PIN_STEPPER_ENABLE);
     
     // Configure MS1/MS2/MS3 pins as outputs (shared microstepping control)
     gpio_config_t ms_conf = {
-        .pin_bit_mask = (1ULL << A4988_MS1_PIN) | (1ULL << A4988_MS2_PIN) | (1ULL << A4988_MS3_PIN),
+        .pin_bit_mask = (1ULL << PIN_STEPPER_MS1) | (1ULL << PIN_STEPPER_MS2) | (1ULL << PIN_STEPPER_MS3),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -104,14 +105,14 @@ esp_err_t A4988StepperMotorHAL::init() {
     // Set default microstepping (1/16)
     applyMicrosteppingPins(currentMicrostepping);
     ESP_LOGI(TAG, "MS pins: MS1=GPIO%d, MS2=GPIO%d, MS3=GPIO%d (default 1/%d)", 
-             A4988_MS1_PIN, A4988_MS2_PIN, A4988_MS3_PIN, currentMicrostepping);
+             PIN_STEPPER_MS1, PIN_STEPPER_MS2, PIN_STEPPER_MS3, currentMicrostepping);
     
-    // Configure LIMIT switch pins as inputs
+    // Configure MIN LIMIT switch pins as inputs
     // GPIO 34-39 are input-only and don't have internal pullups
-    // External pullup resistors required (10K to 3.3V typical)
+    // External pullup resistors required (10K to 3.3V)
     for (int i = 0; i < NUM_MOTORS; i++) {
         gpio_config_t limit_conf = {
-            .pin_bit_mask = (1ULL << LIMIT_PINS[i]),
+            .pin_bit_mask = (1ULL << LIMIT_MIN_PINS[i]),
             .mode = GPIO_MODE_INPUT,
             .pull_up_en = GPIO_PULLUP_DISABLE,  // No internal pullup on 34-39
             .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -119,26 +120,43 @@ esp_err_t A4988StepperMotorHAL::init() {
         };
         err = gpio_config(&limit_conf);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to configure LIMIT pin %d: %d", LIMIT_PINS[i], err);
+            ESP_LOGE(TAG, "Failed to configure LIMIT_MIN pin %d: %d", LIMIT_MIN_PINS[i], err);
             return err;
         }
-        
-        ESP_LOGD(TAG, "Motor %d LIMIT pin: GPIO%d", i, LIMIT_PINS[i]);
+        ESP_LOGD(TAG, "Motor %d LIMIT_MIN pin: GPIO%d", i, LIMIT_MIN_PINS[i]);
+    }
+    
+    // Configure MAX LIMIT switch pins as inputs with internal pullup
+    // GPIOs 4, 5, 13, 33 support internal pullup — no external resistor needed
+    for (int i = 0; i < NUM_MOTORS; i++) {
+        gpio_config_t limit_max_conf = {
+            .pin_bit_mask = (1ULL << LIMIT_MAX_PINS[i]),
+            .mode = GPIO_MODE_INPUT,
+            .pull_up_en = GPIO_PULLUP_ENABLE,   // Internal pullup — active LOW
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE
+        };
+        err = gpio_config(&limit_max_conf);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to configure LIMIT_MAX pin %d: %d", LIMIT_MAX_PINS[i], err);
+            return err;
+        }
+        ESP_LOGD(TAG, "Motor %d LIMIT_MAX pin: GPIO%d", i, LIMIT_MAX_PINS[i]);
     }
     
     initialized = true;
     
     ESP_LOGI(TAG, "A4988 HAL initialized successfully");
     ESP_LOGI(TAG, "Pin assignment:");
-    ESP_LOGI(TAG, "  Motor 0: STEP=GPIO%d, DIR=GPIO%d, LIMIT=GPIO%d", 
-             STEP_PINS[0], DIR_PINS[0], LIMIT_PINS[0]);
-    ESP_LOGI(TAG, "  Motor 1: STEP=GPIO%d, DIR=GPIO%d, LIMIT=GPIO%d", 
-             STEP_PINS[1], DIR_PINS[1], LIMIT_PINS[1]);
-    ESP_LOGI(TAG, "  Motor 2: STEP=GPIO%d, DIR=GPIO%d, LIMIT=GPIO%d", 
-             STEP_PINS[2], DIR_PINS[2], LIMIT_PINS[2]);
-    ESP_LOGI(TAG, "  Motor 3: STEP=GPIO%d, DIR=GPIO%d, LIMIT=GPIO%d", 
-             STEP_PINS[3], DIR_PINS[3], LIMIT_PINS[3]);
-    ESP_LOGI(TAG, "  ENABLE (shared): GPIO%d", A4988_ENABLE_PIN);
+    ESP_LOGI(TAG, "  Motor 0: STEP=GPIO%d, DIR=GPIO%d, LIMIT_MIN=GPIO%d, LIMIT_MAX=GPIO%d", 
+             STEP_PINS[0], DIR_PINS[0], LIMIT_MIN_PINS[0], LIMIT_MAX_PINS[0]);
+    ESP_LOGI(TAG, "  Motor 1: STEP=GPIO%d, DIR=GPIO%d, LIMIT_MIN=GPIO%d, LIMIT_MAX=GPIO%d", 
+             STEP_PINS[1], DIR_PINS[1], LIMIT_MIN_PINS[1], LIMIT_MAX_PINS[1]);
+    ESP_LOGI(TAG, "  Motor 2: STEP=GPIO%d, DIR=GPIO%d, LIMIT_MIN=GPIO%d, LIMIT_MAX=GPIO%d", 
+             STEP_PINS[2], DIR_PINS[2], LIMIT_MIN_PINS[2], LIMIT_MAX_PINS[2]);
+    ESP_LOGI(TAG, "  Motor 3: STEP=GPIO%d, DIR=GPIO%d, LIMIT_MIN=GPIO%d, LIMIT_MAX=GPIO%d", 
+             STEP_PINS[3], DIR_PINS[3], LIMIT_MIN_PINS[3], LIMIT_MAX_PINS[3]);
+    ESP_LOGI(TAG, "  ENABLE (shared): GPIO%d", PIN_STEPPER_ENABLE);
     ESP_LOGI(TAG, "  Microstepping: 1/%d", currentMicrostepping);
     
     return ESP_OK;
@@ -148,18 +166,19 @@ void A4988StepperMotorHAL::deinit() {
     if (!initialized) return;
     
     // Disable motors
-    gpio_set_level(A4988_ENABLE_PIN, 1);  // HIGH = disabled
+    gpio_set_level(PIN_STEPPER_ENABLE, 1);  // HIGH = disabled
     
     // Reset all pins to default state
     for (int i = 0; i < NUM_MOTORS; i++) {
         gpio_reset_pin(STEP_PINS[i]);
         gpio_reset_pin(DIR_PINS[i]);
-        gpio_reset_pin(LIMIT_PINS[i]);
+        gpio_reset_pin(LIMIT_MIN_PINS[i]);
+        gpio_reset_pin(LIMIT_MAX_PINS[i]);
     }
-    gpio_reset_pin(A4988_ENABLE_PIN);
-    gpio_reset_pin(A4988_MS1_PIN);
-    gpio_reset_pin(A4988_MS2_PIN);
-    gpio_reset_pin(A4988_MS3_PIN);
+    gpio_reset_pin(PIN_STEPPER_ENABLE);
+    gpio_reset_pin(PIN_STEPPER_MS1);
+    gpio_reset_pin(PIN_STEPPER_MS2);
+    gpio_reset_pin(PIN_STEPPER_MS3);
     
     initialized = false;
     ESP_LOGI(TAG, "A4988 HAL deinitialized");
@@ -223,17 +242,21 @@ void A4988StepperMotorHAL::setEnabled(uint8_t motor_index, bool enabled) {
     // motor_index == 0xFF means all motors
     
     if (motor_index == 0xFF || motor_index < NUM_MOTORS) {
-        gpio_set_level(A4988_ENABLE_PIN, enabled ? 0 : 1);
+        gpio_set_level(PIN_STEPPER_ENABLE, enabled ? 0 : 1);
         ESP_LOGD(TAG, "Motors %s", enabled ? "ENABLED" : "DISABLED");
     }
 }
 
 bool IRAM_ATTR A4988StepperMotorHAL::isLimitTriggered(uint8_t motor_index) {
     if (motor_index >= NUM_MOTORS) return false;
-    
-    // Limit switches are active LOW (normally HIGH with pullup, LOW when triggered)
-    int level = gpio_get_level(LIMIT_PINS[motor_index]);
-    return (level == 0);
+    // Active LOW: LOW = triggered
+    return (gpio_get_level(LIMIT_MIN_PINS[motor_index]) == 0);
+}
+
+bool IRAM_ATTR A4988StepperMotorHAL::isMaxLimitTriggered(uint8_t motor_index) {
+    if (motor_index >= NUM_MOTORS) return false;
+    // Active LOW: LOW = triggered
+    return (gpio_get_level(LIMIT_MAX_PINS[motor_index]) == 0);
 }
 
 // ============================================================================
@@ -296,9 +319,9 @@ void A4988StepperMotorHAL::applyMicrosteppingPins(uint16_t divisor) {
             break;
     }
     
-    gpio_set_level(A4988_MS1_PIN, ms1 ? 1 : 0);
-    gpio_set_level(A4988_MS2_PIN, ms2 ? 1 : 0);
-    gpio_set_level(A4988_MS3_PIN, ms3 ? 1 : 0);
+    gpio_set_level(PIN_STEPPER_MS1, ms1 ? 1 : 0);
+    gpio_set_level(PIN_STEPPER_MS2, ms2 ? 1 : 0);
+    gpio_set_level(PIN_STEPPER_MS3, ms3 ? 1 : 0);
     
     ESP_LOGD(TAG, "MS pins set: MS1=%d, MS2=%d, MS3=%d (1/%d stepping)", 
              ms1, ms2, ms3, divisor);

@@ -2,6 +2,7 @@
 
 #include "stepper_motor.h"
 #include "driver/gpio.h"
+#include "pin_config.h"
 
 /**
  * A4988 Stepper Motor Driver HAL
@@ -42,37 +43,6 @@
  */
 
 // ============================================================================
-// Pin Definitions - ESP-WROOM-32 30-pin
-// ============================================================================
-
-// Motor step pins (directly toggle GPIO on rising edge)
-#define A4988_MOTOR0_STEP_PIN   GPIO_NUM_16
-#define A4988_MOTOR1_STEP_PIN   GPIO_NUM_18
-#define A4988_MOTOR2_STEP_PIN   GPIO_NUM_21
-#define A4988_MOTOR3_STEP_PIN   GPIO_NUM_23
-
-// Motor direction pins
-#define A4988_MOTOR0_DIR_PIN    GPIO_NUM_17
-#define A4988_MOTOR1_DIR_PIN    GPIO_NUM_19
-#define A4988_MOTOR2_DIR_PIN    GPIO_NUM_22
-#define A4988_MOTOR3_DIR_PIN    GPIO_NUM_25
-
-// Shared enable pin (active LOW - all 4 drivers wired together)
-#define A4988_ENABLE_PIN        GPIO_NUM_26
-
-// Microstepping select pins (shared across all 4 drivers)
-// Wire all 4x A4988 MS1 pins together to GPIO 27, etc.
-#define A4988_MS1_PIN           GPIO_NUM_27
-#define A4988_MS2_PIN           GPIO_NUM_14
-#define A4988_MS3_PIN           GPIO_NUM_12
-
-// Limit switch pins (input only GPIOs, active LOW)
-#define A4988_LIMIT0_PIN        GPIO_NUM_34
-#define A4988_LIMIT1_PIN        GPIO_NUM_35
-#define A4988_LIMIT2_PIN        GPIO_NUM_36
-#define A4988_LIMIT3_PIN        GPIO_NUM_39
-
-// ============================================================================
 // A4988 HAL Implementation
 // ============================================================================
 
@@ -92,7 +62,8 @@ public:
     void step(uint8_t motor_index) override;
     void stepMultiple(uint8_t motor_mask) override;
     void setEnabled(uint8_t motor_index, bool enabled) override;
-    bool isLimitTriggered(uint8_t motor_index) override;
+    bool isLimitTriggered(uint8_t motor_index) override;       // Min (retract) limit
+    bool isMaxLimitTriggered(uint8_t motor_index) override;    // Max (pay-out) limit
     
     uint8_t getMotorCount() const override { return NUM_MOTORS; }
     uint32_t getMinPulseWidthUs() const override { return MIN_PULSE_WIDTH_US; }
@@ -109,24 +80,31 @@ private:
     
     // Pin arrays for easy indexing
     static constexpr gpio_num_t STEP_PINS[NUM_MOTORS] = {
-        A4988_MOTOR0_STEP_PIN,
-        A4988_MOTOR1_STEP_PIN,
-        A4988_MOTOR2_STEP_PIN,
-        A4988_MOTOR3_STEP_PIN
+        PIN_STEPPER_MOTOR0_STEP,
+        PIN_STEPPER_MOTOR1_STEP,
+        PIN_STEPPER_MOTOR2_STEP,
+        PIN_STEPPER_MOTOR3_STEP
     };
     
     static constexpr gpio_num_t DIR_PINS[NUM_MOTORS] = {
-        A4988_MOTOR0_DIR_PIN,
-        A4988_MOTOR1_DIR_PIN,
-        A4988_MOTOR2_DIR_PIN,
-        A4988_MOTOR3_DIR_PIN
+        PIN_STEPPER_MOTOR0_DIR,
+        PIN_STEPPER_MOTOR1_DIR,
+        PIN_STEPPER_MOTOR2_DIR,
+        PIN_STEPPER_MOTOR3_DIR
     };
     
-    static constexpr gpio_num_t LIMIT_PINS[NUM_MOTORS] = {
-        A4988_LIMIT0_PIN,
-        A4988_LIMIT1_PIN,
-        A4988_LIMIT2_PIN,
-        A4988_LIMIT3_PIN
+    static constexpr gpio_num_t LIMIT_MIN_PINS[NUM_MOTORS] = {
+        PIN_STEPPER_LIMIT_MIN0,
+        PIN_STEPPER_LIMIT_MIN1,
+        PIN_STEPPER_LIMIT_MIN2,
+        PIN_STEPPER_LIMIT_MIN3
+    };
+    
+    static constexpr gpio_num_t LIMIT_MAX_PINS[NUM_MOTORS] = {
+        PIN_STEPPER_LIMIT_MAX0,
+        PIN_STEPPER_LIMIT_MAX1,
+        PIN_STEPPER_LIMIT_MAX2,
+        PIN_STEPPER_LIMIT_MAX3
     };
     
     bool initialized;
