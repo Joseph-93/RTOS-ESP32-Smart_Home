@@ -12,8 +12,8 @@ static const char *TAG = "WiFi";
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
-#define MAX_RETRY          10            // Initial fast-retry attempts before first connect
-#define RECONNECT_INTERVAL_MS  5000      // Delay between reconnect attempts after initial failure
+#define INITIAL_RETRY_INTERVAL_MS  2000   // Delay between retries during initial boot (AP may need time to start)
+#define RECONNECT_INTERVAL_MS      5000   // Delay between retries after a drop post-connection
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
@@ -84,28 +84,26 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         }
 
         if (!s_initial_connect_done) {
-            // During initial boot: fast retry up to MAX_RETRY, then signal failure
-            if (s_retry_num < MAX_RETRY) {
-                esp_wifi_connect();
-                s_retry_num++;
-                ESP_LOGI(TAG, "Retry connecting to AP (attempt %d/%d)", s_retry_num, MAX_RETRY);
+            // Initial boot: AP may not be ready yet (e.g. phone hotspot still starting).
+            // Signal WIFI_FAIL_BIT immediately so wifi_init_sta() unblocks and the rest of
+            // the system can start. The timer keeps retrying in the background.
+            s_retry_num++;
+            ESP_LOGW(TAG, "Initial connection attempt %d failed - retrying in %d ms",
+                     s_retry_num, INITIAL_RETRY_INTERVAL_MS);
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+            if (s_reconnect_timer) {
+                xTimerChangePeriod(s_reconnect_timer, pdMS_TO_TICKS(INITIAL_RETRY_INTERVAL_MS), 0);
             } else {
-                ESP_LOGE(TAG, "Initial connection failed after %d attempts - starting periodic reconnect", MAX_RETRY);
-                xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-                // Fall through to start the periodic reconnect timer
-                if (s_reconnect_timer) {
-                    xTimerStart(s_reconnect_timer, 0);
-                }
+                esp_wifi_connect();  // fallback: no timer, retry immediately
             }
         } else {
-            // After initial connection: always attempt reconnect on a timer
+            // Post-connect drop: retry on a longer interval
             ESP_LOGW(TAG, "WiFi disconnected - will retry every %d ms", RECONNECT_INTERVAL_MS);
             s_retry_num = 0;
             if (s_reconnect_timer) {
-                xTimerStart(s_reconnect_timer, 0);
+                xTimerChangePeriod(s_reconnect_timer, pdMS_TO_TICKS(RECONNECT_INTERVAL_MS), 0);
             } else {
-                // Fallback: immediate retry if timer somehow doesn't exist
-                esp_wifi_connect();
+                esp_wifi_connect();  // fallback: no timer, retry immediately
             }
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
