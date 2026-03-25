@@ -41,11 +41,11 @@ void WebServerComponent::onInitialize() {
     config.stack_size = 8192;  // Needs headroom for WebSocket handlers (base64 decode, JSON, etc.)
     config.max_req_hdr_len = 1024;  // Reduced from 2048 - WebSocket doesn't need large headers
     config.lru_purge_enable = true;
-    config.max_open_sockets = 2;  // Reduced from 3 - minimal concurrent connections
-    config.send_wait_timeout = 3;  // Shorter timeout
-    config.recv_wait_timeout = 3;
+    config.max_open_sockets = 7;  // Enough for central hub + browser + headroom
+    config.send_wait_timeout = 5;
+    config.recv_wait_timeout = 5;
     config.task_priority = 10;  // Higher priority to avoid starvation by WiFi tasks
-    
+
     if (httpd_start(&http_server, &config) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start HTTP server (heap: %lu)", esp_get_free_heap_size());
         return;
@@ -63,7 +63,7 @@ void WebServerComponent::onInitialize() {
     };
     httpd_register_uri_handler(http_server, &ws_uri);
     
-    ESP_LOGI(TAG, "WebSocket server started on port 80");
+    ESP_LOGI(TAG, "WebSocket server started on port 80 (heap: %lu)", esp_get_free_heap_size());
     
     // Create mutex for subscriptions map protection
     subscriptions_mutex = xSemaphoreCreateMutex();
@@ -226,12 +226,14 @@ Component* WebServerComponent::get_component(const char* name) {
 
 // WebSocket handler for real-time updates
 esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
+    int socket_fd = httpd_req_to_sockfd(req);
+
     if (req->method == HTTP_GET) {
+        // This is the initial WebSocket handshake (HTTP Upgrade)
+        ESP_LOGI("WebServer", "WebSocket client connected: socket %d (heap: %lu)",
+                 socket_fd, esp_get_free_heap_size());
         return ESP_OK;
     }
-    
-    // Get socket file descriptor for subscription tracking
-    int socket_fd = httpd_req_to_sockfd(req);
     
     httpd_ws_frame_t ws_pkt;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
@@ -240,7 +242,7 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
     // Get frame length
     esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
     if (ret != ESP_OK) {
-        ESP_LOGE("WebServer", "Failed to get WS frame length: %d", ret);
+        ESP_LOGE("WebServer", "recv_frame failed: err=%d socket=%d", ret, socket_fd);
         WebServerComponent* self = (WebServerComponent*)req->user_ctx;
         self->clear_subscriptions(socket_fd);
         return ret;
@@ -248,6 +250,7 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
     
     // Handle control frames (close, ping, pong)
     if (ws_pkt.type == HTTPD_WS_TYPE_CLOSE) {
+        ESP_LOGI("WebServer", "WebSocket client disconnected: socket %d", socket_fd);
         WebServerComponent* self = (WebServerComponent*)req->user_ctx;
         self->clear_subscriptions(socket_fd);
         return ESP_OK;
@@ -265,7 +268,7 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
             ws_pkt.payload = ping_payload;
             esp_err_t recv_ret = httpd_ws_recv_frame(req, &ws_pkt, ping_len);
             if (recv_ret != ESP_OK) {
-                ESP_LOGE("WebServer", "Failed to read PING payload: %d", recv_ret);
+                ESP_LOGE("WebServer", "PING recv failed: err=%d socket=%d", recv_ret, socket_fd);
                 return recv_ret;
             }
         }
@@ -320,7 +323,7 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
         WebServerComponent* self = (WebServerComponent*)req->user_ctx;
         cJSON* json = cJSON_Parse((const char*)ws_pkt.payload);
         if (!json) {
-            ESP_LOGE("WebServer", "Failed to parse WebSocket JSON");
+            ESP_LOGE("WebServer", "JSON parse failed from socket %d", socket_fd);
             const char* error_msg = "{\"error\":\"invalid JSON\"}";
             ws_pkt.payload = (uint8_t*)error_msg;
             ws_pkt.len = strlen(error_msg);
@@ -365,11 +368,13 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
             
             char* response_str = cJSON_PrintUnformatted(response);
             if (response_str) {
+                size_t resp_len = strlen(response_str);
+
                 // Use fresh frame struct for sending (avoid any corruption from received frame)
                 httpd_ws_frame_t send_pkt;
                 memset(&send_pkt, 0, sizeof(httpd_ws_frame_t));
                 send_pkt.payload = (uint8_t*)response_str;
-                send_pkt.len = strlen(response_str);
+                send_pkt.len = resp_len;
                 send_pkt.type = HTTPD_WS_TYPE_TEXT;
                 send_pkt.final = true;  // Explicitly mark as final frame
                 
@@ -378,12 +383,12 @@ esp_err_t WebServerComponent::ws_handler(httpd_req_t *req) {
                     ret = httpd_ws_send_frame(req, &send_pkt);
                     xSemaphoreGive(self->ws_send_mutex);
                 } else {
-                    ESP_LOGW("WebServer", "Send mutex timeout - dropping response");
+                    ESP_LOGE("WebServer", "Send mutex timeout socket=%d - dropping response", socket_fd);
                     ret = ESP_ERR_TIMEOUT;
                 }
                 
                 if (ret != ESP_OK) {
-                    ESP_LOGE("WebServer", "Failed to send WS frame: %d", ret);
+                    ESP_LOGE("WebServer", "send_frame failed: err=%d socket=%d", ret, socket_fd);
                 }
                 free(response_str);
             }
@@ -685,5 +690,6 @@ void WebServerComponent::purgeStaleConnections() {
     
     for (int fd : stale_sockets) {
         clear_subscriptions(fd);
+        ESP_LOGI(TAG, "Purged stale WebSocket connection: socket %d", fd);
     }
 }

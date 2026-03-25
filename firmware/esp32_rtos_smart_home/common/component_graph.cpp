@@ -748,14 +748,25 @@ void ComponentGraph::persistenceTimerCallback(TimerHandle_t timer) {
 }
 
 void ComponentGraph::saveDirtyParameters() {
+    // Snapshot components to avoid holding mutex during NVS I/O
+    // (ESP_LOG inside NVS ops → log hook → getComponent → mutex deadlock)
+    std::vector<std::pair<std::string, Component*>> components_snapshot;
+    
     if (xSemaphoreTake(componentsMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         ESP_LOGW(TAG, "Could not acquire mutex for persistence save");
         return;
     }
     
+    components_snapshot.reserve(componentsByName.size());
+    for (auto& pair : componentsByName) {
+        components_snapshot.push_back(pair);
+    }
+    
+    xSemaphoreGive(componentsMutex);  // Release BEFORE NVS operations!
+    
     int totalSaved = 0;
     
-    for (const auto& [name, component] : componentsByName) {
+    for (const auto& [name, component] : components_snapshot) {
         // Create NVS namespace for this component: "p_<compId>"
         char nsName[16];
         snprintf(nsName, sizeof(nsName), "p_%lu", (unsigned long)component->getComponentId());
@@ -812,22 +823,33 @@ void ComponentGraph::saveDirtyParameters() {
         }
     }
     
-    xSemaphoreGive(componentsMutex);
-    
     if (totalSaved > 0) {
         ESP_LOGI(TAG, "Persistence: saved %d dirty parameters to NVS", totalSaved);
     }
 }
 
 void ComponentGraph::loadAllParameters() {
+    // Take a snapshot of components (like initializeAll does) to avoid holding
+    // componentsMutex during long NVS/SPIFFS operations. The log capture hook
+    // calls getComponent() which also needs this mutex — holding it here would
+    // cause a self-deadlock on any ESP_LOG call during loading.
+    std::vector<std::pair<std::string, Component*>> components_snapshot;
+    
     if (xSemaphoreTake(componentsMutex, portMAX_DELAY) != pdTRUE) {
         ESP_LOGE(TAG, "Could not acquire mutex for parameter loading");
         return;
     }
     
+    components_snapshot.reserve(componentsByName.size());
+    for (auto& pair : componentsByName) {
+        components_snapshot.push_back(pair);
+    }
+    
+    xSemaphoreGive(componentsMutex);  // Release BEFORE iterating!
+    
     int totalLoaded = 0;
     
-    for (const auto& [name, component] : componentsByName) {
+    for (const auto& [name, component] : components_snapshot) {
         // NVS namespace for this component: "p_<compId>"
         char nsName[16];
         snprintf(nsName, sizeof(nsName), "p_%lu", (unsigned long)component->getComponentId());
@@ -864,11 +886,9 @@ void ComponentGraph::loadAllParameters() {
     
     // After ALL data is loaded, give each component a chance to reconcile state
     // (e.g., RgbLed can now verify priority queue vs presets and start playback)
-    for (const auto& [name, component] : componentsByName) {
+    for (const auto& [name, component] : components_snapshot) {
         component->onPostLoadReconcile();
     }
-    
-    xSemaphoreGive(componentsMutex);
     
     if (totalLoaded > 0) {
         ESP_LOGI(TAG, "Persistence: loaded %d parameters from NVS", totalLoaded);
