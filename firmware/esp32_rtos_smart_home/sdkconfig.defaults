@@ -1,0 +1,35 @@
+# Active config: floating_candle
+# To switch products: .\use-config.ps1 <product>  (then idf.py fullclean && idf.py build)
+
+# Compiler options
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+
+# ESP32-specific
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# FreeRTOS
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_TIMER_TASK_STACK_DEPTH=4096
+
+# esp_timer: increase stack for setValue broadcast chains
+CONFIG_ESP_TIMER_TASK_STACK_SIZE=4096
+
+# Watchdog: reboot on task hang instead of just logging
+CONFIG_ESP_TASK_WDT_PANIC=y
+
+# OTA Updates
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# LVGL
+CONFIG_LV_COLOR_16_SWAP=y
+
+# esp_timer: pin the timer task to CPU1 so the stepper step timer (40-80 kHz)
+# runs on CPU1 and never contends with WiFi/lwIP which are pinned to CPU0.
+CONFIG_ESP_TIMER_TASK_AFFINITY_CPU1=y
+
+# lwIP: increase socket pool for httpd (7 open sockets + 1 listener + OTA client)
+CONFIG_LWIP_MAX_SOCKETS=16

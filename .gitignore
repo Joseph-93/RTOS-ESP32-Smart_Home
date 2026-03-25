@@ -40,11 +40,10 @@ managed_components/
 *.elf
 *.map
 
-# Keep these configuration files
-!sdkconfig.defaults
+# Keep sdkconfig.defaults (user-edited Kconfig defaults, must be committed)
+# Ignore generated sdkconfig (built from sdkconfig.defaults, don't commit)
 firmware\esp32_rtos_smart_home\managed_components\**
 **/sdkconfig
-**/sdkconfig.defaults
 .vscode/
 
 .github/

@@ -1,0 +1,33 @@
+# sdkconfig.defaults — LCD Lamp (GUI + RGB + Sensors)
+#
+# Switch to this config:  .\use-config.ps1 lcd_lamp
+# Then:                   idf.py fullclean && idf.py build
+
+# Compiler options
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+
+# ESP32-specific
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# FreeRTOS
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_TIMER_TASK_STACK_DEPTH=4096
+
+# esp_timer: increase stack for setValue broadcast chains
+CONFIG_ESP_TIMER_TASK_STACK_SIZE=4096
+
+# Watchdog: reboot on task hang instead of just logging
+CONFIG_ESP_TASK_WDT_PANIC=y
+
+# OTA Updates
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# LVGL: ILI9341 uses BGR byte order in 16-bit color mode
+CONFIG_LV_COLOR_16_SWAP=y
+
+# lwIP: increase socket pool for httpd
+CONFIG_LWIP_MAX_SOCKETS=16

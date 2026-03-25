@@ -1,3 +1,6 @@
+# Active config: floating_candle
+# To switch products: .\use-config.ps1 <product>  (then idf.py fullclean && idf.py build)
+#
 # Component Selection Configuration for Floating Candle (Stepper Motors)
 # This file enables only the components needed for the stepper motor system
 #
