@@ -128,11 +128,18 @@ public:
     virtual void setEnabled(uint8_t motor_index, bool enabled) = 0;
     
     /**
-     * Check if limit switch is triggered.
+     * Check if MIN (retract) limit switch is triggered.
      * @param motor_index Motor index (0-3)
-     * @return true if at home/limit
+     * @return true if fully retracted / at home
      */
     virtual bool isLimitTriggered(uint8_t motor_index) = 0;
+    
+    /**
+     * Check if MAX (pay-out) limit switch is triggered.
+     * @param motor_index Motor index (0-3)
+     * @return true if fully extended
+     */
+    virtual bool isMaxLimitTriggered(uint8_t motor_index) = 0;
     
     /** Get number of motors supported */
     virtual uint8_t getMotorCount() const = 0;
@@ -268,6 +275,7 @@ enum class PlaybackState : uint8_t {
 class StepperMotorComponent : public Component {
 public:
     StepperMotorComponent();
+    explicit StepperMotorComponent(StepperMotorHAL* hal);
     ~StepperMotorComponent() override;
     
     void onInitialize() override;
@@ -353,11 +361,17 @@ private:
     IntParameter* jogCommandParams[4];     // Per-motor jog: -1=retract, 0=stop, 1=pay-out
     BoolParameter* motorHomedParams[4];    // Per-motor homing status
     BoolParameter* moveToHomeParam;        // Move to center after all homed
-    IntParameter* jogSpeedParam;           // Jog speed in steps/sec
+    IntParameter* jogSpeedParam;           // Jog speed in steps/sec (target)
+    IntParameter* jogAccelerationParam;    // Jog acceleration in steps/sec²
     IntParameter* backoffDistanceParam;    // Limit backoff distance
     
     // Limit switch simulation (for testing without hardware)
-    BoolParameter* simulateLimitTrigger;   // 1x4: simulate limit triggered per motor
+    BoolParameter* simulateLimitMin;       // 1x4: simulate min (retract) limit triggered per motor
+    BoolParameter* simulateLimitMax;       // 1x4: simulate max (pay-out) limit triggered per motor
+    
+    // Limit switch live state (read-only, broadcast on change)
+    BoolParameter* limitMinState;          // 1x4: true = min (retract) switch triggered
+    BoolParameter* limitMaxState;          // 1x4: true = max (pay-out) switch triggered
     
     // Emergency stop
     BoolParameter* eStopCommand;
@@ -391,6 +405,7 @@ private:
     FloatParameter* roomDimensionZ;      // Room Z dimension (meters)
     IntParameter* maxPositionSteps;      // Read-only: auto-calculated from room diagonal
     BoolParameter* softLimitsEnabled;    // Enable/disable soft position limiting
+    FloatParameter* spoolRadius;         // Spool radius in meters (for GUI unit conversion, default 15mm)
     
     // ========================================================================
     // Choreography Storage
@@ -425,8 +440,20 @@ private:
     std::atomic<int32_t> cachedMaxPosition;  // Cached from maxPositionSteps param
     std::atomic<bool> cachedLimitsEnabled;   // Cached from softLimitsEnabled param
     
+    // Driver enable state (cached for ISR performance)
+    std::atomic<bool> cachedDriversEnabled;  // Cached from enableDrivers param
+    
+    // Jog speed + acceleration (cached for ISR performance, fixed-point ×256)
+    std::atomic<uint32_t> cachedJogTargetSpeedFP;  // jogSpeed * 256
+    std::atomic<uint32_t> cachedJogAccelPerTickFP; // (accel * 256) / isrRate — speed delta per tick
+    std::atomic<uint32_t> cachedJogThresholdFP;    // isrRate * 256 — accumulator overflow threshold
+    std::atomic<uint32_t> actualIsrRateHz;         // Actual running timer rate (updated on restartStepTimer)
+    uint32_t jogCurrentSpeedFP[4];  // Per-motor current speed, fixed-point ×256 (ISR-local)
+    uint32_t jogAccumFP[4];         // Per-motor fractional step accumulator (ISR-local)
+    
     // Limit switch simulation (cached for ISR performance)
-    std::atomic<bool> cachedSimulateLimit[4];  // Cached from simulateLimitTrigger param
+    std::atomic<bool> cachedSimulateLimitMin[4];  // Cached from simulateLimitMin param
+    std::atomic<bool> cachedSimulateLimitMax[4];  // Cached from simulateLimitMax param
     
     // ISR direction tracking (to minimize setDirection calls)
     bool lastDirection[4];  // Last direction set in ISR (ISR-local, no atomics needed)
@@ -452,11 +479,10 @@ private:
     // ========================================================================
     // Manual Jog State
     // ========================================================================
-    std::atomic<int8_t> jogCommand[4];      // -1=retract, 0=stop, 1=pay-out
-    std::atomic<bool> motorIsHomed[4];      // Per-motor homing status
-    std::atomic<bool> limitTriggered[4];    // Set by ISR when limit hit
-    uint32_t jogSpeed;                      // Steps/sec for manual jog
-    uint32_t backoffDistance;               // Steps to back off after limit
+    std::atomic<int8_t> jogCommand[4];          // -1=retract, 0=stop, 1=pay-out
+    std::atomic<bool> motorIsHomed[4];          // Per-motor homing status
+    std::atomic<bool> limitMinTriggered[4];     // Set by ISR when min limit hit
+    std::atomic<bool> limitMaxTriggered[4];     // Set by ISR when max limit hit
     
     // ========================================================================
     // Internal Methods
@@ -477,7 +503,7 @@ private:
     
     // Step generation ISR
     static void IRAM_ATTR stepTimerCallback(void* arg);
-    void IRAM_ATTR stepTimerISR();
+    void stepTimerISR();
     
     // Manual jog helpers
     bool allMotorsHomed() const;
@@ -496,4 +522,6 @@ private:
     
     // ISR rate calculation
     uint32_t calculateRequiredIsrRate() const;
+    void updateJogParams();
+    void restartStepTimer(uint32_t rate_hz);
 };

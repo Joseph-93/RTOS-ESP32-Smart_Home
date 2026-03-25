@@ -96,6 +96,7 @@ public:
     void stepMultiple(uint8_t motor_mask) override {}
     void setEnabled(uint8_t motor_index, bool enabled) override {}
     bool isLimitTriggered(uint8_t motor_index) override { return false; }
+    bool isMaxLimitTriggered(uint8_t motor_index) override { return false; }
     uint8_t getMotorCount() const override { return 4; }
     uint32_t getMinPulseWidthUs() const override { return 2; }
     
@@ -114,6 +115,12 @@ private:
 // Constructor / Destructor
 // ============================================================================
 
+StepperMotorComponent::StepperMotorComponent(StepperMotorHAL* hal_ptr)
+    : StepperMotorComponent()
+{
+    setHAL(hal_ptr);
+}
+
 StepperMotorComponent::StepperMotorComponent() 
     : Component("StepperMotor"),
       hal(nullptr),
@@ -121,18 +128,21 @@ StepperMotorComponent::StepperMotorComponent()
       activeChoreographyIndex(-1),
       metadataModified(false),
       state(PlaybackState::IDLE),
+      cachedMaxPosition(INT32_MAX),
+      cachedLimitsEnabled(false),
+      cachedDriversEnabled(false),
+      cachedJogTargetSpeedFP(500 * 256),
+      cachedJogAccelPerTickFP(7),
+      cachedJogThresholdFP(DEFAULT_ISR_RATE_HZ * 256),
+      actualIsrRateHz(DEFAULT_ISR_RATE_HZ),
       motionTaskHandle(nullptr),
       stepTimer(nullptr),
       taskRunning(false),
       taskExited(true),
       stopRequested(false),
-      cachedMaxPosition(INT32_MAX),
-      cachedLimitsEnabled(false),
       uploadExpectedSize(0),
       uploadReceivedSize(0),
-      uploadInProgress(false),
-      jogSpeed(500),
-      backoffDistance(50)
+      uploadInProgress(false)
 {
     for (int i = 0; i < NUM_MOTORS; i++) {
         currentPosition[i] = 0;
@@ -140,33 +150,41 @@ StepperMotorComponent::StepperMotorComponent()
         targetDirection[i] = false;
         jogCommand[i] = 0;
         motorIsHomed[i] = false;
-        limitTriggered[i] = false;
+        limitMinTriggered[i] = false;
+        limitMaxTriggered[i] = false;
         prevTarget[i] = 0;
         lastDirection[i] = false;
-        cachedSimulateLimit[i] = false;
+        cachedSimulateLimitMin[i] = false;
+        cachedSimulateLimitMax[i] = false;
+        jogCurrentSpeedFP[i] = 0;
+        jogAccumFP[i] = 0;
     }
     playbackStartUs = 0;
     loopsRemaining = 0;
 }
 
 StepperMotorComponent::~StepperMotorComponent() {
-    // Stop playback first
-    stopPlayback();
-    
-    // Wait for task to finish
-    if (motionTaskHandle) {
-        taskRunning = false;
-        vTaskDelay(pdMS_TO_TICKS(100));
-        // Task should have exited, but just in case
-        vTaskDelete(motionTaskHandle);
-        motionTaskHandle = nullptr;
-    }
-    
-    // Stop and delete timer
+    // Stop timer first (stops ISR calls)
     if (stepTimer) {
         esp_timer_stop(stepTimer);
         esp_timer_delete(stepTimer);
         stepTimer = nullptr;
+    }
+    
+    // Stop motion task
+    taskRunning.store(false);
+    if (motionTaskHandle) {
+        const uint32_t timeoutMs = 200;
+        const uint32_t pollIntervalMs = 10;
+        uint32_t elapsed = 0;
+        while (!taskExited.load() && elapsed < timeoutMs) {
+            vTaskDelay(pdMS_TO_TICKS(pollIntervalMs));
+            elapsed += pollIntervalMs;
+        }
+        if (!taskExited.load()) {
+            vTaskDelete(motionTaskHandle);
+        }
+        motionTaskHandle = nullptr;
     }
     
     // Cleanup HAL
@@ -243,6 +261,7 @@ void StepperMotorComponent::onInitialize() {
     
     enableDrivers = addBoolParam("enableDrivers", 1, 1, false);
     enableDrivers->setOnChange([this](size_t, size_t, bool val) {
+        cachedDriversEnabled.store(val);  // Cache for ISR
         if (hal) {
             hal->setEnabled(0xFF, val);
         }
@@ -271,20 +290,35 @@ void StepperMotorComponent::onInitialize() {
     }
     
     jogSpeedParam = addIntParam("jogSpeed", 1, 1, 10, 5000, 500);
+    jogSpeedParam->setOnChange([this](size_t, size_t, int32_t) {
+        updateJogParams();
+    });
+    jogAccelerationParam = addIntParam("jogAcceleration", 1, 1, 10, 100000, 1000);
+    jogAccelerationParam->setOnChange([this](size_t, size_t, int32_t) {
+        updateJogParams();
+    });
     backoffDistanceParam = addIntParam("backoffDistance", 1, 1, 10, 200, 50);
     
-    // Limit switch simulation (1x4 parameter: one bool per motor)
-    simulateLimitTrigger = addBoolParam("simulateLimitTrigger", 1, 4, false);
-    simulateLimitTrigger->setOnChange([this](size_t row, size_t col, bool val) {
-        cachedSimulateLimit[col].store(val);
-        ESP_LOGI(TAG, "Motor %zu simulate limit: %s", col, val ? "TRIGGERED" : "clear");
+    // Limit switch simulation (1×4: one bool per motor)
+    simulateLimitMin = addBoolParam("simulateLimitMin", 1, 4, false);
+    simulateLimitMin->setOnChange([this](size_t row, size_t col, bool val) {
+        cachedSimulateLimitMin[col].store(val);
+        ESP_LOGI(TAG, "Motor %zu simulate MIN limit: %s", col, val ? "TRIGGERED" : "clear");
     });
+    simulateLimitMax = addBoolParam("simulateLimitMax", 1, 4, false);
+    simulateLimitMax->setOnChange([this](size_t row, size_t col, bool val) {
+        cachedSimulateLimitMax[col].store(val);
+        ESP_LOGI(TAG, "Motor %zu simulate MAX limit: %s", col, val ? "TRIGGERED" : "clear");
+    });
+    
+    limitMinState = addBoolParam("limitMinState", 1, 4, false, true);  // read-only, broadcast on change
+    limitMaxState = addBoolParam("limitMaxState", 1, 4, false, true);  // read-only, broadcast on change
     
     moveToHomeParam = addBoolParam("moveToHome", 1, 1, false);
     moveToHomeParam->setOnChange([this](size_t, size_t, bool val) {
         if (val && allMotorsHomed()) {
             ESP_LOGI(TAG, "Move to home position requested");
-            moveToHomeParam->setValueQuiet(0, 0, false);
+            moveToHomeParam->setValue(0, 0, false);
             // moveToHomePosition() will be called by task
         }
     });
@@ -294,7 +328,7 @@ void StepperMotorComponent::onInitialize() {
     eStopCommand->setOnChange([this](size_t, size_t, bool val) {
         if (val) {
             emergencyStop();
-            eStopCommand->setValueQuiet(0, 0, false);
+            eStopCommand->setValue(0, 0, false);
         }
     });
     
@@ -302,7 +336,7 @@ void StepperMotorComponent::onInitialize() {
     eStopClear->setOnChange([this](size_t, size_t, bool val) {
         if (val) {
             clearEmergencyStop();
-            eStopClear->setValueQuiet(0, 0, false);
+            eStopClear->setValue(0, 0, false);
         }
     });
     
@@ -331,7 +365,7 @@ void StepperMotorComponent::onInitialize() {
     uploadCommitParam->setOnChange([this](size_t, size_t, bool val) {
         if (val) {
             uploadCommit();
-            uploadCommitParam->setValueQuiet(0, 0, false);
+            uploadCommitParam->setValue(0, 0, false);
         }
     });
     
@@ -340,7 +374,7 @@ void StepperMotorComponent::onInitialize() {
     deleteChoreographyParam->setOnChange([this](size_t, size_t, int32_t val) {
         if (val >= 0) {
             deleteChoreography(val);
-            deleteChoreographyParam->setValueQuiet(0, 0, -1);
+            deleteChoreographyParam->setValue(0, 0, -1);
         }
     });
     
@@ -348,9 +382,9 @@ void StepperMotorComponent::onInitialize() {
     queryChoreographyIndex->setOnChange([this](size_t, size_t, int32_t val) {
         if (val >= 0 && choreographyMeta.count(val)) {
             const auto& meta = choreographyMeta.at(val);
-            queryChoreographyName->setValueQuiet(0, 0, meta.name);
-            queryChoreographyDuration->setValueQuiet(0, 0, meta.duration_sec);
-            queryChoreographyLoop->setValueQuiet(0, 0, meta.loop_count);
+            queryChoreographyName->setValue(0, 0, meta.name);
+            queryChoreographyDuration->setValue(0, 0, meta.duration_sec);
+            queryChoreographyLoop->setValue(0, 0, meta.loop_count);
         }
     });
     
@@ -366,9 +400,9 @@ void StepperMotorComponent::onInitialize() {
     
     maxRpmParam = addIntParam("maxRpm", 1, 1, 1, 3000, 1200);
     maxRpmParam->setOnChange([this](size_t, size_t, int32_t val) {
-        // Recalculate ISR rate based on max RPM
         uint32_t newRate = calculateRequiredIsrRate();
-        isrRateHz->setValueQuiet(0, 0, newRate);
+        isrRateHz->setValue(0, 0, newRate);
+        restartStepTimer(newRate);  // Actually restart — also calls updateJogParams
         ESP_LOGI(TAG, "Max RPM set to %ld, ISR rate now %lu Hz", val, newRate);
     });
     
@@ -376,11 +410,11 @@ void StepperMotorComponent::onInitialize() {
     microsteppingParam->setOnChange([this](size_t, size_t, int32_t val) {
         if (hal) {
             if (!hal->setMicrostepping(val)) {
-                microsteppingParam->setValueQuiet(0, 0, hal->getMicrostepping());
+                microsteppingParam->setValue(0, 0, hal->getMicrostepping());
             } else {
-                // Recalculate ISR rate
                 uint32_t newRate = calculateRequiredIsrRate();
-                isrRateHz->setValueQuiet(0, 0, newRate);
+                isrRateHz->setValue(0, 0, newRate);
+                restartStepTimer(newRate);  // Actually restart — also calls updateJogParams
             }
         }
     });
@@ -390,7 +424,7 @@ void StepperMotorComponent::onInitialize() {
     // Set initial microstepping
     if (hal) {
         hal->setMicrostepping(16);
-        microsteppingConfigurable->setValueQuiet(0, 0, hal->isMicrosteppingSoftwareConfigurable());
+        microsteppingConfigurable->setValue(0, 0, hal->isMicrosteppingSoftwareConfigurable());
     }
     
     // Room dimensions & position limits
@@ -420,6 +454,8 @@ void StepperMotorComponent::onInitialize() {
     });
     cachedLimitsEnabled.store(true);  // Initialize cache
     
+    spoolRadius = addFloatParam("spoolRadius", 1, 1, 0.005f, 0.100f, 0.015f);
+    
     // Calculate initial max position
     updateMaxPositionFromRoomDimensions();
     
@@ -427,7 +463,7 @@ void StepperMotorComponent::onInitialize() {
     esp_timer_create_args_t timer_args = {
         .callback = stepTimerCallback,
         .arg = this,
-        .dispatch_method = ESP_TIMER_ISR,
+        .dispatch_method = ESP_TIMER_TASK,
         .name = "stepper_step",
         .skip_unhandled_events = true
     };
@@ -437,14 +473,40 @@ void StepperMotorComponent::onInitialize() {
         ESP_LOGE(TAG, "Failed to create step timer: %d", err);
     }
     
-    // Calculate initial ISR rate
+    // Calculate initial ISR rate and jog params
     uint32_t rate = calculateRequiredIsrRate();
-    isrRateHz->setValueQuiet(0, 0, rate);
+    isrRateHz->setValue(0, 0, rate);
+    updateJogParams();
+    
+    // Start motion task immediately — it runs forever and handles:
+    //   - Limit switch GPIO polling (always)
+    //   - Jog back-off handling (always)
+    //   - Playback position updates (when PLAYING)
+    taskRunning.store(true);
+    taskExited.store(false);
+    BaseType_t result = xTaskCreatePinnedToCore(
+        motionTaskWrapper,
+        "stepper_motion",
+        8192,
+        this,
+        tskIDLE_PRIORITY + 3,
+        &motionTaskHandle,
+        1   // Core 1 (away from WiFi)
+    );
+    if (result != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create motion task!");
+    }
+    
+    // Start step timer immediately — ISR handles both jog stepping
+    // and playback stepping based on current state
+    uint64_t period_us = 1000000 / rate;
+    esp_timer_start_periodic(stepTimer, period_us);
+    actualIsrRateHz.store(rate);  // Track actual running rate
     
     ESP_LOGI(TAG, "StepperMotorComponent initialized");
     ESP_LOGI(TAG, "  Waypoint interval: %.3f sec (%d Hz)", WAYPOINT_INTERVAL_SEC, (int)(1.0f/WAYPOINT_INTERVAL_SEC));
     ESP_LOGI(TAG, "  Task rate: %lu Hz", TASK_RATE_HZ);
-    ESP_LOGI(TAG, "  ISR rate: %lu Hz", rate);
+    ESP_LOGI(TAG, "  ISR rate: %lu Hz (period: %llu µs)", rate, period_us);
 }
 
 // ============================================================================
@@ -469,6 +531,40 @@ uint32_t StepperMotorComponent::calculateRequiredIsrRate() const {
     if (rate > MAX_ISR_RATE_HZ) rate = MAX_ISR_RATE_HZ;
     
     return rate;
+}
+
+void StepperMotorComponent::updateJogParams() {
+    uint32_t rate  = actualIsrRateHz.load();  // Use ACTUAL running timer rate
+    uint32_t speed = jogSpeedParam        ? (uint32_t)jogSpeedParam->getValue(0, 0)        : 500;
+    uint32_t accel = jogAccelerationParam ? (uint32_t)jogAccelerationParam->getValue(0, 0) : 1000;
+    if (speed < 1) speed = 1;
+    if (accel < 1) accel = 1;
+
+    // Target speed in fixed-point (steps/sec × 256)
+    cachedJogTargetSpeedFP.store(speed * 256);
+
+    // Accumulator threshold: one full second = isrRate × 256
+    cachedJogThresholdFP.store(rate * 256);
+
+    // Speed change per ISR tick in fixed-point: ceil((accel × 256) / rate)
+    uint32_t aptp = (accel * 256 + rate - 1) / rate;
+    if (aptp < 1) aptp = 1;
+    cachedJogAccelPerTickFP.store(aptp);
+
+    ESP_LOGD(TAG, "Jog params: speed=%lu sps, accel=%lu sps², accelPerTick=%lu/256, threshold=%lu",
+             speed, accel, aptp, rate * 256);
+}
+
+void StepperMotorComponent::restartStepTimer(uint32_t rate_hz) {
+    if (!stepTimer) return;
+    if (rate_hz < 1000) rate_hz = 1000;
+    if (rate_hz > MAX_ISR_RATE_HZ) rate_hz = MAX_ISR_RATE_HZ;
+    esp_timer_stop(stepTimer);
+    uint64_t period_us = 1000000ULL / rate_hz;
+    esp_timer_start_periodic(stepTimer, period_us);
+    actualIsrRateHz.store(rate_hz);
+    updateJogParams();
+    ESP_LOGI(TAG, "Step timer restarted: %lu Hz (%llu us period)", rate_hz, period_us);
 }
 
 // ============================================================================
@@ -540,7 +636,7 @@ esp_err_t StepperMotorComponent::precomputeTrajectory() {
         snprintf(errMsg, sizeof(errMsg), 
             "Out of memory: trajectory needs %zu KB, only %zu KB available",
             memBytes / 1024, (freeHeap - minHeapReserve) / 1024);
-        errorMessage->setValueQuiet(0, 0, errMsg);
+        errorMessage->setValue(0, 0, errMsg);
         
         transitionTo(PlaybackState::E_STOP);
         return ESP_ERR_NO_MEM;
@@ -603,7 +699,7 @@ void StepperMotorComponent::updateMaxPositionFromRoomDimensions() {
     float revolutions = diagonal / circumference;
     int32_t maxSteps = (int32_t)(revolutions * steps_per_rev * microstep);
     
-    maxPositionSteps->setValueQuiet(0, 0, maxSteps);
+    maxPositionSteps->setValue(0, 0, maxSteps);
     cachedMaxPosition.store(maxSteps);  // Cache for ISR
     
     ESP_LOGI(TAG, "Room dimensions: %.2f × %.2f × %.2f m, diagonal: %.2f m, max position: %ld steps",
@@ -632,7 +728,7 @@ void StepperMotorComponent::checkPositionLimitsAfterRoomChange() {
             "Room dimensions reduced! Motors exceed new max position (%ld steps). "
             "STOPPED: Use manual jog to bring motors within range.",
             maxPos);
-        errorMessage->setValueQuiet(0, 0, errMsg);
+        errorMessage->setValue(0, 0, errMsg);
         
         ESP_LOGE(TAG, "%s", errMsg);
         emergencyStop();  // Stop all movement
@@ -658,31 +754,13 @@ void StepperMotorComponent::motionTask() {
         PlaybackState currentState = state.load();
         
         // ====================================================================
-        // Handle limit-triggered back-off (manual jog mode)
         // ====================================================================
-        for (int m = 0; m < NUM_MOTORS; m++) {
-            if (limitTriggered[m].load()) {
-                uint32_t backoff = backoffDistanceParam->getValue(0, 0);
-                ESP_LOGI(TAG, "Motor %d hit limit - backing off %lu steps", m, backoff);
-                
-                // Back off at safe rate (not in ISR)
-                hal->setDirection(m, true);  // Reverse direction (pay-out)
-                for (uint32_t step = 0; step < backoff; step++) {
-                    hal->step(m);
-                    vTaskDelay(pdMS_TO_TICKS(2));  // 500 Hz back-off rate
-                }
-                
-                // Zero position and mark as homed
-                currentPosition[m].store(0);
-                motorIsHomed[m].store(true);
-                motorHomedParams[m]->setValueQuiet(0, 0, true);
-                
-                // Clear flag
-                limitTriggered[m].store(false);
-                
-                ESP_LOGI(TAG, "Motor %d homed ✓", m);
-            }
-        }
+        // Limit-triggered back-off / homing sequence
+        // NOTE: limitMinTriggered / limitMaxTriggered are NOT set during normal
+        // jog. They will be set by the homing routine when implemented.
+        // During jog, limits cause an immediate dead stop in the ISR and that
+        // is the ONLY action taken — no back-off, no flag.
+        // ====================================================================
         
         // ====================================================================
         // Check if all homed and user requested move to home
@@ -690,7 +768,7 @@ void StepperMotorComponent::motionTask() {
         if (moveToHomeParam->getValue(0, 0) && allMotorsHomed()) {
             ESP_LOGI(TAG, "Moving all motors to home position");
             moveToHomePosition();
-            moveToHomeParam->setValueQuiet(0, 0, false);
+            moveToHomeParam->setValue(0, 0, false);
         }
         
         // ====================================================================
@@ -699,6 +777,34 @@ void StepperMotorComponent::motionTask() {
         for (int m = 0; m < NUM_MOTORS; m++) {
             int8_t cmd = jogCommandParams[m]->getValue(0, 0);
             jogCommand[m].store(cmd);
+        }
+        
+        // ====================================================================
+        // Poll limit switch states → mirror to parameters for GUI
+        // Both hardware GPIO AND software simulation.
+        // Runs every tick regardless of playback state.
+        // ====================================================================
+        for (int m = 0; m < NUM_MOTORS; m++) {
+            bool hwMin = hal->isLimitTriggered(m)    || cachedSimulateLimitMin[m].load();
+            bool hwMax = hal->isMaxLimitTriggered(m) || cachedSimulateLimitMax[m].load();
+            
+            if (hwMin != limitMinState->getValue(0, m)) {
+                limitMinState->setValue(0, m, hwMin);
+            }
+            if (hwMax != limitMaxState->getValue(0, m)) {
+                limitMaxState->setValue(0, m, hwMax);
+            }
+        }
+        
+        // ====================================================================
+        // Report motor positions to GUI (all states, throttled to 10 Hz)
+        // ====================================================================
+        static uint32_t positionReportCounter = 0;
+        if (++positionReportCounter >= TASK_RATE_HZ / 10) {
+            positionReportCounter = 0;
+            for (int m = 0; m < NUM_MOTORS; m++) {
+                motorPositions->setValue(m, 0, currentPosition[m].load());
+            }
         }
         
         // ====================================================================
@@ -738,9 +844,9 @@ void StepperMotorComponent::motionTask() {
                 if (velocity > MAX_VELOCITY_STEPS_PER_TICK) {
                     char errMsg[128];
                     snprintf(errMsg, sizeof(errMsg), 
-                        "Motor %d velocity too high: %ld steps/tick (max %u) - E-STOP",
-                        m, (long)velocity, MAX_VELOCITY_STEPS_PER_TICK);
-                    errorMessage->setValueQuiet(0, 0, errMsg);
+                        "Motor %d velocity too high: %ld steps/tick (max %lu) - E-STOP",
+                        m, (long)velocity, (unsigned long)MAX_VELOCITY_STEPS_PER_TICK);
+                    errorMessage->setValue(0, 0, errMsg);
                     ESP_LOGE(TAG, "%s", errMsg);
                     emergencyStop();
                     return;
@@ -760,12 +866,12 @@ void StepperMotorComponent::motionTask() {
             static uint32_t updateCounter = 0;
             if (++updateCounter >= TASK_RATE_HZ / 10) {  // 10 Hz update
                 updateCounter = 0;
-                playbackProgressParam->setValueQuiet(0, 0, t / trajectory.duration_sec);
-                playbackTimeParam->setValueQuiet(0, 0, t);
+                playbackProgressParam->setValue(0, 0, t / trajectory.duration_sec);
+                playbackTimeParam->setValue(0, 0, t);
                 
                 for (int m = 0; m < NUM_MOTORS; m++) {
-                    motorPositions->setValueQuiet(m, 0, currentPosition[m].load());
-                    motorTargets->setValueQuiet(m, 0, targetPosition[m].load());
+                    motorPositions->setValue(m, 0, currentPosition[m].load());
+                    motorTargets->setValue(m, 0, targetPosition[m].load());
                 }
             }
         }
@@ -796,43 +902,88 @@ void IRAM_ATTR StepperMotorComponent::stepTimerCallback(void* arg) {
 void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
     PlaybackState currentState = state.load();
     
-    // Manual jog mode - handle limit detection and jogging
-    if (currentState == PlaybackState::IDLE) {
+    // ================================================================
+    // Manual jog with smooth acceleration / deceleration ramp.
+    // Works in ALL states except E_STOP and PLAYING.
+    //
+    // Algorithm (fixed-point ×256 fractional accumulator):
+    //   - Each ISR tick, ramp currentSpeed toward targetSpeed (accel)
+    //     or toward 0 (decel when jog released).
+    //   - Add currentSpeed to per-motor accumulator each tick.
+    //   - When accumulator overflows threshold (= isrRate×256), step once.
+    //
+    // Rules:
+    //   1) Drivers must be enabled
+    //   2) MIN limit blocks RETRACT; MAX limit blocks PAY OUT
+    //   3) On release, continue last direction while decelerating to stop
+    // ================================================================
+    if (currentState != PlaybackState::E_STOP &&
+        currentState != PlaybackState::PLAYING &&
+        cachedDriversEnabled.load()) {
+
+        const uint32_t targetSpeedFP = cachedJogTargetSpeedFP.load();
+        const uint32_t accelPerTick  = cachedJogAccelPerTickFP.load();
+        const uint32_t thresholdFP   = cachedJogThresholdFP.load();
+
         for (uint8_t m = 0; m < NUM_MOTORS; m++) {
-            // Skip if limit-triggered (task handles back-off)
-            if (limitTriggered[m].load()) {
-                continue;
-            }
-            
             int8_t jog = jogCommand[m].load();
-            if (jog == 0) continue;  // No jog command
-            
-            // Check limit switch before stepping (simulation overrides hardware)
-            bool limitHit = cachedSimulateLimit[m].load() || hal->isLimitTriggered(m);
-            if (limitHit) {
-                // Hit limit - stop jogging, flag for task to handle back-off
-                jogCommand[m].store(0);
-                limitTriggered[m].store(true);
-                continue;
+
+            if (jog != 0) {
+                // Hit MIN limit while retracting — dead stop, no back-off, no flag.
+                // The switch being active is sufficient to block stepping every tick.
+                if (jog < 0 && (cachedSimulateLimitMin[m].load() || hal->isLimitTriggered(m))) {
+                    jogCurrentSpeedFP[m] = 0;
+                    jogAccumFP[m] = 0;
+                    continue;
+                }
+                // Hit MAX limit while paying out — same: dead stop.
+                if (jog > 0 && (cachedSimulateLimitMax[m].load() || hal->isMaxLimitTriggered(m))) {
+                    jogCurrentSpeedFP[m] = 0;
+                    jogAccumFP[m] = 0;
+                    continue;
+                }
+
+                // Ramp up toward target speed
+                if (jogCurrentSpeedFP[m] + accelPerTick < targetSpeedFP) {
+                    jogCurrentSpeedFP[m] += accelPerTick;
+                } else {
+                    jogCurrentSpeedFP[m] = targetSpeedFP;
+                }
+            } else {
+                // Jog released — ramp down (decelerate in the same direction)
+                if (jogCurrentSpeedFP[m] > accelPerTick) {
+                    jogCurrentSpeedFP[m] -= accelPerTick;
+                } else {
+                    // Fully stopped
+                    jogCurrentSpeedFP[m] = 0;
+                    jogAccumFP[m] = 0;
+                    continue;
+                }
             }
-            
-            // Execute jog step
-            bool direction = (jog > 0);  // 1=pay-out (positive), -1=retract (negative)
-            
-            // Only call setDirection if it changed
+
+            // Advance fractional accumulator
+            jogAccumFP[m] += jogCurrentSpeedFP[m];
+            if (jogAccumFP[m] < thresholdFP) {
+                continue;  // Not yet time for a step
+            }
+            jogAccumFP[m] -= thresholdFP;
+
+            // Direction: active jog sets direction; decel continues last direction
+            bool direction = (jog != 0) ? (jog > 0) : lastDirection[m];
             if (direction != lastDirection[m]) {
                 hal->setDirection(m, direction);
                 lastDirection[m] = direction;
             }
-            
+
             hal->step(m);
-            
             int32_t pos = currentPosition[m].load();
             currentPosition[m].store(direction ? pos + 1 : pos - 1);
         }
-        return;
     }
     
+    // ================================================================
+    // Playback mode — chase precomputed target positions
+    // ================================================================
     if (currentState != PlaybackState::PLAYING) {
         return;
     }
@@ -897,7 +1048,7 @@ esp_err_t StepperMotorComponent::startPlayback() {
     trajectory.reset();
     
     // Clear error message
-    errorMessage->setValueQuiet(0, 0, "");
+    errorMessage->setValue(0, 0, "");
     
     // Set initial targets and reset velocity tracking
     for (int m = 0; m < NUM_MOTORS; m++) {
@@ -917,89 +1068,42 @@ esp_err_t StepperMotorComponent::startPlayback() {
         hal->setEnabled(0xFF, true);
     }
     
-    // Start motion task if not already running
-    if (!motionTaskHandle) {
-        taskRunning.store(true);
-        taskExited.store(false);  // Reset exit flag
-        BaseType_t result = xTaskCreatePinnedToCore(
-            motionTaskWrapper,
-            "stepper_motion",
-            4096,
-            this,
-            tskIDLE_PRIORITY + 3,  // Higher than webserver
-            &motionTaskHandle,
-            1   // Core 1 (away from WiFi)
-        );
-        
-        if (result != pdPASS) {
-            ESP_LOGE(TAG, "Failed to create motion task");
-            return ESP_FAIL;
-        }
-    }
-    
-    // Start step timer
-    uint32_t rate = isrRateHz->getValue(0, 0);
-    uint64_t period_us = 1000000 / rate;
-    esp_timer_start_periodic(stepTimer, period_us);
-    
+    // Task and timer are already running from init — just transition state
     transitionTo(PlaybackState::PLAYING);
-    playing->setValueQuiet(0, 0, true);
-    enableDrivers->setValueQuiet(0, 0, true);
+    playing->setValue(0, 0, true);
+    enableDrivers->setValue(0, 0, true);
     
-    ESP_LOGI(TAG, "Playback started (ISR period: %llu µs = %lu Hz)", period_us, rate);
+    ESP_LOGI(TAG, "Playback started");
     return ESP_OK;
 }
 
 void StepperMotorComponent::stopPlayback() {
     ESP_LOGI(TAG, "Stopping playback");
     
-    // Stop timer first
-    if (stepTimer) {
-        esp_timer_stop(stepTimer);
-    }
-    
-    // Stop task
-    taskRunning.store(false);
-    if (motionTaskHandle) {
-        // Wait for task to signal it has exited (with timeout)
-        const uint32_t timeoutMs = 200;
-        const uint32_t pollIntervalMs = 10;
-        uint32_t elapsed = 0;
-        
-        while (!taskExited.load() && elapsed < timeoutMs) {
-            vTaskDelay(pdMS_TO_TICKS(pollIntervalMs));
-            elapsed += pollIntervalMs;
-        }
-        
-        if (!taskExited.load()) {
-            ESP_LOGW(TAG, "Task did not exit cleanly in %lu ms", timeoutMs);
-        }
-        
-        motionTaskHandle = nullptr;
-    }
-    
+    // Task and timer keep running — they handle jog/limit polling in IDLE state.
+    // Just transition state so ISR stops chasing playback targets.
     transitionTo(PlaybackState::IDLE);
-    playing->setValueQuiet(0, 0, false);
+    playing->setValue(0, 0, false);
 }
 
 void StepperMotorComponent::emergencyStop() {
     ESP_LOGW(TAG, "EMERGENCY STOP");
     
-    // Stop everything immediately
-    if (stepTimer) {
-        esp_timer_stop(stepTimer);
-    }
-    
-    taskRunning.store(false);
-    
-    // Disable drivers
+    // Disable drivers immediately
     if (hal) {
         hal->setEnabled(0xFF, false);
     }
     
+    // Clear all jog commands so ISR stops stepping
+    for (int m = 0; m < NUM_MOTORS; m++) {
+        jogCommand[m].store(0);
+    }
+    
+    // Task and timer keep running — ISR checks state and skips stepping in E_STOP.
+    // Motion task still polls limit switches so you can see them in the GUI.
+    playing->setValue(0, 0, false);
+    enableDrivers->setValue(0, 0, false);
     transitionTo(PlaybackState::E_STOP);
-    playing->setValueQuiet(0, 0, false);
-    enableDrivers->setValueQuiet(0, 0, false);
 }
 
 void StepperMotorComponent::clearEmergencyStop() {
@@ -1043,7 +1147,7 @@ void StepperMotorComponent::moveToHomePosition() {
         }
         
         currentPosition[m].store(homePosition);
-        motorPositions->setValueQuiet(m, 0, homePosition);
+        motorPositions->setValue(m, 0, homePosition);
     }
     
     ESP_LOGI(TAG, "All motors at home position");
@@ -1083,7 +1187,7 @@ esp_err_t StepperMotorComponent::loadChoreography(int16_t index) {
         return err;
     }
     
-    activeChoreographyParam->setValueQuiet(0, 0, index);
+    activeChoreographyParam->setValue(0, 0, index);
     
     return ESP_OK;
 }
@@ -1094,7 +1198,7 @@ esp_err_t StepperMotorComponent::loadChoreography(int16_t index) {
 
 void StepperMotorComponent::transitionTo(PlaybackState newState) {
     state.store(newState);
-    stateParam->setValueQuiet(0, 0, static_cast<int>(newState));
+    stateParam->setValue(0, 0, static_cast<int>(newState));
 }
 
 float StepperMotorComponent::getPlaybackProgress() const {
@@ -1463,7 +1567,7 @@ int16_t StepperMotorComponent::findNextChoreographyId() const {
 }
 
 void StepperMotorComponent::updateStatusParams() {
-    choreographyCountParam->setValueQuiet(0, 0, choreographyMeta.size());
+    choreographyCountParam->setValue(0, 0, choreographyMeta.size());
 }
 
 void StepperMotorComponent::updateChoreographyIdsParam() {
@@ -1472,5 +1576,5 @@ void StepperMotorComponent::updateChoreographyIdsParam() {
         if (!ids.empty()) ids += ",";
         ids += std::to_string(id);
     }
-    choreographyIdsParam->setValueQuiet(0, 0, ids);
+    choreographyIdsParam->setValue(0, 0, ids);
 }
