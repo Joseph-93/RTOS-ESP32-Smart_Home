@@ -63,9 +63,7 @@ Copy-Item $srcComponents $dstComponents -Force
 Copy-Item $srcSdkconfig  $dstSdkconfig  -Force
 
 Write-Host ""
-Write-Host "╔══════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║  Config switched to: $Product$((' ' * (22 - $Product.Length)))║" -ForegroundColor Green
-Write-Host "╚══════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "Config switched to: $Product" -ForegroundColor Green
 Write-Host ""
 Write-Host "Active components:" -ForegroundColor Yellow
 Select-String "set\(ENABLE_" $dstComponents | ForEach-Object {
@@ -78,7 +76,7 @@ Select-String "set\(ENABLE_" $dstComponents | ForEach-Object {
     }
 }
 Write-Host ""
-Write-Host "⚠  REQUIRED: Run a full clean before building!" -ForegroundColor Yellow
+Write-Host "WARNING: Run a full clean before building!" -ForegroundColor Yellow
 Write-Host "   idf.py fullclean" -ForegroundColor Cyan
 Write-Host "   idf.py build" -ForegroundColor Cyan
 Write-Host ""
