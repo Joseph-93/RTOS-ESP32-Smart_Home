@@ -6,6 +6,7 @@
 #include "wifi_init.h"
 #include "lvgl.h"
 #include "esp_heap_caps.h"
+#include "esp_lcd_panel_io.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -325,6 +326,20 @@ void GUIComponent::onInitialize() {
     lvgl_disp_drv.flush_cb = GUIComponent::lvgl_flush_cb;
     lvgl_disp_drv.draw_buf = &lvgl_disp_buf;
     lv_disp_drv_register(&lvgl_disp_drv);
+
+    // Register on_color_trans_done so lv_disp_flush_ready is called from the DMA
+    // completion ISR instead of immediately after queuing the transaction.
+    // This prevents the SPI bus being busy with LCD pixel data when the touch
+    // controller tries to do its own SPI read on the same bus.
+    esp_lcd_panel_io_handle_t lcd_io = lcd_get_io_handle();
+    if (lcd_io) {
+        esp_lcd_panel_io_callbacks_t lcd_cbs = {};
+        lcd_cbs.on_color_trans_done = GUIComponent::lcd_trans_done_cb;
+        esp_lcd_panel_io_register_event_callbacks(lcd_io, &lcd_cbs, &lvgl_disp_drv);
+        ESP_LOGI(TAG, "LCD on_color_trans_done callback registered");
+    } else {
+        ESP_LOGW(TAG, "lcd_get_io_handle returned NULL - flush_ready called synchronously");
+    }
     
     // Initialize LVGL theme (must be done AFTER display registration)
     lv_theme_t* theme = lv_theme_default_init(NULL, lv_palette_main(LV_PALETTE_BLUE), lv_palette_main(LV_PALETTE_RED), true, LV_FONT_DEFAULT);
@@ -905,8 +920,16 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
             }
 
             // Always poll - IRQ just saves us a SPI read on quiet frames
-            esp_lcd_touch_read_data(touch_handle_ref);
-            bool touched = esp_lcd_touch_get_coordinates(touch_handle_ref, touchpad_x, touchpad_y, NULL, &touchpad_cnt, 1);
+            esp_err_t read_err = esp_lcd_touch_read_data(touch_handle_ref);
+            uint16_t strength[1] = {0};
+            bool touched = esp_lcd_touch_get_coordinates(touch_handle_ref, touchpad_x, touchpad_y, strength, &touchpad_cnt, 1);
+
+            // Diagnostic: log every IRQ-triggered read so we can see what the driver returns
+            if (do_read) {
+                ESP_LOGI(TAG, "IRQ #%lu read: err=%s touched=%d cnt=%d x=%d y=%d z=%d",
+                         irq_count, esp_err_to_name(read_err), touched, touchpad_cnt,
+                         touchpad_x[0], touchpad_y[0], strength[0]);
+            }
 
             if (touched && touchpad_cnt > 0) {
                 if (do_read) {
@@ -982,6 +1005,18 @@ void GUIComponent::handleTouchRead(lv_indev_data_t *data) {
     }
 }
 
+// Called from the DMA completion ISR when the LCD SPI transfer is done.
+// This is the correct place to call lv_disp_flush_ready - NOT inside lvgl_flush_cb -
+// so the SPI bus is free before LVGL calls the touch read callback for the next frame.
+bool IRAM_ATTR GUIComponent::lcd_trans_done_cb(esp_lcd_panel_io_handle_t panel_io,
+                                                esp_lcd_panel_io_event_data_t *edata,
+                                                void *user_ctx)
+{
+    lv_disp_drv_t *drv = static_cast<lv_disp_drv_t *>(user_ctx);
+    lv_disp_flush_ready(drv);
+    return false;  // No high-priority task woken
+}
+
 // LVGL flush callback
 void GUIComponent::lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map) {
     if (!panel_handle_ref) {
@@ -994,8 +1029,12 @@ void GUIComponent::lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_c
     int x2 = area->x2 + 1;
     int y2 = area->y2 + 1;
     
+    // Queue the DMA transfer. lv_disp_flush_ready will be called from
+    // lcd_trans_done_cb (registered via on_color_trans_done) once the
+    // transfer actually completes - NOT here. This keeps the SPI bus free
+    // for the touch read that LVGL calls immediately after flush_ready.
     esp_lcd_panel_draw_bitmap(panel_handle_ref, x1, y1, x2, y2, (uint16_t *)color_map);
-    lv_disp_flush_ready(drv);
+    // DO NOT call lv_disp_flush_ready here - lcd_trans_done_cb does it
 }
 
 // LVGL timer task

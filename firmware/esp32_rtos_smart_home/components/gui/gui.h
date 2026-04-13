@@ -3,6 +3,7 @@
 #include "component.h"
 #include "component_graph.h"
 #include "lvgl.h"
+#include "esp_lcd_panel_io.h"
 #include <vector>
 #include <map>
 
@@ -99,6 +100,9 @@ private:
     static void create_touch_feedback(int16_t x, int16_t y);
     static void IRAM_ATTR touch_irq_handler(void* arg);
     static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map);
+    static bool IRAM_ATTR lcd_trans_done_cb(esp_lcd_panel_io_handle_t panel_io,
+                                            esp_lcd_panel_io_event_data_t *edata,
+                                            void *user_ctx);
     static void lvgl_timer_task(void *arg);
     
     // Touch reading implementation (non-static)

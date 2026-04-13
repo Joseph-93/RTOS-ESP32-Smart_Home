@@ -10,6 +10,7 @@
 static const char *TAG = "LCD";
 static uint8_t current_brightness = 100; // Default 100%
 static bool lcd_initialized = false;     // Track if LCD hardware is available
+static esp_lcd_panel_io_handle_t lcd_io_handle = NULL;  // Exposed for flush-done callback
 
 // LCD backlight PWM configuration - Pin configured in common/pin_config.h
 #define LCD_BACKLIGHT_GPIO  PIN_LCD_BACKLIGHT
@@ -53,6 +54,7 @@ esp_lcd_panel_handle_t lcd_init(void) {
         ESP_LOGE(TAG, "Panel IO init failed: %s - LCD disabled", esp_err_to_name(ret));
         return NULL;
     }
+    lcd_io_handle = io_handle;  // Store for on_color_trans_done registration
     
     esp_lcd_panel_dev_config_t panel_config = {};
     panel_config.reset_gpio_num = LCD_PIN_RST;
@@ -139,5 +141,9 @@ uint8_t lcd_get_brightness(void) {
 
 bool lcd_is_available(void) {
     return lcd_initialized;
+}
+
+esp_lcd_panel_io_handle_t lcd_get_io_handle(void) {
+    return lcd_io_handle;
 }
 

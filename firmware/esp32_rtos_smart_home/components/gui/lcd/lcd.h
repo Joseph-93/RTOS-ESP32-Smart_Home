@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esp_lcd_panel_ops.h"
+#include "esp_lcd_panel_io.h"
 #include "pin_config.h"
 
 #ifdef __cplusplus
@@ -45,6 +46,12 @@ uint8_t lcd_get_brightness(void);
  * @return true if LCD initialized successfully, false otherwise
  */
 bool lcd_is_available(void);
+
+/**
+ * @brief Get the LCD panel IO handle (needed to register on_color_trans_done)
+ * @return Panel IO handle, or NULL if LCD not initialized
+ */
+esp_lcd_panel_io_handle_t lcd_get_io_handle(void);
 
 #ifdef __cplusplus
 }
