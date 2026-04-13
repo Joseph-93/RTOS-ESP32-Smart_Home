@@ -830,6 +830,7 @@ class CentralHub:
         component, param = result
         old_value = param.get_value(row, col)
         param.set_value(row, col, value)
+        if component.name == "log_collector" or param.name == "log":
             device_name = device.name or device.hostname or ip
             logger.info(f"[{ip}] 📝 Log from {component.name}: {str(value)[:120]}")
             self.log_collector.process_log_update(ip, device_name, str(value), component.name)
