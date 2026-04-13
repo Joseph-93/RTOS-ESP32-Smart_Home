@@ -49,6 +49,22 @@ endif()
 # Add common directory to component search path
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/common")
 
+# ---------------------------------------------------------------------------
+# Patch LVGL: remove circular "REQUIRES main" that breaks link order in IDF v5.x
+# Handles incremental builds. For post-fullclean builds, use build.ps1 which
+# runs idf.py reconfigure first (downloads LVGL), patches it, then builds.
+# ---------------------------------------------------------------------------
+set(_LVGL_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}/managed_components/lvgl__lvgl/CMakeLists.txt")
+if(EXISTS "${_LVGL_CMAKE}")
+    file(READ "${_LVGL_CMAKE}" _LVGL_CONTENT)
+    if("${_LVGL_CONTENT}" MATCHES "REQUIRES main")
+        string(REPLACE "REQUIRES main" "" _LVGL_PATCHED "${_LVGL_CONTENT}")
+        file(WRITE "${_LVGL_CMAKE}" "${_LVGL_PATCHED}")
+        message(STATUS "Patched lvgl__lvgl: removed circular 'REQUIRES main'")
+    endif()
+endif()
+unset(_LVGL_CMAKE)
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(esp32_rtos_smart_home)
 
