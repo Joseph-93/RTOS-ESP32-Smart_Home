@@ -1,5 +1,7 @@
-# Active config: floating_candle
-# To switch products: .\use-config.ps1 <product>  (then idf.py fullclean && idf.py build)
+# sdkconfig.defaults — LCD Lamp (GUI + RGB + Sensors)
+#
+# Switch to this config:  .\use-config.ps1 lcd_lamp
+# Then:                   idf.py fullclean && idf.py build
 
 # Compiler options
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
@@ -24,12 +26,12 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
-# LVGL
+# LVGL: ILI9341 uses BGR byte order in 16-bit color mode
 CONFIG_LV_COLOR_16_SWAP=y
 
-# esp_timer: pin the timer task to CPU1 so the stepper step timer (40-80 kHz)
-# runs on CPU1 and never contends with WiFi/lwIP which are pinned to CPU0.
-CONFIG_ESP_TIMER_TASK_AFFINITY_CPU1=y
+# XPT2046 touch controller
+CONFIG_XPT2046_Z_THRESHOLD=20
+CONFIG_XPT2046_INTERRUPT_MODE=y
 
-# lwIP: increase socket pool for httpd (7 open sockets + 1 listener + OTA client)
+# lwIP: increase socket pool for httpd
 CONFIG_LWIP_MAX_SOCKETS=16

@@ -44,7 +44,24 @@ esp_lcd_touch_handle_t touch_init(void) {
     }
     
     touch_initialized = true;
-    
+
+    // ── Diagnostic: raw SPI probe of XPT2046 ──────────────────────────
+    // Read Z1 (0xB0), Z2 (0xC0), X (0xD0), Y (0x90) registers directly
+    // via the panel IO handle to verify the chip responds on the SPI bus.
+    // Each command returns 2 bytes (12-bit ADC value left-justified).
+    {
+        const uint8_t cmds[] = {0xB0, 0xC0, 0xD0, 0x90};  // Z1, Z2, X, Y (PD=00 = low power + IRQ)
+        const char* names[] = {"Z1", "Z2", "X", "Y"};
+        for (int i = 0; i < 4; i++) {
+            uint8_t buf[2] = {0, 0};
+            esp_err_t err = esp_lcd_panel_io_rx_param(touch_io_handle, cmds[i], buf, 2);
+            uint16_t raw = (buf[0] << 8) | buf[1];
+            ESP_LOGW(TAG, "SPI probe %s (cmd=0x%02X): err=%s raw=0x%04X (%d) bytes=[0x%02X,0x%02X]",
+                     names[i], cmds[i], esp_err_to_name(err), raw, raw >> 3, buf[0], buf[1]);
+        }
+    }
+    // ──────────────────────────────────────────────────────────────────
+
     return touch_handle;
 }
 
