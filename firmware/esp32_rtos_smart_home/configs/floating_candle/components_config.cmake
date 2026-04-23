@@ -1,8 +1,8 @@
 # Component Selection Configuration — Floating Candle (Stepper Motors)
 #
 # Hardware: ESP-WROOM-32 30-pin, 4× A4988 + NEMA 17, 4× cable-driven axes
-# GPIOs:    16/17, 18/19, 21/22, 23/25 (STEP/DIR), 26 (EN), 27/14/12 (MS)
-#           34/35/36/39 (LIMIT_MIN, ext pullup), 4/5/13/33 (LIMIT_MAX, int pullup)
+# GPIOs:    15/2, 4/16, 17/5, 18/19 (STEP/DIR), 27 (EN), 14/12/13 (MS)
+#           26/33/35/39 (LIMIT_MIN), 25/32/34/36 (LIMIT_MAX)
 #
 # Switch to this config:  .\use-config.ps1 floating_candle
 # Then:                   idf.py fullclean && idf.py build

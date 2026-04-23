@@ -108,13 +108,14 @@ esp_err_t A4988StepperMotorHAL::init() {
              PIN_STEPPER_MS1, PIN_STEPPER_MS2, PIN_STEPPER_MS3, currentMicrostepping);
     
     // Configure MIN LIMIT switch pins as inputs
-    // GPIO 34-39 are input-only and don't have internal pullups
-    // External pullup resistors required (10K to 3.3V)
+    // GPIOs 34-39 are input-only with NO internal pullup (need external 10K to 3.3V)
+    // Other GPIOs can use internal pullup
     for (int i = 0; i < NUM_MOTORS; i++) {
+        bool input_only = (LIMIT_MIN_PINS[i] >= 34);  // GPIOs 34-39 have no internal pullup
         gpio_config_t limit_conf = {
             .pin_bit_mask = (1ULL << LIMIT_MIN_PINS[i]),
             .mode = GPIO_MODE_INPUT,
-            .pull_up_en = GPIO_PULLUP_DISABLE,  // No internal pullup on 34-39
+            .pull_up_en = input_only ? GPIO_PULLUP_DISABLE : GPIO_PULLUP_ENABLE,
             .pull_down_en = GPIO_PULLDOWN_DISABLE,
             .intr_type = GPIO_INTR_DISABLE
         };
@@ -123,16 +124,19 @@ esp_err_t A4988StepperMotorHAL::init() {
             ESP_LOGE(TAG, "Failed to configure LIMIT_MIN pin %d: %d", LIMIT_MIN_PINS[i], err);
             return err;
         }
-        ESP_LOGD(TAG, "Motor %d LIMIT_MIN pin: GPIO%d", i, LIMIT_MIN_PINS[i]);
+        ESP_LOGD(TAG, "Motor %d LIMIT_MIN pin: GPIO%d (%s pullup)", i, LIMIT_MIN_PINS[i],
+                 input_only ? "external" : "internal");
     }
     
-    // Configure MAX LIMIT switch pins as inputs with internal pullup
-    // GPIOs 4, 5, 13, 33 support internal pullup — no external resistor needed
+    // Configure MAX LIMIT switch pins as inputs
+    // GPIOs 34-39 are input-only with NO internal pullup (need external 10K to 3.3V)
+    // Other GPIOs can use internal pullup
     for (int i = 0; i < NUM_MOTORS; i++) {
+        bool input_only = (LIMIT_MAX_PINS[i] >= 34);  // GPIOs 34-39 have no internal pullup
         gpio_config_t limit_max_conf = {
             .pin_bit_mask = (1ULL << LIMIT_MAX_PINS[i]),
             .mode = GPIO_MODE_INPUT,
-            .pull_up_en = GPIO_PULLUP_ENABLE,   // Internal pullup — active LOW
+            .pull_up_en = input_only ? GPIO_PULLUP_DISABLE : GPIO_PULLUP_ENABLE,
             .pull_down_en = GPIO_PULLDOWN_DISABLE,
             .intr_type = GPIO_INTR_DISABLE
         };
@@ -141,7 +145,8 @@ esp_err_t A4988StepperMotorHAL::init() {
             ESP_LOGE(TAG, "Failed to configure LIMIT_MAX pin %d: %d", LIMIT_MAX_PINS[i], err);
             return err;
         }
-        ESP_LOGD(TAG, "Motor %d LIMIT_MAX pin: GPIO%d", i, LIMIT_MAX_PINS[i]);
+        ESP_LOGD(TAG, "Motor %d LIMIT_MAX pin: GPIO%d (%s pullup)", i, LIMIT_MAX_PINS[i],
+                 input_only ? "external" : "internal");
     }
     
     initialized = true;

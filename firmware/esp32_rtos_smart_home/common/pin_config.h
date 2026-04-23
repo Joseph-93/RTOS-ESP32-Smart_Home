@@ -77,33 +77,37 @@
 // Used for Floating Candle project - 4 cable-driven motors
 //
 // Pin assignment for ESP-WROOM-32 30-pin module:
-#define PIN_STEPPER_MOTOR0_STEP     GPIO_NUM_16
-#define PIN_STEPPER_MOTOR0_DIR      GPIO_NUM_17
-#define PIN_STEPPER_MOTOR1_STEP     GPIO_NUM_18
-#define PIN_STEPPER_MOTOR1_DIR      GPIO_NUM_19
-#define PIN_STEPPER_MOTOR2_STEP     GPIO_NUM_21
-#define PIN_STEPPER_MOTOR2_DIR      GPIO_NUM_22
-#define PIN_STEPPER_MOTOR3_STEP     GPIO_NUM_23
-#define PIN_STEPPER_MOTOR3_DIR      GPIO_NUM_25
-#define PIN_STEPPER_ENABLE          GPIO_NUM_26  // Shared, active LOW
-#define PIN_STEPPER_MS1             GPIO_NUM_27  // Microstepping select (shared)
-#define PIN_STEPPER_MS2             GPIO_NUM_14  // Microstepping select (shared)
-#define PIN_STEPPER_MS3             GPIO_NUM_12  // Microstepping select (shared)
-#define PIN_STEPPER_LIMIT_MIN0      GPIO_NUM_34  // Min (retract) limit, input only
-#define PIN_STEPPER_LIMIT_MIN1      GPIO_NUM_35  // Min (retract) limit, input only
-#define PIN_STEPPER_LIMIT_MIN2      GPIO_NUM_36  // Min (retract) limit, input only
-#define PIN_STEPPER_LIMIT_MIN3      GPIO_NUM_39  // Min (retract) limit, input only
-#define PIN_STEPPER_LIMIT_MAX0      GPIO_NUM_4   // Max (pay-out) limit, supports internal pullup
-#define PIN_STEPPER_LIMIT_MAX1      GPIO_NUM_5   // Max (pay-out) limit, supports internal pullup
-#define PIN_STEPPER_LIMIT_MAX2      GPIO_NUM_13  // Max (pay-out) limit, supports internal pullup
-#define PIN_STEPPER_LIMIT_MAX3      GPIO_NUM_33  // Max (pay-out) limit, supports internal pullup
+#define PIN_STEPPER_MOTOR0_STEP     GPIO_NUM_15  // Boot strapping - safe with ENABLE pull-up
+#define PIN_STEPPER_MOTOR0_DIR      GPIO_NUM_2   // Boot strapping - harmless for DIR
+#define PIN_STEPPER_MOTOR1_STEP     GPIO_NUM_4
+#define PIN_STEPPER_MOTOR1_DIR      GPIO_NUM_16
+#define PIN_STEPPER_MOTOR2_STEP     GPIO_NUM_17
+#define PIN_STEPPER_MOTOR2_DIR      GPIO_NUM_5   // Internal pull-up at boot - harmless for DIR
+#define PIN_STEPPER_MOTOR3_STEP     GPIO_NUM_18
+#define PIN_STEPPER_MOTOR3_DIR      GPIO_NUM_19
+#define PIN_STEPPER_ENABLE          GPIO_NUM_27  // Shared, active LOW. External 10K pull-up to 3.3V
+#define PIN_STEPPER_MS1             GPIO_NUM_14  // Microstepping select (shared)
+#define PIN_STEPPER_MS2             GPIO_NUM_12  // Microstepping select (shared). Burn eFuse!
+#define PIN_STEPPER_MS3             GPIO_NUM_13  // Microstepping select (shared)
+#define PIN_STEPPER_LIMIT_MIN0      GPIO_NUM_26  // Min (retract) limit, internal pullup
+#define PIN_STEPPER_LIMIT_MIN1      GPIO_NUM_33  // Min (retract) limit, internal pullup
+#define PIN_STEPPER_LIMIT_MIN2      GPIO_NUM_35  // Min (retract) limit, input only, external 10K pullup
+#define PIN_STEPPER_LIMIT_MIN3      GPIO_NUM_39  // Min (retract) limit, input only, external 10K pullup
+#define PIN_STEPPER_LIMIT_MAX0      GPIO_NUM_25  // Max (pay-out) limit, internal pullup
+#define PIN_STEPPER_LIMIT_MAX1      GPIO_NUM_32  // Max (pay-out) limit, internal pullup
+#define PIN_STEPPER_LIMIT_MAX2      GPIO_NUM_34  // Max (pay-out) limit, input only, external 10K pullup
+#define PIN_STEPPER_LIMIT_MAX3      GPIO_NUM_36  // Max (pay-out) limit, input only, external 10K pullup
 //
-// NOTE: Min limit GPIOs (34-39) have NO internal pullup.
-// External 10K pullup resistors to 3.3V required on min limit pins.
-// Max limit GPIOs (4, 5, 13, 33) use internal pullup (no external resistor needed).
+// NOTE: GPIOs 35, 39, 34, 36 are input-only with NO internal pullup.
+// External 10K pullup resistors to 3.3V required on those limit pins.
+// GPIOs 26, 33, 25, 32 use internal pullup (no external resistor needed).
 // All limit switches: active LOW (switch closes to GND when triggered).
-// NOTE: GPIO 12 (MS3) is a boot strapping pin - must be LOW at boot.
-// This is fine since 1/16 microstepping (default) sets MS3=HIGH after boot.
+// NOTE: GPIO 12 (MS2) is a boot strapping pin — burn VDD_SDIO eFuse:
+//   espefuse.py --port COM<X> set_flash_voltage 3.3V
+// NOTE: GPIO 27 (ENABLE) needs external 10K pull-up to 3.3V to keep
+//   drivers disabled during ESP32 boot (before firmware takes over).
+// NOTE: SLEEP and RESET on all A4988 boards are tied together and to 3.3V.
+//   No ESP32 GPIOs needed for SLEEP/RESET.
 
 // ============================================================================
 // RESERVED / SYSTEM PINS (DO NOT USE)
@@ -119,31 +123,28 @@
 /*
  * GPIO  | Component        | Enabled By
  * ------|------------------|------------------
- *  2    | LCD DC           | ENABLE_GUI
- *  4    | LCD RST          | ENABLE_GUI
- *  5    | LCD CS           | ENABLE_GUI
- * 13    | RGB LED          | ENABLE_RGB_LED
- * 16    | Motor 0 STEP     | ENABLE_STEPPER_MOTOR
- * 17    | Motor 0 DIR      | ENABLE_STEPPER_MOTOR
- * 18    | LCD CLK / M1 STEP| ENABLE_GUI / ENABLE_STEPPER_MOTOR
- * 19    | LCD MISO / M1 DIR| ENABLE_GUI / ENABLE_STEPPER_MOTOR
- * 21    | Touch CS / M2 STEP| ENABLE_GUI / ENABLE_STEPPER_MOTOR
- * 22    | Touch IRQ / M2 DIR| ENABLE_GUI / ENABLE_STEPPER_MOTOR
- * 23    | LCD MOSI / M3 STEP| ENABLE_GUI / ENABLE_STEPPER_MOTOR
- * 25    | Touch Sensor 0 / M3 DIR| ENABLE_TOUCH_SENSOR / ENABLE_STEPPER_MOTOR
- * 26    | Touch Sensor 1 / Motor EN| ENABLE_TOUCH_SENSOR / ENABLE_STEPPER_MOTOR
- * 27    | Motion Sensor    | ENABLE_MOTION_SENSOR
- * 32    | Door Sensor      | ENABLE_DOOR_SENSOR
- * 33    | LCD Backlight    | ENABLE_GUI
- *  4    | Motor 0 LIMIT MAX| ENABLE_STEPPER_MOTOR
- *  5    | Motor 1 LIMIT MAX| ENABLE_STEPPER_MOTOR
- * 13    | RGB LED / M2 MAX | ENABLE_RGB_LED / ENABLE_STEPPER_MOTOR
- * 33    | LCD BL / M3 MAX  | ENABLE_GUI / ENABLE_STEPPER_MOTOR
- * 34    | Motor 0 LIMIT MIN| ENABLE_STEPPER_MOTOR (input only)
- * 35    | Motor 1 LIMIT MIN| ENABLE_STEPPER_MOTOR (input only)
- * 36    | Light Sensor / M2 MIN | ENABLE_LIGHT_SENSOR / ENABLE_STEPPER_MOTOR
- * 39    | Motor 3 LIMIT MIN| ENABLE_STEPPER_MOTOR (input only)
+ *  2    | LCD DC / M0 DIR  | ENABLE_GUI / ENABLE_STEPPER_MOTOR
+ *  4    | LCD RST / M1 STEP| ENABLE_GUI / ENABLE_STEPPER_MOTOR
+ *  5    | LCD CS / M2 DIR  | ENABLE_GUI / ENABLE_STEPPER_MOTOR
+ * 12    | Stepper MS2      | ENABLE_STEPPER_MOTOR (burn eFuse!)
+ * 13    | RGB LED / MS3    | ENABLE_RGB_LED / ENABLE_STEPPER_MOTOR
+ * 14    | Stepper MS1      | ENABLE_STEPPER_MOTOR
+ * 15    | Motor 0 STEP     | ENABLE_STEPPER_MOTOR (boot strapping)
+ * 16    | Motor 1 DIR      | ENABLE_STEPPER_MOTOR
+ * 17    | Motor 2 STEP     | ENABLE_STEPPER_MOTOR
+ * 18    | LCD CLK / M3 STEP| ENABLE_GUI / ENABLE_STEPPER_MOTOR
+ * 19    | LCD MISO / M3 DIR| ENABLE_GUI / ENABLE_STEPPER_MOTOR
+ * 25    | Touch Sensor 0 / M0 MAX | ENABLE_TOUCH_SENSOR / ENABLE_STEPPER_MOTOR
+ * 26    | Touch Sensor 1 / M0 MIN | ENABLE_TOUCH_SENSOR / ENABLE_STEPPER_MOTOR
+ * 27    | Motion Sensor / ENABLE   | ENABLE_MOTION_SENSOR / ENABLE_STEPPER_MOTOR
+ * 32    | Door Sensor / M1 MAX     | ENABLE_DOOR_SENSOR / ENABLE_STEPPER_MOTOR
+ * 33    | LCD BL / M1 MIN  | ENABLE_GUI / ENABLE_STEPPER_MOTOR
+ * 34    | Motor 2 MAX      | ENABLE_STEPPER_MOTOR (input only)
+ * 35    | Motor 2 MIN      | ENABLE_STEPPER_MOTOR (input only)
+ * 36    | Light Sensor / M3 MAX | ENABLE_LIGHT_SENSOR / ENABLE_STEPPER_MOTOR
+ * 39    | Motor 3 MIN      | ENABLE_STEPPER_MOTOR (input only)
  *
  * Floating Candle build: ONLY heartbeat + webserver + stepper_motor enabled.
  * No conflicts with GUI, touch sensor, or other components.
+ * Spare GPIOs: 21, 22, 23
  */
