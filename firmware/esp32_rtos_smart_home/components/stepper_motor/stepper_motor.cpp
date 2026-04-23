@@ -142,7 +142,11 @@ StepperMotorComponent::StepperMotorComponent()
       stopRequested(false),
       uploadExpectedSize(0),
       uploadReceivedSize(0),
-      uploadInProgress(false)
+      uploadInProgress(false),
+      homingPhase(HomingPhase::IDLE),
+      homingMotorIndex(0),
+      homingBackoffTarget(0),
+      savedJogSpeedFP(0)
 {
     for (int i = 0; i < NUM_MOTORS; i++) {
         currentPosition[i] = 0;
@@ -298,6 +302,24 @@ void StepperMotorComponent::onInitialize() {
         updateJogParams();
     });
     backoffDistanceParam = addIntParam("backoffDistance", 1, 1, 10, 200, 50);
+    
+    // Homing control
+    homingSpeedParam = addIntParam("homingSpeed", 1, 1, 1, 1000, 50);
+    startHomingParam = addBoolParam("startHoming", 1, 1, false);
+    startHomingParam->setOnChange([this](size_t, size_t, bool val) {
+        if (val) {
+            startHomingParam->setValue(0, 0, false);  // Auto-reset trigger
+            beginHoming();
+        }
+    });
+    abortHomingParam = addBoolParam("abortHoming", 1, 1, false);
+    abortHomingParam->setOnChange([this](size_t, size_t, bool val) {
+        if (val) {
+            abortHomingParam->setValue(0, 0, false);  // Auto-reset trigger
+            abortHoming();
+        }
+    });
+    homingMotorParam = addIntParam("homingMotor", 1, 1, -1, 3, -1, true);  // read-only
     
     // Limit switch simulation (1×4: one bool per motor)
     simulateLimitMin = addBoolParam("simulateLimitMin", 1, 4, false);
@@ -476,6 +498,7 @@ void StepperMotorComponent::onInitialize() {
     // Calculate initial ISR rate and jog params
     uint32_t rate = calculateRequiredIsrRate();
     isrRateHz->setValue(0, 0, rate);
+    actualIsrRateHz.store(rate);  // Must be set BEFORE updateJogParams uses it
     updateJogParams();
     
     // Start motion task immediately — it runs forever and handles:
@@ -501,7 +524,6 @@ void StepperMotorComponent::onInitialize() {
     // and playback stepping based on current state
     uint64_t period_us = 1000000 / rate;
     esp_timer_start_periodic(stepTimer, period_us);
-    actualIsrRateHz.store(rate);  // Track actual running rate
     
     ESP_LOGI(TAG, "StepperMotorComponent initialized");
     ESP_LOGI(TAG, "  Waypoint interval: %.3f sec (%d Hz)", WAYPOINT_INTERVAL_SEC, (int)(1.0f/WAYPOINT_INTERVAL_SEC));
@@ -754,13 +776,11 @@ void StepperMotorComponent::motionTask() {
         PlaybackState currentState = state.load();
         
         // ====================================================================
+        // Homing state machine
         // ====================================================================
-        // Limit-triggered back-off / homing sequence
-        // NOTE: limitMinTriggered / limitMaxTriggered are NOT set during normal
-        // jog. They will be set by the homing routine when implemented.
-        // During jog, limits cause an immediate dead stop in the ISR and that
-        // is the ONLY action taken — no back-off, no flag.
-        // ====================================================================
+        if (currentState == PlaybackState::HOMING) {
+            homingTick();
+        }
         
         // ====================================================================
         // Check if all homed and user requested move to home
@@ -772,11 +792,13 @@ void StepperMotorComponent::motionTask() {
         }
         
         // ====================================================================
-        // Read jog parameter updates
+        // Read jog parameter updates (blocked during homing)
         // ====================================================================
-        for (int m = 0; m < NUM_MOTORS; m++) {
-            int8_t cmd = jogCommandParams[m]->getValue(0, 0);
-            jogCommand[m].store(cmd);
+        if (currentState != PlaybackState::HOMING) {
+            for (int m = 0; m < NUM_MOTORS; m++) {
+                int8_t cmd = jogCommandParams[m]->getValue(0, 0);
+                jogCommand[m].store(cmd);
+            }
         }
         
         // ====================================================================
@@ -904,7 +926,7 @@ void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
     
     // ================================================================
     // Manual jog with smooth acceleration / deceleration ramp.
-    // Works in ALL states except E_STOP and PLAYING.
+    // Works in ALL states except E_STOP and PLAYING (including HOMING).
     //
     // Algorithm (fixed-point ×256 fractional accumulator):
     //   - Each ISR tick, ramp currentSpeed toward targetSpeed (accel)
@@ -929,14 +951,13 @@ void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
             int8_t jog = jogCommand[m].load();
 
             if (jog != 0) {
-                // Hit MIN limit while retracting — dead stop, no back-off, no flag.
-                // The switch being active is sufficient to block stepping every tick.
+                // Hit MIN limit while retracting — dead stop
                 if (jog < 0 && (cachedSimulateLimitMin[m].load() || hal->isLimitTriggered(m))) {
                     jogCurrentSpeedFP[m] = 0;
                     jogAccumFP[m] = 0;
                     continue;
                 }
-                // Hit MAX limit while paying out — same: dead stop.
+                // Hit MAX limit while paying out — dead stop
                 if (jog > 0 && (cachedSimulateLimitMax[m].load() || hal->isMaxLimitTriggered(m))) {
                     jogCurrentSpeedFP[m] = 0;
                     jogAccumFP[m] = 0;
@@ -1089,6 +1110,14 @@ void StepperMotorComponent::stopPlayback() {
 void StepperMotorComponent::emergencyStop() {
     ESP_LOGW(TAG, "EMERGENCY STOP");
     
+    // Abort homing if active
+    if (homingPhase != HomingPhase::IDLE && homingPhase != HomingPhase::DONE) {
+        ESP_LOGW(TAG, "E-STOP: aborting homing sequence");
+        homingPhase = HomingPhase::IDLE;
+        homingMotorParam->setValue(0, 0, -1);
+        cachedJogTargetSpeedFP.store(savedJogSpeedFP);  // Restore jog speed
+    }
+    
     // Disable drivers immediately
     if (hal) {
         hal->setEnabled(0xFF, false);
@@ -1151,6 +1180,163 @@ void StepperMotorComponent::moveToHomePosition() {
     }
     
     ESP_LOGI(TAG, "All motors at home position");
+}
+
+// ============================================================================
+// Homing Sequence
+// ============================================================================
+
+void StepperMotorComponent::beginHoming() {
+    PlaybackState cur = state.load();
+    if (cur == PlaybackState::PLAYING || cur == PlaybackState::E_STOP) {
+        ESP_LOGW(TAG, "Cannot start homing in state %d", (int)cur);
+        return;
+    }
+    
+    ESP_LOGI(TAG, "=== HOMING SEQUENCE START ===");
+    
+    // Ensure drivers are enabled
+    if (!cachedDriversEnabled.load()) {
+        enableDrivers->setValue(0, 0, true);
+        cachedDriversEnabled.store(true);
+        if (hal) hal->setEnabled(0xFF, true);
+        ESP_LOGI(TAG, "Auto-enabled drivers for homing");
+    }
+    
+    // Clear all homed flags
+    for (int m = 0; m < NUM_MOTORS; m++) {
+        motorIsHomed[m].store(false);
+        motorHomedParams[m]->setValue(0, 0, false);
+    }
+    
+    // Save current jog speed and apply homing speed
+    savedJogSpeedFP = cachedJogTargetSpeedFP.load();
+    uint32_t homingSpeed = (uint32_t)homingSpeedParam->getValue(0, 0);
+    cachedJogTargetSpeedFP.store(homingSpeed * 256);
+    ESP_LOGI(TAG, "Homing speed: %lu steps/sec (saved jog speed: %lu)",
+             homingSpeed, savedJogSpeedFP / 256);
+    
+    // Start with motor 0
+    homingMotorIndex = 0;
+    homingPhase = HomingPhase::RETRACT;
+    homingMotorParam->setValue(0, 0, (int32_t)homingMotorIndex);
+    
+    // Set jog commands: homing motor retracts, others pay out
+    for (int m = 0; m < NUM_MOTORS; m++) {
+        jogCommand[m].store(m == homingMotorIndex ? -1 : 1);
+    }
+    
+    transitionTo(PlaybackState::HOMING);
+    ESP_LOGI(TAG, "Homing motor %d: RETRACT (others PAY OUT)", homingMotorIndex);
+}
+
+void StepperMotorComponent::abortHoming() {
+    if (state.load() != PlaybackState::HOMING) return;
+    
+    ESP_LOGW(TAG, "=== HOMING ABORTED ===");
+    
+    // Stop all motors
+    for (int m = 0; m < NUM_MOTORS; m++) {
+        jogCommand[m].store(0);
+    }
+    
+    // Restore jog speed
+    cachedJogTargetSpeedFP.store(savedJogSpeedFP);
+    
+    homingPhase = HomingPhase::IDLE;
+    homingMotorParam->setValue(0, 0, -1);
+    transitionTo(PlaybackState::IDLE);
+}
+
+void StepperMotorComponent::homingTick() {
+    // Called at TASK_RATE_HZ (200 Hz) while state == HOMING
+    
+    switch (homingPhase) {
+    
+    case HomingPhase::RETRACT: {
+        // Check if homing motor hit MIN limit
+        uint8_t m = homingMotorIndex;
+        bool minHit = hal->isLimitTriggered(m) || cachedSimulateLimitMin[m].load();
+        
+        if (minHit) {
+            ESP_LOGI(TAG, "Motor %d hit MIN limit at pos=%ld — stopping all, backing off",
+                     m, (long)currentPosition[m].load());
+            
+            // Stop all motors
+            for (int i = 0; i < NUM_MOTORS; i++) {
+                jogCommand[i].store(0);
+            }
+
+            // Snap the displayed/working position to zero as soon as home is hit.
+            currentPosition[m].store(0);
+            motorPositions->setValue(m, 0, 0);
+            
+            // Calculate backoff target (pay out from home = 0)
+            int32_t backoff = (int32_t)backoffDistanceParam->getValue(0, 0);
+            homingBackoffTarget = backoff;
+            
+            // Start backing off just the homing motor
+            jogCommand[m].store(1);  // Pay out
+            homingPhase = HomingPhase::BACKOFF;
+            
+            ESP_LOGI(TAG, "Motor %d: backing off %ld steps to pos=%ld",
+                     m, (long)backoff, (long)homingBackoffTarget);
+        }
+        break;
+    }
+    
+    case HomingPhase::BACKOFF: {
+        uint8_t m = homingMotorIndex;
+        int32_t pos = currentPosition[m].load();
+        
+        if (pos >= homingBackoffTarget) {
+            // Backoff complete — stop, zero position, mark homed
+            jogCommand[m].store(0);
+            
+            currentPosition[m].store(0);
+            motorPositions->setValue(m, 0, 0);
+            motorIsHomed[m].store(true);
+            motorHomedParams[m]->setValue(0, 0, true);
+            
+            ESP_LOGI(TAG, "Motor %d HOMED (zeroed at backoff position)", m);
+            
+            homingPhase = HomingPhase::NEXT;
+        }
+        break;
+    }
+    
+    case HomingPhase::NEXT: {
+        homingMotorIndex++;
+        
+        if (homingMotorIndex >= NUM_MOTORS) {
+            // All motors homed!
+            ESP_LOGI(TAG, "=== HOMING COMPLETE — all %d motors homed ===", NUM_MOTORS);
+            
+            // Restore jog speed
+            cachedJogTargetSpeedFP.store(savedJogSpeedFP);
+            
+            homingPhase = HomingPhase::DONE;
+            homingMotorParam->setValue(0, 0, -1);
+            transitionTo(PlaybackState::IDLE);
+        } else {
+            // Start homing next motor
+            homingMotorParam->setValue(0, 0, (int32_t)homingMotorIndex);
+            
+            // Homing motor retracts, others pay out
+            for (int m = 0; m < NUM_MOTORS; m++) {
+                jogCommand[m].store(m == homingMotorIndex ? -1 : 1);
+            }
+            
+            homingPhase = HomingPhase::RETRACT;
+            ESP_LOGI(TAG, "Homing motor %d: RETRACT (others PAY OUT)", homingMotorIndex);
+        }
+        break;
+    }
+    
+    case HomingPhase::DONE:
+    case HomingPhase::IDLE:
+        break;
+    }
 }
 
 // ============================================================================

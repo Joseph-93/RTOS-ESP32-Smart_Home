@@ -121,8 +121,8 @@
                         style="padding: 8px 20px; border: 2px solid #f44336; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 700; background: #f44336; color: white; letter-spacing: 1px;">
                         ⛔ E-STOP
                     </button>
-                    <button id="stepper-estop-clear-btn" onclick="clearEStop()" style="display: none; padding: 8px 16px; border: 2px solid #FF9800; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; background: transparent; color: #FF9800;">
-                        Clear E-Stop
+                    <button id="stepper-estop-clear-btn" onclick="clearEStop()" style="display: none; padding: 8px 20px; border: 2px solid #4CAF50; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 700; background: #4CAF50; color: white; letter-spacing: 0.5px; box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);">
+                        CLEAR E-STOP
                     </button>
                 </div>
                 
@@ -244,6 +244,27 @@
                     <strong>Status:</strong> <span id="stepper-status-text">Loading...</span>
                 </div>
                 
+                <div id="stepper-homing-controls" style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
+                    <button id="stepper-home-btn" class="btn btn-primary" onclick="startHoming()" style="font-size: 16px; padding: 12px 24px;">
+                        🏠 Home All Motors
+                    </button>
+                    <button id="stepper-abort-home-btn" class="btn btn-danger" onclick="abortHoming()" style="font-size: 16px; padding: 12px 24px; display: none;">
+                        ✋ Abort Homing
+                    </button>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-left: 20px;">
+                        <label style="font-size: 13px; color: #888;">Homing Speed:</label>
+                        <input id="stepper-homing-speed" type="number" min="1" max="1000" value="50" 
+                               style="width: 80px; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color);"
+                               onchange="setHomingSpeed(this.value)">
+                        <span style="font-size: 12px; color: #888;">steps/s</span>
+                    </div>
+                </div>
+                
+                <div id="stepper-homing-progress" style="display: none; padding: 15px; background: #fff3e0; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+                    <strong>🔄 Homing in progress...</strong>
+                    <span id="stepper-homing-motor-text">Motor 0</span>
+                </div>
+                
                 <div id="stepper-move-home-section" style="display: none; text-align: center; padding: 20px; background: #c8e6c9; border-radius: 8px;">
                     <p style="margin: 0 0 15px 0; font-size: 16px;"><strong>✓ All motors homed!</strong> Move to center position?</p>
                     <button class="btn btn-primary" onclick="moveSteppersToHome()" style="font-size: 18px; padding: 12px 30px;">
@@ -298,25 +319,25 @@
         if (componentName === 'Watcher') {
             document.getElementById('watcher-controls').style.display = 'block';
             // Load active expressions after WebSocket connects
-            setTimeout(() => loadActiveExpressions(), 1000);
+            wsReady.then(() => loadActiveExpressions());
         } else if (componentName === 'ActionManager') {
             document.getElementById('action-manager-controls').style.display = 'block';
         } else if (componentName === 'NetworkActions') {
             document.getElementById('network-actions-controls').style.display = 'block';
             // Load network actions after WebSocket connects
-            setTimeout(() => loadNetworkActions(), 1000);
+            wsReady.then(() => loadNetworkActions());
         } else if (componentName === 'RgbLed') {
             document.getElementById('rgb-led-controls').style.display = 'block';
             // Init animation builder once WebSocket is ready
-            setTimeout(() => initRgbLedBuilder(esp32ws, componentName), 1000);
+            wsReady.then(() => initRgbLedBuilder(esp32ws, componentName));
         } else if (componentName === 'GUI') {
             document.getElementById('gui-designer-controls').style.display = 'block';
             // Init color designer once WebSocket is ready
-            setTimeout(() => initGuiDesigner(esp32ws, componentName), 800);
+            wsReady.then(() => initGuiDesigner(esp32ws, componentName));
         } else if (componentName === 'StepperMotor') {
             document.getElementById('stepper-motor-controls').style.display = 'block';
             // Init stepper motor jog interface
-            setTimeout(() => initStepperMotorJog(esp32ws, componentName), 800);
+            wsReady.then(() => initStepperMotorJog(esp32ws, componentName));
         }
         
         // Global functions for modal editors
@@ -980,6 +1001,7 @@
         
         let stepperMotorState = {
             motorHomed: [false, false, false, false],
+            homingMotor: -1,
             motorPositions: [0, 0, 0, 0],
             limitMinState: [false, false, false, false],
             limitMaxState: [false, false, false, false],
@@ -1083,6 +1105,9 @@
             initStepperSubscriptions();
         }
         
+        // Track which motors are actively jogging to prevent stop-spam
+        const activeJogs = new Set();
+        
         async function startStepperJog(motorId, direction) {
             if (!esp32ws || !esp32ws.connected) {
                 showNotification('Connect to device first', 'error');
@@ -1090,25 +1115,28 @@
             }
             
             try {
-                // Auto-enable drivers on first jog if not already on
+                // Auto-enable drivers on first jog if not already on (fire-and-forget)
                 if (!stepperMotorState.driversEnabled) {
-                    await esp32ws.send({
+                    esp32ws.send({
                         type: 'set_param',
                         comp: 'StepperMotor',
                         param: 'enableDrivers',
                         row: 0, col: 0,
                         value: true
-                    });
+                    }).catch(e => console.error('Failed to enable drivers:', e));
                 }
                 
-                await esp32ws.send({
+                activeJogs.add(motorId);
+                const jogMsg = {
                     type: 'set_param',
                     comp: 'StepperMotor',
                     param: `motor${motorId}JogCommand`,
                     row: 0,
                     col: 0,
                     value: direction
-                });
+                };
+                console.log(`[JOG] START motor${motorId} dir=${direction} (${direction < 0 ? 'RETRACT' : 'PAY-OUT'})`, jogMsg);
+                await esp32ws.send(jogMsg);
             } catch (e) {
                 console.error('Failed to start jog:', e);
             }
@@ -1116,16 +1144,21 @@
         
         async function stopStepperJog(motorId) {
             if (!esp32ws || !esp32ws.connected) return;
+            // Only send stop if this motor was actually jogging
+            if (!activeJogs.has(motorId)) return;
+            activeJogs.delete(motorId);
             
             try {
-                await esp32ws.send({
+                const stopMsg = {
                     type: 'set_param',
                     comp: 'StepperMotor',
                     param: `motor${motorId}JogCommand`,
                     row: 0,
                     col: 0,
                     value: 0
-                });
+                };
+                console.log(`[JOG] STOP motor${motorId}`, stopMsg);
+                await esp32ws.send(stopMsg);
             } catch (e) {
                 console.error('Failed to stop jog:', e);
             }
@@ -1149,6 +1182,60 @@
             } catch (e) {
                 console.error('Failed to move to home:', e);
                 showNotification('Failed to move to home', 'error');
+            }
+        }
+        
+        async function startHoming() {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: 'startHoming',
+                    row: 0, col: 0,
+                    value: true
+                });
+                console.log('[HOMING] Start requested');
+                showNotification('Homing sequence started...', 'success');
+            } catch (e) {
+                console.error('Failed to start homing:', e);
+                showNotification('Failed to start homing', 'error');
+            }
+        }
+        
+        async function abortHoming() {
+            if (!esp32ws || !esp32ws.connected) return;
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: 'abortHoming',
+                    row: 0, col: 0,
+                    value: true
+                });
+                console.log('[HOMING] Abort requested');
+                showNotification('Homing aborted', 'warning');
+            } catch (e) {
+                console.error('Failed to abort homing:', e);
+            }
+        }
+        
+        async function setHomingSpeed(speed) {
+            if (!esp32ws || !esp32ws.connected) return;
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: 'homingSpeed',
+                    row: 0, col: 0,
+                    value: parseInt(speed)
+                });
+                console.log(`[HOMING] Speed set to ${speed} steps/s`);
+            } catch (e) {
+                console.error('Failed to set homing speed:', e);
             }
         }
         
@@ -1285,6 +1372,18 @@
                 const backoffVal = await sub('backoffDistance', 0, 0);
                 updateSettingUI('backoffDistance', backoffVal);
                 
+                // homingSpeed (1×1)
+                const homingSpeedVal = await sub('homingSpeed', 0, 0);
+                if (homingSpeedVal != null) {
+                    const el = document.getElementById('stepper-homing-speed');
+                    if (el) el.value = homingSpeedVal;
+                }
+                
+                // homingMotor (1×1, read-only)
+                const homingMotorVal = await sub('homingMotor', 0, 0);
+                stepperMotorState.homingMotor = homingMotorVal ?? -1;
+                updateHomingProgressUI(stepperMotorState.homingMotor);
+                
                 // maxRpm (1×1)
                 const rpmVal = await sub('maxRpm', 0, 0);
                 updateSettingUI('maxRpm', rpmVal);
@@ -1376,6 +1475,13 @@
                     updateHomingStatusUI();
                     return;
                 }
+            }
+            
+            // homingMotor
+            if (ids.homingMotor && param_id === ids.homingMotor.id) {
+                stepperMotorState.homingMotor = value;
+                updateHomingProgressUI(value);
+                return;
             }
             
             // Settings params
@@ -1611,18 +1717,40 @@
         }
         
         function updateStateUI(stateVal) {
+            const banner = document.getElementById('stepper-state-banner');
             const label = document.getElementById('stepper-state-label');
+            const estopBtn = document.getElementById('stepper-estop-btn');
             const clearBtn = document.getElementById('stepper-estop-clear-btn');
+            const homeBtn = document.getElementById('stepper-home-btn');
+            const abortBtn = document.getElementById('stepper-abort-home-btn');
+            const isEStop = (stateVal === 5); // 5 = E_STOP
             if (label) {
                 const name = STATE_NAMES[stateVal] || `UNKNOWN(${stateVal})`;
                 const color = STATE_COLORS[stateVal] || '#999';
                 label.textContent = name;
                 label.style.color = color;
             }
-            // Show/hide E-Stop clear button
-            if (clearBtn) {
-                clearBtn.style.display = (stateVal === 5) ? 'inline-block' : 'none'; // 5 = E_STOP
+            if (banner) {
+                banner.style.background = isEStop ? '#4a1515' : '#263238';
+                banner.style.borderColor = isEStop ? '#f44336' : 'var(--border-color)';
+                banner.style.boxShadow = isEStop ? '0 0 0 2px rgba(244, 67, 54, 0.18)' : 'none';
             }
+            // Swap E-STOP and CLEAR E-STOP buttons so the active action is obvious
+            if (estopBtn) {
+                estopBtn.style.display = isEStop ? 'none' : 'inline-block';
+            }
+            if (clearBtn) {
+                clearBtn.style.display = isEStop ? 'inline-block' : 'none';
+            }
+            // Show/hide homing buttons based on state
+            const isHoming = (stateVal === 2); // 2 = HOMING
+            if (homeBtn) homeBtn.style.display = isHoming ? 'none' : 'inline-block';
+            if (abortBtn) abortBtn.style.display = isHoming ? 'inline-block' : 'none';
+            // Disable jog buttons during homing
+            document.querySelectorAll('.stepper-jog-btn').forEach(btn => {
+                btn.disabled = isHoming;
+                btn.style.opacity = isHoming ? '0.4' : '1';
+            });
         }
         
         function updateErrorUI(errMsg) {
@@ -1665,6 +1793,17 @@
             const moveHomeSection = document.getElementById('stepper-move-home-section');
             if (moveHomeSection) {
                 moveHomeSection.style.display = (homedCount === 4) ? 'block' : 'none';
+            }
+        }
+        
+        function updateHomingProgressUI(homingMotor) {
+            const progressEl = document.getElementById('stepper-homing-progress');
+            const motorText = document.getElementById('stepper-homing-motor-text');
+            if (progressEl) {
+                progressEl.style.display = (homingMotor >= 0) ? 'block' : 'none';
+            }
+            if (motorText && homingMotor >= 0) {
+                motorText.textContent = `Motor ${homingMotor} of 4`;
             }
         }
     </script>

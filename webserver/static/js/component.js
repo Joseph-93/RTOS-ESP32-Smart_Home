@@ -48,6 +48,11 @@ function hideError() {
     if (banner) banner.style.display = 'none';
 }
 
+// Promise that resolves once the WebSocket is connected and ready.
+// Component-specific init code should await this instead of using setTimeout.
+let wsReadyResolve = null;
+const wsReady = new Promise(resolve => { wsReadyResolve = resolve; });
+
 async function initComponent(deviceName, componentName) {
     hideError();
     showPageLoading(`Connecting to ${deviceName}...`);
@@ -60,6 +65,9 @@ async function initComponent(deviceName, componentName) {
     const esp32Host = window.esp32Host;
     try {
         await initWebSocket(esp32Host);
+        
+        // Signal that WebSocket is ready for component-specific init
+        if (wsReadyResolve) wsReadyResolve();
         
         // Set up parameter update handler
         window.addEventListener('esp32-push', handleParameterUpdate);
@@ -133,62 +141,30 @@ async function loadParameters(deviceName, componentName) {
     const container = document.getElementById('params-container');
     
     try {
-        // Get COUNTS first via WebSocket - one type at a time
-        const intCount = (await esp32ws.getParamInfo(componentName, 'int', -1)).count || 0;
-        await new Promise(r => setTimeout(r, 100));
+        // Fetch ALL parameters in a single bulk request instead of 58+ round-trips
+        const resp = await esp32ws.getComponentParams(componentName);
+        const paramList = resp.params || [];
         
-        const floatCount = (await esp32ws.getParamInfo(componentName, 'float', -1)).count || 0;
-        await new Promise(r => setTimeout(r, 100));
-        
-        const boolCount = (await esp32ws.getParamInfo(componentName, 'bool', -1)).count || 0;
-        await new Promise(r => setTimeout(r, 100));
-        
-        const strCount = (await esp32ws.getParamInfo(componentName, 'str', -1)).count || 0;
-        await new Promise(r => setTimeout(r, 100));
-        
-        // Collect all parameter entries as a flat list of [row][col] entries
+        // Expand to individual row/col entries (same shape createParamEntryById expects)
         allParams = [];
-        
-        // Fetch each parameter and expand to individual entries
-        for (let i = 0; i < intCount; i++) {
-            const param = await esp32ws.getParamInfo(componentName, 'int', i);
-            // Expand to individual row/col entries
-            for (let r = 0; r < param.rows; r++) {
-                for (let c = 0; c < param.cols; c++) {
-                    allParams.push({ ...param, row: r, col: c, category: 'int' });
+        for (const p of paramList) {
+            for (let r = 0; r < p.rows; r++) {
+                for (let c = 0; c < p.cols; c++) {
+                    allParams.push({
+                        name: p.name,
+                        param_id: p.id,       // bulk endpoint returns 'id', UI expects 'param_id'
+                        type: p.type,
+                        rows: p.rows,
+                        cols: p.cols,
+                        min: p.min,
+                        max: p.max,
+                        readOnly: p.readOnly,
+                        row: r,
+                        col: c,
+                        category: p.type
+                    });
                 }
             }
-            await new Promise(r => setTimeout(r, 100));
-        }
-        
-        for (let i = 0; i < floatCount; i++) {
-            const param = await esp32ws.getParamInfo(componentName, 'float', i);
-            for (let r = 0; r < param.rows; r++) {
-                for (let c = 0; c < param.cols; c++) {
-                    allParams.push({ ...param, row: r, col: c, category: 'float' });
-                }
-            }
-            await new Promise(r => setTimeout(r, 100));
-        }
-        
-        for (let i = 0; i < boolCount; i++) {
-            const param = await esp32ws.getParamInfo(componentName, 'bool', i);
-            for (let r = 0; r < param.rows; r++) {
-                for (let c = 0; c < param.cols; c++) {
-                    allParams.push({ ...param, row: r, col: c, category: 'bool' });
-                }
-            }
-            await new Promise(r => setTimeout(r, 100));
-        }
-        
-        for (let i = 0; i < strCount; i++) {
-            const param = await esp32ws.getParamInfo(componentName, 'str', i);
-            for (let r = 0; r < param.rows; r++) {
-                for (let c = 0; c < param.cols; c++) {
-                    allParams.push({ ...param, row: r, col: c, category: 'str' });
-                }
-            }
-            await new Promise(r => setTimeout(r, 100));
         }
         
         if (allParams.length === 0) {

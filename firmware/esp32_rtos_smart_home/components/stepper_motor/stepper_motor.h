@@ -268,6 +268,15 @@ enum class PlaybackState : uint8_t {
     E_STOP
 };
 
+// Homing sub-phases (internal to motionTask, not exposed as PlaybackState)
+enum class HomingPhase : uint8_t {
+    IDLE = 0,
+    RETRACT,       // Retracting motor N, other 3 paying out at same rate
+    BACKOFF,       // Backing off motor N from limit switch
+    NEXT,          // Zeroing position, advancing to next motor
+    DONE           // All motors homed
+};
+
 // ============================================================================
 // Stepper Motor Component
 // ============================================================================
@@ -364,6 +373,12 @@ private:
     IntParameter* jogSpeedParam;           // Jog speed in steps/sec (target)
     IntParameter* jogAccelerationParam;    // Jog acceleration in steps/sec²
     IntParameter* backoffDistanceParam;    // Limit backoff distance
+    
+    // Homing Control
+    BoolParameter* startHomingParam;       // Trigger: start homing sequence
+    IntParameter* homingSpeedParam;        // Homing speed in steps/sec (separate from jog)
+    IntParameter* homingMotorParam;        // Read-only: which motor is currently homing (-1=none)
+    BoolParameter* abortHomingParam;       // Trigger: abort homing sequence
     
     // Limit switch simulation (for testing without hardware)
     BoolParameter* simulateLimitMin;       // 1x4: simulate min (retract) limit triggered per motor
@@ -485,6 +500,14 @@ private:
     std::atomic<bool> limitMaxTriggered[4];     // Set by ISR when max limit hit
     
     // ========================================================================
+    // Homing State (task-local, no atomics needed)
+    // ========================================================================
+    HomingPhase homingPhase;
+    uint8_t homingMotorIndex;                   // Which motor is currently being homed (0-3)
+    int32_t homingBackoffTarget;                // Target position after backoff
+    uint32_t savedJogSpeedFP;                   // Saved jog speed before homing overwrote it
+    
+    // ========================================================================
     // Internal Methods
     // ========================================================================
     
@@ -508,6 +531,11 @@ private:
     // Manual jog helpers
     bool allMotorsHomed() const;
     void moveToHomePosition();
+    
+    // Homing
+    void beginHoming();
+    void abortHoming();
+    void homingTick();  // Called each motionTask iteration when state==HOMING
     
     // Choreography management
     int16_t findNextChoreographyId() const;
