@@ -25,7 +25,12 @@ static const char* s_mdns_hostname = "esp32";
 
 // Timer callback: periodically retry WiFi connection
 static void reconnect_timer_callback(TimerHandle_t xTimer) {
-    esp_wifi_connect();
+    // Only attempt if we're not already connected or mid-handshake.
+    // esp_wifi_connect() while already connecting/connected causes
+    // noisy errors and can tear down a working link.
+    if (!wifi_is_connected()) {
+        esp_wifi_connect();
+    }
 }
 
 static void init_mdns(void) {
@@ -72,6 +77,16 @@ static void event_handler(void* arg, esp_event_base_t event_base,
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED) {
+        // WiFi associated with AP - stop reconnect timer immediately.
+        // IP may take several more seconds (DHCP), but we must NOT call
+        // esp_wifi_connect() again while already associated or it will
+        // trigger "sta is connected, disconnect before connecting to new ap"
+        // warnings and can destabilise the link.
+        ESP_LOGI(TAG, "WiFi associated - waiting for IP...");
+        if (s_reconnect_timer) {
+            xTimerStop(s_reconnect_timer, 0);
+        }
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         // Notify callback of disconnection
         if (s_status_callback) {
