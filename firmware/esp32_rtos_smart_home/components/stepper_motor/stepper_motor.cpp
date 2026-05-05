@@ -144,6 +144,9 @@ StepperMotorComponent::StepperMotorComponent()
       uploadReceivedSize(0),
       uploadInProgress(false),
       homingPhase(HomingPhase::IDLE),
+    homingPaused(false),
+    homingCheckMode(false),
+    homingCheckFailures(0),
       homingMotorIndex(0),
       homingBackoffTarget(0),
       savedJogSpeedFP(0)
@@ -162,6 +165,12 @@ StepperMotorComponent::StepperMotorComponent()
         cachedSimulateLimitMax[i] = false;
         jogCurrentSpeedFP[i] = 0;
         jogAccumFP[i] = 0;
+        homingPhaseStartVirtualPos[i] = 0;
+        virtualToPhysicalMotorCache[i].store(i);
+        physicalToVirtualMotorCache[i].store(i);
+        directionSignCache[i].store(1);
+        virtualMinSensorMapCache[i].store(i);
+        virtualMaxSensorMapCache[i].store(i);
     }
     playbackStartUs = 0;
     loopsRemaining = 0;
@@ -292,6 +301,43 @@ void StepperMotorComponent::onInitialize() {
         jogCommandParams[i] = addIntParam(motorName + "JogCommand", 1, 1, -1, 1, 0);
         motorHomedParams[i] = addBoolParam(motorName + "Homed", 1, 1, false, true);
     }
+
+    // Virtual axis mapping
+    virtualToPhysicalMotorParam = addIntParam("virtualToPhysicalMotor", 1, 4, 0, 3, 0);
+    virtualDirectionInvertedParam = addBoolParam("virtualDirectionInverted", 1, 4, false);
+    virtualMinSensorMapParam = addIntParam("virtualMinSensorMap", 1, 4, 0, 3, 0);
+    virtualMaxSensorMapParam = addIntParam("virtualMaxSensorMap", 1, 4, 0, 3, 0);
+
+    for (int v = 0; v < NUM_MOTORS; v++) {
+        virtualToPhysicalMotorParam->setValue(0, v, v);
+        virtualMinSensorMapParam->setValue(0, v, v);
+        virtualMaxSensorMapParam->setValue(0, v, v);
+    }
+
+    virtualToPhysicalMotorParam->setOnChange([this](size_t, size_t, int32_t) {
+        if (applyVirtualMotorMappingFromParams()) {
+            metadataModified = true;
+        }
+    });
+
+    virtualDirectionInvertedParam->setOnChange([this](size_t, size_t, bool) {
+        applyDirectionMappingFromParams();
+        metadataModified = true;
+    });
+
+    virtualMinSensorMapParam->setOnChange([this](size_t, size_t, int32_t) {
+        applyVirtualSensorMappingFromParams();
+        metadataModified = true;
+    });
+
+    virtualMaxSensorMapParam->setOnChange([this](size_t, size_t, int32_t) {
+        applyVirtualSensorMappingFromParams();
+        metadataModified = true;
+    });
+
+    applyVirtualMotorMappingFromParams();
+    applyDirectionMappingFromParams();
+    applyVirtualSensorMappingFromParams();
     
     jogSpeedParam = addIntParam("jogSpeed", 1, 1, 10, 5000, 500);
     jogSpeedParam->setOnChange([this](size_t, size_t, int32_t) {
@@ -312,6 +358,14 @@ void StepperMotorComponent::onInitialize() {
             beginHoming();
         }
     });
+    startHomingCheckParam = addBoolParam("startHomingCheck", 1, 1, false);
+    startHomingCheckParam->setOnChange([this](size_t, size_t, bool val) {
+        if (val) {
+            startHomingCheckParam->setValue(0, 0, false);  // Auto-reset trigger
+            beginHomingCheck();
+        }
+    });
+    homingCheckToleranceParam = addIntParam("homingCheckTolerance", 1, 1, 5, 500, 50);
     abortHomingParam = addBoolParam("abortHoming", 1, 1, false);
     abortHomingParam->setOnChange([this](size_t, size_t, bool val) {
         if (val) {
@@ -320,6 +374,29 @@ void StepperMotorComponent::onInitialize() {
         }
     });
     homingMotorParam = addIntParam("homingMotor", 1, 1, -1, 3, -1, true);  // read-only
+    pauseHomingParam = addBoolParam("pauseHoming", 1, 1, false);
+    pauseHomingParam->setOnChange([this](size_t, size_t, bool val) {
+        if (state.load() != PlaybackState::HOMING) {
+            // Pause only applies during active homing.
+            if (val) {
+                pauseHomingParam->setValue(0, 0, false);
+            }
+            homingPaused = false;
+            return;
+        }
+
+        if (val) {
+            homingPaused = true;
+            for (int m = 0; m < NUM_MOTORS; m++) {
+                jogCommand[m].store(0);
+            }
+            ESP_LOGI(TAG, "Homing paused (manual jog enabled)");
+        } else {
+            homingPaused = false;
+            applyHomingJogPattern();
+            ESP_LOGI(TAG, "Homing resumed");
+        }
+    });
     
     // Limit switch simulation (1×4: one bool per motor)
     simulateLimitMin = addBoolParam("simulateLimitMin", 1, 4, false);
@@ -476,7 +553,7 @@ void StepperMotorComponent::onInitialize() {
     });
     cachedLimitsEnabled.store(true);  // Initialize cache
     
-    spoolRadius = addFloatParam("spoolRadius", 1, 1, 0.005f, 0.100f, 0.015f);
+    spoolRadius = addFloatParam("spoolRadius", 1, 1, 0.005f, 0.100f, 0.050f);
     
     // Calculate initial max position
     updateMaxPositionFromRoomDimensions();
@@ -536,8 +613,8 @@ void StepperMotorComponent::onInitialize() {
 // ============================================================================
 
 uint32_t StepperMotorComponent::calculateRequiredIsrRate() const {
-    // Calculate required step rate for max RPM
-    // steps/sec = (RPM / 60) * steps_per_rev * microstepping
+    // Calculate required pulse rate for max RPM
+    // pulses/sec = (RPM / 60) * steps_per_rev * microstepping
     
     uint32_t rpm = maxRpmParam ? maxRpmParam->getValue(0, 0) : 1200;
     uint32_t microstepping = microsteppingParam ? microsteppingParam->getValue(0, 0) : 16;
@@ -562,7 +639,7 @@ void StepperMotorComponent::updateJogParams() {
     if (speed < 1) speed = 1;
     if (accel < 1) accel = 1;
 
-    // Target speed in fixed-point (steps/sec × 256)
+    // Target speed in fixed-point (pulses/sec × 256)
     cachedJogTargetSpeedFP.store(speed * 256);
 
     // Accumulator threshold: one full second = isrRate × 256
@@ -737,9 +814,13 @@ void StepperMotorComponent::checkPositionLimitsAfterRoomChange() {
     bool anyMotorOutOfRange = false;
     
     for (int m = 0; m < NUM_MOTORS; m++) {
-        int32_t current = currentPosition[m].load();
-        if (current > maxPos) {
-            ESP_LOGW(TAG, "Motor %d position %ld exceeds new max %ld!", m, current, maxPos);
+            int32_t p = getPhysicalMotorFromVirtual(m);
+            if (p < 0 || p >= NUM_MOTORS) {
+                continue;
+            }
+            int32_t current = toVirtualPosition(m, currentPosition[p].load());
+            if (current > maxPos) {
+                ESP_LOGW(TAG, "Motor %d position %ld exceeds new max %ld!", m, current, maxPos);
             anyMotorOutOfRange = true;
         }
     }
@@ -792,12 +873,19 @@ void StepperMotorComponent::motionTask() {
         }
         
         // ====================================================================
-        // Read jog parameter updates (blocked during homing)
+        // Read jog parameter updates (blocked during active homing, allowed when paused)
         // ====================================================================
-        if (currentState != PlaybackState::HOMING) {
-            for (int m = 0; m < NUM_MOTORS; m++) {
-                int8_t cmd = jogCommandParams[m]->getValue(0, 0);
-                jogCommand[m].store(cmd);
+        if (currentState != PlaybackState::HOMING || homingPaused) {
+            for (int p = 0; p < NUM_MOTORS; p++) {
+                jogCommand[p].store(0);
+            }
+            for (int v = 0; v < NUM_MOTORS; v++) {
+                int8_t cmdVirtual = (int8_t)jogCommandParams[v]->getValue(0, 0);
+                int8_t p = getPhysicalMotorFromVirtual(v);
+                if (p < 0 || p >= NUM_MOTORS) {
+                    continue;
+                }
+                jogCommand[p].store(virtualJogToPhysical(v, cmdVirtual));
             }
         }
         
@@ -806,15 +894,15 @@ void StepperMotorComponent::motionTask() {
         // Both hardware GPIO AND software simulation.
         // Runs every tick regardless of playback state.
         // ====================================================================
-        for (int m = 0; m < NUM_MOTORS; m++) {
-            bool hwMin = hal->isLimitTriggered(m)    || cachedSimulateLimitMin[m].load();
-            bool hwMax = hal->isMaxLimitTriggered(m) || cachedSimulateLimitMax[m].load();
+        for (int v = 0; v < NUM_MOTORS; v++) {
+            bool hwMin = readVirtualMinLimit(v);
+            bool hwMax = readVirtualMaxLimit(v);
             
-            if (hwMin != limitMinState->getValue(0, m)) {
-                limitMinState->setValue(0, m, hwMin);
+            if (hwMin != limitMinState->getValue(0, v)) {
+                limitMinState->setValue(0, v, hwMin);
             }
-            if (hwMax != limitMaxState->getValue(0, m)) {
-                limitMaxState->setValue(0, m, hwMax);
+            if (hwMax != limitMaxState->getValue(0, v)) {
+                limitMaxState->setValue(0, v, hwMax);
             }
         }
         
@@ -824,8 +912,12 @@ void StepperMotorComponent::motionTask() {
         static uint32_t positionReportCounter = 0;
         if (++positionReportCounter >= TASK_RATE_HZ / 10) {
             positionReportCounter = 0;
-            for (int m = 0; m < NUM_MOTORS; m++) {
-                motorPositions->setValue(m, 0, currentPosition[m].load());
+            for (int v = 0; v < NUM_MOTORS; v++) {
+                int8_t p = getPhysicalMotorFromVirtual(v);
+                if (p < 0 || p >= NUM_MOTORS) {
+                    continue;
+                }
+                motorPositions->setValue(v, 0, toVirtualPosition(v, currentPosition[p].load()));
             }
         }
         
@@ -858,27 +950,44 @@ void StepperMotorComponent::motionTask() {
             }
             
             // Update target positions from precomputed trajectory
-            for (int m = 0; m < NUM_MOTORS; m++) {
-                int32_t newTarget = trajectory.motors[m].getPosition(t);
+            for (int v = 0; v < NUM_MOTORS; v++) {
+                int32_t newTargetVirtual = trajectory.motors[v].getPosition(t);
+
+                if (cachedLimitsEnabled.load()) {
+                    int32_t maxPos = cachedMaxPosition.load();
+                    if (newTargetVirtual > maxPos) {
+                        newTargetVirtual = maxPos;
+                    }
+                    if (newTargetVirtual < 0) {
+                        newTargetVirtual = 0;
+                    }
+                }
                 
                 // Safety check: detect velocity that would exceed motor capability
-                int32_t velocity = abs(newTarget - prevTarget[m]);
+                int32_t velocity = abs(newTargetVirtual - prevTarget[v]);
                 if (velocity > MAX_VELOCITY_STEPS_PER_TICK) {
                     char errMsg[128];
                     snprintf(errMsg, sizeof(errMsg), 
                         "Motor %d velocity too high: %ld steps/tick (max %lu) - E-STOP",
-                        m, (long)velocity, (unsigned long)MAX_VELOCITY_STEPS_PER_TICK);
+                        v, (long)velocity, (unsigned long)MAX_VELOCITY_STEPS_PER_TICK);
                     errorMessage->setValue(0, 0, errMsg);
                     ESP_LOGE(TAG, "%s", errMsg);
                     emergencyStop();
                     return;
                 }
                 
-                prevTarget[m] = newTarget;
-                int32_t current = currentPosition[m].load();
+                prevTarget[v] = newTargetVirtual;
+
+                int8_t p = getPhysicalMotorFromVirtual(v);
+                if (p < 0 || p >= NUM_MOTORS) {
+                    continue;
+                }
+
+                int32_t newTargetPhysical = toPhysicalPosition(v, newTargetVirtual);
+                int32_t currentPhysical = currentPosition[p].load();
                 
-                targetPosition[m].store(newTarget);
-                targetDirection[m].store(newTarget > current);
+                targetPosition[p].store(newTargetPhysical);
+                targetDirection[p].store(newTargetPhysical > currentPhysical);
                 
                 // Update read-only params (not every tick - would be too much)
                 // We'll do this less frequently
@@ -891,9 +1000,13 @@ void StepperMotorComponent::motionTask() {
                 playbackProgressParam->setValue(0, 0, t / trajectory.duration_sec);
                 playbackTimeParam->setValue(0, 0, t);
                 
-                for (int m = 0; m < NUM_MOTORS; m++) {
-                    motorPositions->setValue(m, 0, currentPosition[m].load());
-                    motorTargets->setValue(m, 0, targetPosition[m].load());
+                for (int v = 0; v < NUM_MOTORS; v++) {
+                    int8_t p = getPhysicalMotorFromVirtual(v);
+                    if (p < 0 || p >= NUM_MOTORS) {
+                        continue;
+                    }
+                    motorPositions->setValue(v, 0, toVirtualPosition(v, currentPosition[p].load()));
+                    motorTargets->setValue(v, 0, toVirtualPosition(v, targetPosition[p].load()));
                 }
             }
         }
@@ -951,17 +1064,51 @@ void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
             int8_t jog = jogCommand[m].load();
 
             if (jog != 0) {
-                // Hit MIN limit while retracting — dead stop
-                if (jog < 0 && (cachedSimulateLimitMin[m].load() || hal->isLimitTriggered(m))) {
-                    jogCurrentSpeedFP[m] = 0;
-                    jogAccumFP[m] = 0;
-                    continue;
+                // CRYSTAL CLEAR LIMIT LOGIC:
+                // - MIN sensor only blocks RETRACT (-1 virtual direction)
+                // - MAX sensor only blocks PAY OUT (+1 virtual direction)
+                // - BUT: if the motor is inverted, physical directions are swapped!
+                // - This allows escape from any limit corner.
+                
+                int8_t virtualIdx = getVirtualMotorFromPhysical(m);
+                bool isInverted = false;
+                if (virtualIdx >= 0 && virtualIdx < NUM_MOTORS) {
+                    isInverted = (getDirectionSignForVirtual(virtualIdx) < 0);
                 }
-                // Hit MAX limit while paying out — dead stop
-                if (jog > 0 && (cachedSimulateLimitMax[m].load() || hal->isMaxLimitTriggered(m))) {
-                    jogCurrentSpeedFP[m] = 0;
-                    jogAccumFP[m] = 0;
-                    continue;
+                
+                const bool isRetract = (jog < 0);
+                const bool isPayOut = (jog > 0);
+                const bool minHit = readPhysicalMinLimitForMotor(m);
+                const bool maxHit = readPhysicalMaxLimitForMotor(m);
+                
+                if (!isInverted) {
+                    // Normal (non-inverted): physical direction = virtual semantics
+                    // Block retract ONLY if MIN is hit
+                    if (isRetract && minHit) {
+                        jogCurrentSpeedFP[m] = 0;
+                        jogAccumFP[m] = 0;
+                        continue;
+                    }
+                    // Block payout ONLY if MAX is hit
+                    if (isPayOut && maxHit) {
+                        jogCurrentSpeedFP[m] = 0;
+                        jogAccumFP[m] = 0;
+                        continue;
+                    }
+                } else {
+                    // Inverted: physical direction is opposite to virtual semantics
+                    // Physical retract = virtual payout, check against MAX
+                    if (isRetract && maxHit) {
+                        jogCurrentSpeedFP[m] = 0;
+                        jogAccumFP[m] = 0;
+                        continue;
+                    }
+                    // Physical payout = virtual retract, check against MIN
+                    if (isPayOut && minHit) {
+                        jogCurrentSpeedFP[m] = 0;
+                        jogAccumFP[m] = 0;
+                        continue;
+                    }
                 }
 
                 // Ramp up toward target speed
@@ -1018,11 +1165,21 @@ void IRAM_ATTR StepperMotorComponent::stepTimerISR() {
         // Apply soft position limits (if enabled)
         if (cachedLimitsEnabled.load()) {
             int32_t maxPos = cachedMaxPosition.load();
-            if (target > maxPos) {
-                target = maxPos;  // Clamp to max
-            }
-            if (target < 0) {
-                target = 0;  // Clamp to min (homed position)
+            int8_t v = getVirtualMotorFromPhysical(m);
+            if (v >= 0 && v < NUM_MOTORS) {
+                int32_t minPhysical = toPhysicalPosition(v, 0);
+                int32_t maxPhysical = toPhysicalPosition(v, maxPos);
+                if (minPhysical > maxPhysical) {
+                    int32_t tmp = minPhysical;
+                    minPhysical = maxPhysical;
+                    maxPhysical = tmp;
+                }
+                if (target > maxPhysical) {
+                    target = maxPhysical;
+                }
+                if (target < minPhysical) {
+                    target = minPhysical;
+                }
             }
         }
         
@@ -1072,11 +1229,16 @@ esp_err_t StepperMotorComponent::startPlayback() {
     errorMessage->setValue(0, 0, "");
     
     // Set initial targets and reset velocity tracking
-    for (int m = 0; m < NUM_MOTORS; m++) {
-        if (!trajectory.motors[m].waypoints.empty()) {
-            int32_t initial = trajectory.motors[m].waypoints[0].pos_steps;
-            targetPosition[m].store(initial);
-            prevTarget[m] = initial;  // Initialize velocity tracking
+    for (int v = 0; v < NUM_MOTORS; v++) {
+        if (!trajectory.motors[v].waypoints.empty()) {
+            int8_t p = getPhysicalMotorFromVirtual(v);
+            if (p < 0 || p >= NUM_MOTORS) {
+                continue;
+            }
+            int32_t initialVirtual = trajectory.motors[v].waypoints[0].pos_steps;
+            int32_t initialPhysical = toPhysicalPosition(v, initialVirtual);
+            targetPosition[p].store(initialPhysical);
+            prevTarget[v] = initialVirtual;  // Initialize velocity tracking
         }
     }
     
@@ -1159,24 +1321,30 @@ void StepperMotorComponent::moveToHomePosition() {
     // Move all motors to center position (1000 steps retracted from limit)
     const int32_t homePosition = -1000;
     
-    ESP_LOGI(TAG, "Moving all motors to home position (%ld steps)", homePosition);
+    ESP_LOGI(TAG, "Moving all motors to home position (%ld pulses)", homePosition);
     
-    for (int m = 0; m < NUM_MOTORS; m++) {
-        int32_t current = currentPosition[m].load();
-        int32_t delta = homePosition - current;
+    for (int v = 0; v < NUM_MOTORS; v++) {
+        int8_t p = getPhysicalMotorFromVirtual(v);
+        if (p < 0 || p >= NUM_MOTORS) {
+            continue;
+        }
+
+        int32_t currentVirtual = toVirtualPosition(v, currentPosition[p].load());
+        int32_t deltaVirtual = homePosition - currentVirtual;
         
-        if (delta == 0) continue;  // Already at home
+        if (deltaVirtual == 0) continue;  // Already at home
         
-        bool direction = (delta > 0);
-        hal->setDirection(m, direction);
+        int8_t jogPhysical = virtualJogToPhysical(v, deltaVirtual > 0 ? 1 : -1);
+        bool directionPhysical = (jogPhysical > 0);
+        hal->setDirection(p, directionPhysical);
         
-        for (int32_t step = 0; step < abs(delta); step++) {
-            hal->step(m);
+        for (int32_t step = 0; step < abs(deltaVirtual); step++) {
+            hal->step(p);
             vTaskDelay(pdMS_TO_TICKS(2));  // 500 Hz move rate
         }
         
-        currentPosition[m].store(homePosition);
-        motorPositions->setValue(m, 0, homePosition);
+        currentPosition[p].store(toPhysicalPosition(v, homePosition));
+        motorPositions->setValue(v, 0, homePosition);
     }
     
     ESP_LOGI(TAG, "All motors at home position");
@@ -1185,6 +1353,69 @@ void StepperMotorComponent::moveToHomePosition() {
 // ============================================================================
 // Homing Sequence
 // ============================================================================
+
+void StepperMotorComponent::captureHomingPhaseStartPositions() {
+    for (int v = 0; v < NUM_MOTORS; v++) {
+        int8_t p = getPhysicalMotorFromVirtual(v);
+        if (p >= 0 && p < NUM_MOTORS) {
+            homingPhaseStartVirtualPos[v] = toVirtualPosition(v, currentPosition[p].load());
+        } else {
+            homingPhaseStartVirtualPos[v] = 0;
+        }
+    }
+}
+
+void StepperMotorComponent::applyHomingJogPattern() {
+    if (state.load() != PlaybackState::HOMING || homingPaused) {
+        return;
+    }
+
+    for (int p = 0; p < NUM_MOTORS; p++) {
+        jogCommand[p].store(0);
+    }
+
+    if (homingPhase == HomingPhase::RETRACT || homingPhase == HomingPhase::NEXT) {
+        // Coupled payout: active motor retracts; the other motors only pay out enough
+        // to follow the active motor's retract progress and keep cable tension sane.
+        uint8_t activeV = homingMotorIndex;
+        int8_t activeP = getPhysicalMotorFromVirtual(activeV);
+        if (activeP < 0 || activeP >= NUM_MOTORS) {
+            return;
+        }
+
+        int32_t activeCurrent = toVirtualPosition(activeV, currentPosition[activeP].load());
+        int32_t activeDelta = homingPhaseStartVirtualPos[activeV] - activeCurrent;
+        if (activeDelta < 0) {
+            activeDelta = 0;
+        }
+
+        for (int v = 0; v < NUM_MOTORS; v++) {
+            int8_t p = getPhysicalMotorFromVirtual(v);
+            if (p < 0 || p >= NUM_MOTORS) {
+                continue;
+            }
+
+            int8_t cmdVirtual = 0;
+            if (v == activeV) {
+                cmdVirtual = -1;  // Active motor retracts toward MIN
+            } else {
+                // Distribute active retract across the other 3 motors.
+                int32_t desired = homingPhaseStartVirtualPos[v] + (activeDelta / 3);
+                int32_t current = toVirtualPosition(v, currentPosition[p].load());
+                if (current + 1 < desired) {
+                    cmdVirtual = 1;
+                }
+            }
+
+            jogCommand[p].store(virtualJogToPhysical(v, cmdVirtual));
+        }
+    } else if (homingPhase == HomingPhase::BACKOFF) {
+        int8_t p = getPhysicalMotorFromVirtual(homingMotorIndex);
+        if (p >= 0 && p < NUM_MOTORS) {
+            jogCommand[p].store(virtualJogToPhysical(homingMotorIndex, 1));
+        }
+    }
+}
 
 void StepperMotorComponent::beginHoming() {
     PlaybackState cur = state.load();
@@ -1213,21 +1444,64 @@ void StepperMotorComponent::beginHoming() {
     savedJogSpeedFP = cachedJogTargetSpeedFP.load();
     uint32_t homingSpeed = (uint32_t)homingSpeedParam->getValue(0, 0);
     cachedJogTargetSpeedFP.store(homingSpeed * 256);
-    ESP_LOGI(TAG, "Homing speed: %lu steps/sec (saved jog speed: %lu)",
+    ESP_LOGI(TAG, "Homing speed: %lu pulses/sec (saved jog speed: %lu)",
              homingSpeed, savedJogSpeedFP / 256);
     
     // Start with motor 0
     homingMotorIndex = 0;
     homingPhase = HomingPhase::RETRACT;
+    homingPaused = false;
+    homingCheckMode = false;
+    homingCheckFailures = 0;
+    pauseHomingParam->setValue(0, 0, false);
     homingMotorParam->setValue(0, 0, (int32_t)homingMotorIndex);
-    
-    // Set jog commands: homing motor retracts, others pay out
-    for (int m = 0; m < NUM_MOTORS; m++) {
-        jogCommand[m].store(m == homingMotorIndex ? -1 : 1);
-    }
+    captureHomingPhaseStartPositions();
+
+    applyHomingJogPattern();
     
     transitionTo(PlaybackState::HOMING);
     ESP_LOGI(TAG, "Homing motor %d: RETRACT (others PAY OUT)", homingMotorIndex);
+}
+
+void StepperMotorComponent::beginHomingCheck() {
+    PlaybackState cur = state.load();
+    if (cur == PlaybackState::PLAYING || cur == PlaybackState::E_STOP) {
+        ESP_LOGW(TAG, "Cannot start homing check in state %d", (int)cur);
+        return;
+    }
+    if (!allMotorsHomed()) {
+        ESP_LOGW(TAG, "Cannot start homing check: all motors must already be homed");
+        errorMessage->setValue(0, 0, "Homing check requires all motors already homed.");
+        return;
+    }
+
+    ESP_LOGI(TAG, "=== HOMING CHECK START ===");
+
+    if (!cachedDriversEnabled.load()) {
+        enableDrivers->setValue(0, 0, true);
+        cachedDriversEnabled.store(true);
+        if (hal) hal->setEnabled(0xFF, true);
+        ESP_LOGI(TAG, "Auto-enabled drivers for homing check");
+    }
+
+    savedJogSpeedFP = cachedJogTargetSpeedFP.load();
+    uint32_t homingSpeed = (uint32_t)homingSpeedParam->getValue(0, 0);
+    cachedJogTargetSpeedFP.store(homingSpeed * 256);
+
+    homingMotorIndex = 0;
+    homingPhase = HomingPhase::RETRACT;
+    homingPaused = false;
+    homingCheckMode = true;
+    homingCheckFailures = 0;
+    pauseHomingParam->setValue(0, 0, false);
+    homingMotorParam->setValue(0, 0, (int32_t)homingMotorIndex);
+    captureHomingPhaseStartPositions();
+
+    applyHomingJogPattern();
+
+    transitionTo(PlaybackState::HOMING);
+    errorMessage->setValue(0, 0, "");
+    ESP_LOGI(TAG, "Homing check motor %d: RETRACT with coupled payout", homingMotorIndex);
 }
 
 void StepperMotorComponent::abortHoming() {
@@ -1243,6 +1517,10 @@ void StepperMotorComponent::abortHoming() {
     // Restore jog speed
     cachedJogTargetSpeedFP.store(savedJogSpeedFP);
     
+    homingPaused = false;
+    homingCheckMode = false;
+    homingCheckFailures = 0;
+    pauseHomingParam->setValue(0, 0, false);
     homingPhase = HomingPhase::IDLE;
     homingMotorParam->setValue(0, 0, -1);
     transitionTo(PlaybackState::IDLE);
@@ -1250,55 +1528,97 @@ void StepperMotorComponent::abortHoming() {
 
 void StepperMotorComponent::homingTick() {
     // Called at TASK_RATE_HZ (200 Hz) while state == HOMING
+    if (homingPaused) {
+        return;
+    }
     
     switch (homingPhase) {
     
     case HomingPhase::RETRACT: {
         // Check if homing motor hit MIN limit
-        uint8_t m = homingMotorIndex;
-        bool minHit = hal->isLimitTriggered(m) || cachedSimulateLimitMin[m].load();
+        uint8_t v = homingMotorIndex;
+        int8_t p = getPhysicalMotorFromVirtual(v);
+        if (p < 0 || p >= NUM_MOTORS) {
+            emergencyStop();
+            return;
+        }
+
+        applyHomingJogPattern();
+
+        bool minHit = readVirtualMinLimit(v);
         
         if (minHit) {
+            int32_t atMin = toVirtualPosition(v, currentPosition[p].load());
             ESP_LOGI(TAG, "Motor %d hit MIN limit at pos=%ld — stopping all, backing off",
-                     m, (long)currentPosition[m].load());
+                     v, (long)atMin);
             
             // Stop all motors
             for (int i = 0; i < NUM_MOTORS; i++) {
                 jogCommand[i].store(0);
             }
 
-            // Snap the displayed/working position to zero as soon as home is hit.
-            currentPosition[m].store(0);
-            motorPositions->setValue(m, 0, 0);
-            
-            // Calculate backoff target (pay out from home = 0)
             int32_t backoff = (int32_t)backoffDistanceParam->getValue(0, 0);
-            homingBackoffTarget = backoff;
-            
-            // Start backing off just the homing motor
-            jogCommand[m].store(1);  // Pay out
+            if (homingCheckMode) {
+                int32_t travelled = homingPhaseStartVirtualPos[v] - atMin;
+                int32_t tolerance = homingCheckToleranceParam
+                    ? homingCheckToleranceParam->getValue(0, 0)
+                    : 50;
+                int32_t err = (travelled > backoff) ? (travelled - backoff) : (backoff - travelled);
+                if (err > tolerance) {
+                    homingCheckFailures++;
+                    ESP_LOGE(TAG, "Homing check FAIL motor %d: expected MIN at %ld pulses, measured %ld (|err|=%ld > tol=%ld)",
+                             v, (long)backoff, (long)travelled, (long)err, (long)tolerance);
+                } else {
+                    ESP_LOGI(TAG, "Homing check PASS motor %d: expected %ld, measured %ld (|err|=%ld)",
+                             v, (long)backoff, (long)travelled, (long)err);
+                }
+
+                // Return this motor to where it started this check phase.
+                homingBackoffTarget = homingPhaseStartVirtualPos[v];
+            } else {
+                // Standard homing: snap to zero on MIN hit and back off to configured home offset.
+                currentPosition[p].store(0);
+                motorPositions->setValue(v, 0, 0);
+                homingBackoffTarget = backoff;
+            }
+
+            // Start backing off just the active motor
+            jogCommand[p].store(virtualJogToPhysical(v, 1));
             homingPhase = HomingPhase::BACKOFF;
             
-            ESP_LOGI(TAG, "Motor %d: backing off %ld steps to pos=%ld",
-                     m, (long)backoff, (long)homingBackoffTarget);
+            ESP_LOGI(TAG, "Motor %d: backing off %ld pulses to pos=%ld",
+                     v, (long)(homingBackoffTarget - atMin), (long)homingBackoffTarget);
         }
         break;
     }
     
     case HomingPhase::BACKOFF: {
-        uint8_t m = homingMotorIndex;
-        int32_t pos = currentPosition[m].load();
+        uint8_t v = homingMotorIndex;
+        int8_t p = getPhysicalMotorFromVirtual(v);
+        if (p < 0 || p >= NUM_MOTORS) {
+            emergencyStop();
+            return;
+        }
+
+        int32_t pos = toVirtualPosition(v, currentPosition[p].load());
         
         if (pos >= homingBackoffTarget) {
             // Backoff complete — stop, zero position, mark homed
-            jogCommand[m].store(0);
-            
-            currentPosition[m].store(0);
-            motorPositions->setValue(m, 0, 0);
-            motorIsHomed[m].store(true);
-            motorHomedParams[m]->setValue(0, 0, true);
-            
-            ESP_LOGI(TAG, "Motor %d HOMED (zeroed at backoff position)", m);
+            jogCommand[p].store(0);
+
+            if (homingCheckMode) {
+                // Return to starting point of this check leg.
+                currentPosition[p].store(toPhysicalPosition(v, homingPhaseStartVirtualPos[v]));
+                motorPositions->setValue(v, 0, homingPhaseStartVirtualPos[v]);
+                ESP_LOGI(TAG, "Motor %d homing-check leg complete (returned to %ld)",
+                         v, (long)homingPhaseStartVirtualPos[v]);
+            } else {
+                currentPosition[p].store(0);
+                motorPositions->setValue(v, 0, 0);
+                motorIsHomed[v].store(true);
+                motorHomedParams[v]->setValue(0, 0, true);
+                ESP_LOGI(TAG, "Motor %d HOMED (zeroed at backoff position)", v);
+            }
             
             homingPhase = HomingPhase::NEXT;
         }
@@ -1309,26 +1629,42 @@ void StepperMotorComponent::homingTick() {
         homingMotorIndex++;
         
         if (homingMotorIndex >= NUM_MOTORS) {
-            // All motors homed!
-            ESP_LOGI(TAG, "=== HOMING COMPLETE — all %d motors homed ===", NUM_MOTORS);
+            if (homingCheckMode) {
+                if (homingCheckFailures == 0) {
+                    ESP_LOGI(TAG, "=== HOMING CHECK PASS — all %d motors within tolerance ===", NUM_MOTORS);
+                    errorMessage->setValue(0, 0, "Homing check PASS: all motors hit MIN near expected counts.");
+                } else {
+                    char msg[128];
+                    snprintf(msg, sizeof(msg), "Homing check FAIL: %u motor(s) outside tolerance.", homingCheckFailures);
+                    ESP_LOGE(TAG, "%s", msg);
+                    errorMessage->setValue(0, 0, msg);
+                }
+            } else {
+                ESP_LOGI(TAG, "=== HOMING COMPLETE — all %d motors homed ===", NUM_MOTORS);
+            }
             
             // Restore jog speed
             cachedJogTargetSpeedFP.store(savedJogSpeedFP);
             
+            homingPaused = false;
+            homingCheckMode = false;
+            homingCheckFailures = 0;
+            pauseHomingParam->setValue(0, 0, false);
             homingPhase = HomingPhase::DONE;
             homingMotorParam->setValue(0, 0, -1);
             transitionTo(PlaybackState::IDLE);
         } else {
             // Start homing next motor
             homingMotorParam->setValue(0, 0, (int32_t)homingMotorIndex);
-            
-            // Homing motor retracts, others pay out
-            for (int m = 0; m < NUM_MOTORS; m++) {
-                jogCommand[m].store(m == homingMotorIndex ? -1 : 1);
-            }
-            
+
             homingPhase = HomingPhase::RETRACT;
-            ESP_LOGI(TAG, "Homing motor %d: RETRACT (others PAY OUT)", homingMotorIndex);
+            captureHomingPhaseStartPositions();
+            applyHomingJogPattern();
+            if (homingCheckMode) {
+                ESP_LOGI(TAG, "Homing check motor %d: RETRACT with coupled payout", homingMotorIndex);
+            } else {
+                ESP_LOGI(TAG, "Homing motor %d: RETRACT with coupled payout", homingMotorIndex);
+            }
         }
         break;
     }
@@ -1398,12 +1734,142 @@ float StepperMotorComponent::getPlaybackProgress() const {
     return std::min(1.0f, t / trajectory.duration_sec);
 }
 
+bool StepperMotorComponent::applyVirtualMotorMappingFromParams() {
+    bool usedPhysical[NUM_MOTORS] = { false, false, false, false };
+    int8_t v2p[NUM_MOTORS] = { 0, 1, 2, 3 };
+    int8_t p2v[NUM_MOTORS] = { -1, -1, -1, -1 };
+
+    for (int v = 0; v < NUM_MOTORS; v++) {
+        int32_t p = virtualToPhysicalMotorParam ? virtualToPhysicalMotorParam->getValue(0, v) : v;
+        if (p < 0 || p >= NUM_MOTORS || usedPhysical[p]) {
+            ESP_LOGD(TAG, "Skipping virtual->physical apply until mapping is a full unique permutation (v=%d p=%ld)", v, p);
+            return false;
+        }
+        usedPhysical[p] = true;
+        v2p[v] = (int8_t)p;
+        p2v[p] = (int8_t)v;
+    }
+
+    for (int v = 0; v < NUM_MOTORS; v++) {
+        virtualToPhysicalMotorCache[v].store(v2p[v]);
+    }
+    for (int p = 0; p < NUM_MOTORS; p++) {
+        physicalToVirtualMotorCache[p].store(p2v[p]);
+    }
+
+    return true;
+}
+
+void StepperMotorComponent::applyDirectionMappingFromParams() {
+    for (int v = 0; v < NUM_MOTORS; v++) {
+        bool inverted = virtualDirectionInvertedParam && virtualDirectionInvertedParam->getValue(0, v);
+        directionSignCache[v].store(inverted ? -1 : 1);
+    }
+}
+
+void StepperMotorComponent::applyVirtualSensorMappingFromParams() {
+    for (int v = 0; v < NUM_MOTORS; v++) {
+        int32_t minSensor = virtualMinSensorMapParam ? virtualMinSensorMapParam->getValue(0, v) : v;
+        int32_t maxSensor = virtualMaxSensorMapParam ? virtualMaxSensorMapParam->getValue(0, v) : v;
+        if (minSensor < 0) minSensor = 0;
+        if (minSensor >= NUM_MOTORS) minSensor = NUM_MOTORS - 1;
+        if (maxSensor < 0) maxSensor = 0;
+        if (maxSensor >= NUM_MOTORS) maxSensor = NUM_MOTORS - 1;
+        virtualMinSensorMapCache[v].store((int8_t)minSensor);
+        virtualMaxSensorMapCache[v].store((int8_t)maxSensor);
+    }
+}
+
+int8_t StepperMotorComponent::getPhysicalMotorFromVirtual(uint8_t virtualIdx) const {
+    if (virtualIdx >= NUM_MOTORS) {
+        return -1;
+    }
+    return virtualToPhysicalMotorCache[virtualIdx].load();
+}
+
+int8_t StepperMotorComponent::getVirtualMotorFromPhysical(uint8_t physicalIdx) const {
+    if (physicalIdx >= NUM_MOTORS) {
+        return -1;
+    }
+    return physicalToVirtualMotorCache[physicalIdx].load();
+}
+
+int8_t StepperMotorComponent::getDirectionSignForVirtual(uint8_t virtualIdx) const {
+    if (virtualIdx >= NUM_MOTORS) {
+        return 1;
+    }
+    return directionSignCache[virtualIdx].load();
+}
+
+int32_t StepperMotorComponent::toPhysicalPosition(uint8_t virtualIdx, int32_t virtualSteps) const {
+    return virtualSteps * (int32_t)getDirectionSignForVirtual(virtualIdx);
+}
+
+int32_t StepperMotorComponent::toVirtualPosition(uint8_t virtualIdx, int32_t physicalSteps) const {
+    return physicalSteps * (int32_t)getDirectionSignForVirtual(virtualIdx);
+}
+
+int8_t StepperMotorComponent::virtualJogToPhysical(uint8_t virtualIdx, int8_t virtualJog) const {
+    if (virtualJog == 0) {
+        return 0;
+    }
+    int32_t mapped = (int32_t)virtualJog * (int32_t)getDirectionSignForVirtual(virtualIdx);
+    if (mapped > 0) {
+        return 1;
+    }
+    return -1;
+}
+
+bool StepperMotorComponent::readVirtualMinLimit(uint8_t virtualIdx) const {
+    if (!hal || virtualIdx >= NUM_MOTORS) {
+        return false;
+    }
+    int8_t sensorIdx = virtualMinSensorMapCache[virtualIdx].load();
+    if (sensorIdx < 0 || sensorIdx >= NUM_MOTORS) {
+        return false;
+    }
+    return hal->isLimitTriggered(sensorIdx) || cachedSimulateLimitMin[sensorIdx].load();
+}
+
+bool StepperMotorComponent::readVirtualMaxLimit(uint8_t virtualIdx) const {
+    if (!hal || virtualIdx >= NUM_MOTORS) {
+        return false;
+    }
+    int8_t sensorIdx = virtualMaxSensorMapCache[virtualIdx].load();
+    if (sensorIdx < 0 || sensorIdx >= NUM_MOTORS) {
+        return false;
+    }
+    return hal->isMaxLimitTriggered(sensorIdx) || cachedSimulateLimitMax[sensorIdx].load();
+}
+
+bool StepperMotorComponent::readPhysicalMinLimitForMotor(uint8_t physicalMotorIdx) const {
+    int8_t virtualIdx = getVirtualMotorFromPhysical(physicalMotorIdx);
+    if (virtualIdx >= 0) {
+        return readVirtualMinLimit((uint8_t)virtualIdx);
+    }
+    if (!hal || physicalMotorIdx >= NUM_MOTORS) {
+        return false;
+    }
+    return hal->isLimitTriggered(physicalMotorIdx) || cachedSimulateLimitMin[physicalMotorIdx].load();
+}
+
+bool StepperMotorComponent::readPhysicalMaxLimitForMotor(uint8_t physicalMotorIdx) const {
+    int8_t virtualIdx = getVirtualMotorFromPhysical(physicalMotorIdx);
+    if (virtualIdx >= 0) {
+        return readVirtualMaxLimit((uint8_t)virtualIdx);
+    }
+    if (!hal || physicalMotorIdx >= NUM_MOTORS) {
+        return false;
+    }
+    return hal->isMaxLimitTriggered(physicalMotorIdx) || cachedSimulateLimitMax[physicalMotorIdx].load();
+}
+
 // ============================================================================
 // NVS Persistence
 // ============================================================================
 
 void StepperMotorComponent::saveCustomData(nvs_handle_t handle) {
-    ESP_LOGI(TAG, "Saving choreography metadata to NVS");
+    ESP_LOGI(TAG, "Saving choreography metadata + mapping to NVS");
     
     uint16_t count = choreographyMeta.size();
     nvs_set_u16(handle, "choreo_count", count);
@@ -1431,6 +1897,22 @@ void StepperMotorComponent::saveCustomData(nvs_handle_t handle) {
     }
     
     nvs_set_i16(handle, "active_choreo", activeChoreographyIndex);
+
+    for (int v = 0; v < NUM_MOTORS; v++) {
+        char key[32];
+        snprintf(key, sizeof(key), "map_v2p_%d", v);
+        nvs_set_i8(handle, key, getPhysicalMotorFromVirtual(v));
+
+        snprintf(key, sizeof(key), "map_dir_inv_%d", v);
+        nvs_set_u8(handle, key, getDirectionSignForVirtual(v) < 0 ? 1 : 0);
+
+        snprintf(key, sizeof(key), "map_min_%d", v);
+        nvs_set_i8(handle, key, virtualMinSensorMapCache[v].load());
+
+        snprintf(key, sizeof(key), "map_max_%d", v);
+        nvs_set_i8(handle, key, virtualMaxSensorMapCache[v].load());
+    }
+
     metadataModified = false;
 }
 
@@ -1442,7 +1924,7 @@ void StepperMotorComponent::loadCustomData(nvs_handle_t handle) {
     uint16_t count = 0;
     if (nvs_get_u16(handle, "choreo_count", &count) != ESP_OK) {
         ESP_LOGI(TAG, "No choreographies in NVS");
-        return;
+        count = 0;
     }
     
     for (int idx = 0; idx < count; idx++) {
@@ -1480,11 +1962,53 @@ void StepperMotorComponent::loadCustomData(nvs_handle_t handle) {
     int16_t active = -1;
     nvs_get_i16(handle, "active_choreo", &active);
     activeChoreographyIndex = active;
+
+    for (int v = 0; v < NUM_MOTORS; v++) {
+        char key[32];
+        int8_t mapVal = v;
+        uint8_t dirInv = 0;
+        int8_t minSensor = v;
+        int8_t maxSensor = v;
+
+        snprintf(key, sizeof(key), "map_v2p_%d", v);
+        nvs_get_i8(handle, key, &mapVal);
+        if (virtualToPhysicalMotorParam) {
+            virtualToPhysicalMotorParam->setValue(0, v, mapVal);
+        }
+
+        snprintf(key, sizeof(key), "map_dir_inv_%d", v);
+        nvs_get_u8(handle, key, &dirInv);
+        if (virtualDirectionInvertedParam) {
+            virtualDirectionInvertedParam->setValue(0, v, dirInv != 0);
+        }
+
+        snprintf(key, sizeof(key), "map_min_%d", v);
+        nvs_get_i8(handle, key, &minSensor);
+        if (virtualMinSensorMapParam) {
+            virtualMinSensorMapParam->setValue(0, v, minSensor);
+        }
+
+        snprintf(key, sizeof(key), "map_max_%d", v);
+        nvs_get_i8(handle, key, &maxSensor);
+        if (virtualMaxSensorMapParam) {
+            virtualMaxSensorMapParam->setValue(0, v, maxSensor);
+        }
+    }
+
+    if (!applyVirtualMotorMappingFromParams()) {
+        for (int v = 0; v < NUM_MOTORS; v++) {
+            virtualToPhysicalMotorParam->setValue(0, v, v);
+        }
+        applyVirtualMotorMappingFromParams();
+    }
+    applyDirectionMappingFromParams();
+    applyVirtualSensorMappingFromParams();
     
     ESP_LOGI(TAG, "Loaded %zu choreographies from NVS", choreographyMeta.size());
     
     updateStatusParams();
     updateChoreographyIdsParam();
+    metadataModified = false;
 }
 
 void StepperMotorComponent::onPostLoadReconcile() {

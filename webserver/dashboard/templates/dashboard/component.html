@@ -156,7 +156,7 @@
                                     <label style="font-size: 13px; color: #aaa;">Jog Speed</label>
                                     <select id="jog-unit-select" onchange="onJogUnitChange(this.value)"
                                         style="padding: 2px 6px; font-size: 12px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: inherit;">
-                                        <option value="steps">steps/sec</option>
+                                        <option value="steps">pulses/s</option>
                                         <option value="rpm" selected>RPM</option>
                                         <option value="mms">mm/s</option>
                                     </select>
@@ -201,7 +201,7 @@
                             </div>
                             <!-- Backoff Distance -->
                             <div>
-                                <label style="font-size: 13px; color: #aaa; display: block; margin-bottom: 4px;">Limit Backoff (steps)</label>
+                                <label style="font-size: 13px; color: #aaa; display: block; margin-bottom: 4px;">Limit Backoff (pulses)</label>
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <input type="range" id="stepper-backoff" min="10" max="200" value="50" step="5"
                                         style="flex: 1;" oninput="document.getElementById('stepper-backoff-val').textContent=this.value"
@@ -225,13 +225,77 @@
                             <span>ISR Rate: <span id="stepper-isr-rate" style="font-family: monospace; color: #4CAF50;">—</span> Hz</span>
                             <span style="display: flex; align-items: center; gap: 6px;">
                                 Spool Radius:
-                                <input type="number" id="stepper-spool-radius" min="5" max="100" value="15" step="0.5"
+                                <input type="number" id="stepper-spool-radius" min="5" max="100" value="50" step="0.5"
                                     style="width: 60px; padding: 2px 4px; font-size: 12px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--bg-primary); color: inherit; font-family: monospace;"
                                     onchange="onSpoolRadiusChange(this.value)">
                                 mm
                             </span>
+                            <span id="stepper-step-basis" style="font-family: monospace; color: #9ecbff;">Basis: 3200 pulses/rev (1/16)</span>
                         </div>
                     </div>
+                </div>
+
+                <!-- Virtual Mapping -->
+                <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px;">
+                        <span style="font-weight: 600; font-size: 15px;">🧭 Virtual Mapping</span>
+                        <span style="font-size: 12px; color: #888;">Configure virtual motors once, keep choreography unchanged</span>
+                    </div>
+
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-color); color: #aaa; text-align: left;">
+                                        <th style="padding: 8px 6px;">Virtual Motor</th>
+                                        <th style="padding: 8px 6px;">↔ Maps To (Physical)</th>
+                                    <th style="padding: 8px 6px;">Invert Direction</th>
+                                    <th style="padding: 8px 6px;">Min Sensor</th>
+                                    <th style="padding: 8px 6px;">Max Sensor</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                        <td style="padding: 8px 6px; font-weight: 600; color: #4CAF50;">V0</td>
+                                    <td style="padding: 8px 6px;"><select id="map-v2p-0" onchange="onStepperMappingInputChanged(0)" style="width: 100%;"><option value="0">P0</option><option value="1">P1</option><option value="2">P2</option><option value="3">P3</option></select></td>
+                                    <td style="padding: 8px 6px;"><label style="display:flex; align-items:center; gap:6px;"><input id="map-inv-0" type="checkbox" onchange="onStepperMappingInputChanged(0)">Invert</label></td>
+                                    <td style="padding: 8px 6px;"><select id="map-min-0" onchange="onStepperMappingInputChanged(0)" style="width: 100%;"><option value="0">S0</option><option value="1">S1</option><option value="2">S2</option><option value="3">S3</option></select></td>
+                                    <td style="padding: 8px 6px;"><select id="map-max-0" onchange="onStepperMappingInputChanged(0)" style="width: 100%;"><option value="0">S0</option><option value="1">S1</option><option value="2">S2</option><option value="3">S3</option></select></td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 6px; font-weight: 600;">V1</td>
+                                    <td style="padding: 8px 6px;"><select id="map-v2p-1" onchange="onStepperMappingInputChanged(1)" style="width: 100%;"><option value="0">P0</option><option value="1">P1</option><option value="2">P2</option><option value="3">P3</option></select></td>
+                                    <td style="padding: 8px 6px;"><label style="display:flex; align-items:center; gap:6px;"><input id="map-inv-1" type="checkbox" onchange="onStepperMappingInputChanged(1)">Invert</label></td>
+                                    <td style="padding: 8px 6px;"><select id="map-min-1" onchange="onStepperMappingInputChanged(1)" style="width: 100%;"><option value="0">S0</option><option value="1">S1</option><option value="2">S2</option><option value="3">S3</option></select></td>
+                                    <td style="padding: 8px 6px;"><select id="map-max-1" onchange="onStepperMappingInputChanged(1)" style="width: 100%;"><option value="0">S0</option><option value="1">S1</option><option value="2">S2</option><option value="3">S3</option></select></td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 6px; font-weight: 600;">V2</td>
+                                    <td style="padding: 8px 6px;"><select id="map-v2p-2" onchange="onStepperMappingInputChanged(2)" style="width: 100%;"><option value="0">P0</option><option value="1">P1</option><option value="2">P2</option><option value="3">P3</option></select></td>
+                                    <td style="padding: 8px 6px;"><label style="display:flex; align-items:center; gap:6px;"><input id="map-inv-2" type="checkbox" onchange="onStepperMappingInputChanged(2)">Invert</label></td>
+                                    <td style="padding: 8px 6px;"><select id="map-min-2" onchange="onStepperMappingInputChanged(2)" style="width: 100%;"><option value="0">S0</option><option value="1">S1</option><option value="2">S2</option><option value="3">S3</option></select></td>
+                                    <td style="padding: 8px 6px;"><select id="map-max-2" onchange="onStepperMappingInputChanged(2)" style="width: 100%;"><option value="0">S0</option><option value="1">S1</option><option value="2">S2</option><option value="3">S3</option></select></td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 6px; font-weight: 600;">V3</td>
+                                    <td style="padding: 8px 6px;"><select id="map-v2p-3" onchange="onStepperMappingInputChanged(3)" style="width: 100%;"><option value="0">P0</option><option value="1">P1</option><option value="2">P2</option><option value="3">P3</option></select></td>
+                                    <td style="padding: 8px 6px;"><label style="display:flex; align-items:center; gap:6px;"><input id="map-inv-3" type="checkbox" onchange="onStepperMappingInputChanged(3)">Invert</label></td>
+                                    <td style="padding: 8px 6px;"><select id="map-min-3" onchange="onStepperMappingInputChanged(3)" style="width: 100%;"><option value="0">S0</option><option value="1">S1</option><option value="2">S2</option><option value="3">S3</option></select></td>
+                                    <td style="padding: 8px 6px;"><select id="map-max-3" onchange="onStepperMappingInputChanged(3)" style="width: 100%;"><option value="0">S0</option><option value="1">S1</option><option value="2">S2</option><option value="3">S3</option></select></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 10px; margin-top: 12px;">
+                        <button id="stepper-map-apply-btn" class="btn btn-primary" onclick="applyStepperMapping()">Apply Mapping</button>
+                        <button id="stepper-map-reset-btn" class="btn" onclick="resetStepperMappingIdentity()">Reset Identity</button>
+                        <span id="stepper-map-dirty" style="font-size: 12px; color: #ff9800; display: none;">Unsaved mapping changes</span>
+                    </div>
+                        <div style="margin-top: 12px; font-size: 12px; color: #888; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px;">
+                            <strong>V = Virtual Motor</strong> (what you see in the jog controls)<br/>
+                            <strong>P = Physical Motor</strong> (actual hardware on ESP32)<br/>
+                            Use this to remap your wiring without changing choreography.
+                        </div>
                 </div>
                 
                 <p class="help-text">Hold jog buttons to move motors. Release when limit switch triggers.</p>
@@ -248,15 +312,31 @@
                     <button id="stepper-home-btn" class="btn btn-primary" onclick="startHoming()" style="font-size: 16px; padding: 12px 24px;">
                         🏠 Home All Motors
                     </button>
+                    <button id="stepper-home-check-btn" class="btn" onclick="startHomingCheck()" style="font-size: 16px; padding: 12px 24px;">
+                        ✅ Homing Check
+                    </button>
                     <button id="stepper-abort-home-btn" class="btn btn-danger" onclick="abortHoming()" style="font-size: 16px; padding: 12px 24px; display: none;">
                         ✋ Abort Homing
+                    </button>
+                    <button id="stepper-pause-home-btn" class="btn" onclick="pauseHoming()" style="font-size: 16px; padding: 12px 24px; display: none;">
+                        ⏸ Pause Homing
+                    </button>
+                    <button id="stepper-resume-home-btn" class="btn btn-primary" onclick="resumeHoming()" style="font-size: 16px; padding: 12px 24px; display: none;">
+                        ▶ Resume Homing
                     </button>
                     <div style="display: flex; align-items: center; gap: 8px; margin-left: 20px;">
                         <label style="font-size: 13px; color: #888;">Homing Speed:</label>
                         <input id="stepper-homing-speed" type="number" min="1" max="1000" value="50" 
                                style="width: 80px; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color);"
                                onchange="setHomingSpeed(this.value)">
-                        <span style="font-size: 12px; color: #888;">steps/s</span>
+                        <span style="font-size: 12px; color: #888;">pulses/s</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label style="font-size: 13px; color: #888;">Check Tolerance:</label>
+                        <input id="stepper-homing-check-tol" type="number" min="5" max="500" value="50"
+                               style="width: 80px; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color);"
+                               onchange="setHomingCheckTolerance(this.value)">
+                        <span style="font-size: 12px; color: #888;">pulses</span>
                     </div>
                 </div>
                 
@@ -343,6 +423,24 @@
         // Global functions for modal editors
         let watchSlotEditor = null;
         let actionManagerEditor = null;
+
+        // Fallback notifier for pages where the shared notification helper is not loaded.
+        function showNotification(message, type = 'info') {
+            const externalNotifier = window.showNotification;
+            if (typeof externalNotifier === 'function' && externalNotifier !== showNotification) {
+                externalNotifier(message, type);
+                return;
+            }
+
+            const prefix = `[${String(type || 'info').toUpperCase()}]`;
+            if (type === 'error') {
+                console.error(prefix, message);
+            } else if (type === 'warning') {
+                console.warn(prefix, message);
+            } else {
+                console.log(prefix, message);
+            }
+        }
         
         // Load and display active watch expressions
         async function loadActiveExpressions() {
@@ -1002,16 +1100,21 @@
         let stepperMotorState = {
             motorHomed: [false, false, false, false],
             homingMotor: -1,
+            homingPaused: false,
             motorPositions: [0, 0, 0, 0],
             limitMinState: [false, false, false, false],
             limitMaxState: [false, false, false, false],
+            virtualToPhysicalMotor: [0, 1, 2, 3],
+            virtualDirectionInverted: [false, false, false, false],
+            virtualMinSensorMap: [0, 1, 2, 3],
+            virtualMaxSensorMap: [0, 1, 2, 3],
             driversEnabled: false,
             playbackState: 0,
             errorMessage: '',
             jogSpeed: 500,
             jogAcceleration: 1000,
             microstepping: 16,
-            spoolRadius: 0.015,
+            spoolRadius: 0.05,
             paramIds: {},
             stepperSubs: [],
         };
@@ -1038,7 +1141,10 @@
                 
                 card.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <span style="font-weight: 600; font-size: 16px;">Motor ${motorId}</span>
+                            <div>
+                                <span style="font-weight: 600; font-size: 16px;">Virtual Motor ${motorId}</span>
+                                <div id="motor-${motorId}-mapping-info" style="font-size: 12px; color: #aaa; margin-top: 2px;">Maps to: P?</div>
+                            </div>
                         <span id="motor-${motorId}-status" class="motor-status" style="padding: 4px 10px; border-radius: 4px; font-size: 13px; background: #ccc; color: #666;">
                             Not Homed
                         </span>
@@ -1069,7 +1175,7 @@
                     
                     <div style="display: flex; align-items: center; justify-content: space-between;">
                         <div id="motor-${motorId}-position" style="font-family: monospace; color: #666; font-size: 14px;">
-                            Position: 0 steps
+                            Position: 0 pulses
                         </div>
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span style="font-size: 11px; color: #888;">MIN</span>
@@ -1205,6 +1311,27 @@
                 showNotification('Failed to start homing', 'error');
             }
         }
+
+        async function startHomingCheck() {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: 'startHomingCheck',
+                    row: 0, col: 0,
+                    value: true
+                });
+                console.log('[HOMING CHECK] Start requested');
+                showNotification('Homing check started...', 'success');
+            } catch (e) {
+                console.error('Failed to start homing check:', e);
+                showNotification('Failed to start homing check', 'error');
+            }
+        }
         
         async function abortHoming() {
             if (!esp32ws || !esp32ws.connected) return;
@@ -1222,6 +1349,40 @@
                 console.error('Failed to abort homing:', e);
             }
         }
+
+        async function pauseHoming() {
+            if (!esp32ws || !esp32ws.connected) return;
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: 'pauseHoming',
+                    row: 0, col: 0,
+                    value: true
+                });
+                showNotification('Homing paused. You can jog motors manually.', 'warning');
+            } catch (e) {
+                console.error('Failed to pause homing:', e);
+                showNotification('Failed to pause homing', 'error');
+            }
+        }
+
+        async function resumeHoming() {
+            if (!esp32ws || !esp32ws.connected) return;
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: 'pauseHoming',
+                    row: 0, col: 0,
+                    value: false
+                });
+                showNotification('Homing resumed.', 'success');
+            } catch (e) {
+                console.error('Failed to resume homing:', e);
+                showNotification('Failed to resume homing', 'error');
+            }
+        }
         
         async function setHomingSpeed(speed) {
             if (!esp32ws || !esp32ws.connected) return;
@@ -1233,9 +1394,25 @@
                     row: 0, col: 0,
                     value: parseInt(speed)
                 });
-                console.log(`[HOMING] Speed set to ${speed} steps/s`);
+                console.log(`[HOMING] Speed set to ${speed} pulses/s`);
             } catch (e) {
                 console.error('Failed to set homing speed:', e);
+            }
+        }
+
+        async function setHomingCheckTolerance(tolerance) {
+            if (!esp32ws || !esp32ws.connected) return;
+            try {
+                await esp32ws.send({
+                    type: 'set_param',
+                    comp: 'StepperMotor',
+                    param: 'homingCheckTolerance',
+                    row: 0, col: 0,
+                    value: parseInt(tolerance)
+                });
+                console.log(`[HOMING CHECK] Tolerance set to ${tolerance} pulses`);
+            } catch (e) {
+                console.error('Failed to set homing check tolerance:', e);
             }
         }
         
@@ -1378,11 +1555,23 @@
                     const el = document.getElementById('stepper-homing-speed');
                     if (el) el.value = homingSpeedVal;
                 }
+
+                // homingCheckTolerance (1x1)
+                const homingCheckTolVal = await sub('homingCheckTolerance', 0, 0);
+                if (homingCheckTolVal != null) {
+                    const el = document.getElementById('stepper-homing-check-tol');
+                    if (el) el.value = homingCheckTolVal;
+                }
                 
                 // homingMotor (1×1, read-only)
                 const homingMotorVal = await sub('homingMotor', 0, 0);
                 stepperMotorState.homingMotor = homingMotorVal ?? -1;
                 updateHomingProgressUI(stepperMotorState.homingMotor);
+
+                // pauseHoming (1×1)
+                const pausedVal = await sub('pauseHoming', 0, 0);
+                stepperMotorState.homingPaused = !!pausedVal;
+                updateStateUI(stepperMotorState.playbackState);
                 
                 // maxRpm (1×1)
                 const rpmVal = await sub('maxRpm', 0, 0);
@@ -1403,9 +1592,28 @@
                 // spoolRadius (1×1)
                 const spoolVal = await sub('spoolRadius', 0, 0);
                 updateSettingUI('spoolRadius', spoolVal);
+
+                // Mapping params (1×4)
+                for (let col = 0; col < 4; col++) {
+                    const v2p = await sub('virtualToPhysicalMotor', 0, col);
+                    updateSettingUI('virtualToPhysicalMotor', v2p, 0, col);
+
+                    const inv = await sub('virtualDirectionInverted', 0, col);
+                    updateSettingUI('virtualDirectionInverted', inv, 0, col);
+
+                    const minMap = await sub('virtualMinSensorMap', 0, col);
+                    updateSettingUI('virtualMinSensorMap', minMap, 0, col);
+
+                    const maxMap = await sub('virtualMaxSensorMap', 0, col);
+                    updateSettingUI('virtualMaxSensorMap', maxMap, 0, col);
+                }
                 
                 // Update aggregate status from initial values
                 updateHomingStatusUI();
+
+                    // Update all motor mapping info displays
+                    updateAllMotorMappingInfo();
+                refreshStepBasisDisplay();
                 
                 // Listen for push updates
                 window.removeEventListener('esp32-push', handleStepperPush);
@@ -1483,12 +1691,24 @@
                 updateHomingProgressUI(value);
                 return;
             }
+
+            // pauseHoming
+            if (ids.pauseHoming && param_id === ids.pauseHoming.id) {
+                stepperMotorState.homingPaused = !!value;
+                updateStateUI(stepperMotorState.playbackState);
+                updateHomingProgressUI(stepperMotorState.homingMotor);
+                return;
+            }
             
             // Settings params
-            const settingNames = ['jogSpeed', 'jogAcceleration', 'backoffDistance', 'maxRpm', 'microstepping', 'isrRateHz', 'microsteppingConfigurable', 'spoolRadius'];
+            const settingNames = ['jogSpeed', 'jogAcceleration', 'backoffDistance', 'maxRpm', 'microstepping', 'isrRateHz', 'microsteppingConfigurable', 'spoolRadius', 'homingCheckTolerance', 'virtualToPhysicalMotor', 'virtualDirectionInverted', 'virtualMinSensorMap', 'virtualMaxSensorMap'];
             for (const name of settingNames) {
                 if (ids[name] && param_id === ids[name].id) {
-                    updateSettingUI(name, value);
+                    updateSettingUI(name, value, row, col);
+                    // Refresh motor mapping display if any mapping param changed
+                    if (['virtualToPhysicalMotor', 'virtualDirectionInverted'].includes(name)) {
+                        updateAllMotorMappingInfo();
+                    }
                     return;
                 }
             }
@@ -1515,11 +1735,99 @@
                 showNotification(`Failed to set ${paramName}`, 'error');
             }
         }
+
+        async function sendStepperIndexedSetting(paramName, col, value) {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+            await esp32ws.send({
+                type: 'set_param',
+                comp: 'StepperMotor',
+                param: paramName,
+                row: 0,
+                col,
+                value,
+            });
+        }
+
+        function onStepperMappingInputChanged() {
+            const dirtyEl = document.getElementById('stepper-map-dirty');
+            if (dirtyEl) dirtyEl.style.display = 'inline';
+        }
+
+        async function applyStepperMapping() {
+            if (!esp32ws || !esp32ws.connected) {
+                showNotification('Connect to device first', 'error');
+                return;
+            }
+
+            const v2p = [];
+            const inv = [];
+            const minMap = [];
+            const maxMap = [];
+
+            for (let v = 0; v < 4; v++) {
+                v2p[v] = parseInt(document.getElementById(`map-v2p-${v}`)?.value ?? `${v}`, 10);
+                inv[v] = !!document.getElementById(`map-inv-${v}`)?.checked;
+                minMap[v] = parseInt(document.getElementById(`map-min-${v}`)?.value ?? `${v}`, 10);
+                maxMap[v] = parseInt(document.getElementById(`map-max-${v}`)?.value ?? `${v}`, 10);
+            }
+
+            if (new Set(v2p).size !== 4) {
+                showNotification('Physical Motor mapping must be unique (P0..P3 used once each)', 'error');
+                return;
+            }
+
+            try {
+                for (let v = 0; v < 4; v++) {
+                    await sendStepperIndexedSetting('virtualToPhysicalMotor', v, v2p[v]);
+                }
+                for (let v = 0; v < 4; v++) {
+                    await sendStepperIndexedSetting('virtualDirectionInverted', v, inv[v]);
+                    await sendStepperIndexedSetting('virtualMinSensorMap', v, minMap[v]);
+                    await sendStepperIndexedSetting('virtualMaxSensorMap', v, maxMap[v]);
+                }
+                const dirtyEl = document.getElementById('stepper-map-dirty');
+                if (dirtyEl) dirtyEl.style.display = 'none';
+                showNotification('Stepper mapping applied', 'success');
+            } catch (e) {
+                console.error('Failed to apply mapping:', e);
+                showNotification('Failed to apply mapping', 'error');
+            }
+        }
+
+        async function resetStepperMappingIdentity() {
+            for (let v = 0; v < 4; v++) {
+                const v2pEl = document.getElementById(`map-v2p-${v}`);
+                const invEl = document.getElementById(`map-inv-${v}`);
+                const minEl = document.getElementById(`map-min-${v}`);
+                const maxEl = document.getElementById(`map-max-${v}`);
+                if (v2pEl) v2pEl.value = `${v}`;
+                if (invEl) invEl.checked = false;
+                if (minEl) minEl.value = `${v}`;
+                if (maxEl) maxEl.value = `${v}`;
+            }
+            onStepperMappingInputChanged();
+            await applyStepperMapping();
+        }
         
         // ============================================================
         // Update settings UI from push or initial subscription
         // ============================================================
-        function updateSettingUI(name, value) {
+            function updateAllMotorMappingInfo() {
+                for (let v = 0; v < 4; v++) {
+                    const physicalMotor = stepperMotorState.virtualToPhysicalMotor[v];
+                    const isInverted = stepperMotorState.virtualDirectionInverted[v];
+                    const infoEl = document.getElementById(`motor-${v}-mapping-info`);
+                    if (infoEl) {
+                        const invertLabel = isInverted ? ' (Inverted)' : '';
+                        infoEl.textContent = `Maps to: P${physicalMotor}${invertLabel}`;
+                    }
+                }
+            }
+
+        function updateSettingUI(name, value, row = 0, col = 0) {
             switch (name) {
                 case 'jogSpeed': {
                     stepperMotorState.jogSpeed = value || 500;
@@ -1549,6 +1857,7 @@
                     stepperMotorState.microstepping = value || 16;
                     const select = document.getElementById('stepper-microstep');
                     if (select) select.value = value;
+                    refreshStepBasisDisplay();
                     refreshJogSpeedDisplay();  // Recompute display since totalStepsPerRev changed
                     break;
                 }
@@ -1565,10 +1874,39 @@
                     break;
                 }
                 case 'spoolRadius': {
-                    stepperMotorState.spoolRadius = value || 0.015;
+                    stepperMotorState.spoolRadius = value || 0.05;
                     const inp = document.getElementById('stepper-spool-radius');
                     if (inp) inp.value = (stepperMotorState.spoolRadius * 1000).toFixed(1);
                     refreshJogSpeedDisplay();
+                    break;
+                }
+                case 'homingCheckTolerance': {
+                    const inp = document.getElementById('stepper-homing-check-tol');
+                    if (inp && value != null) inp.value = value;
+                    break;
+                }
+                case 'virtualToPhysicalMotor': {
+                    stepperMotorState.virtualToPhysicalMotor[col] = value;
+                    const el = document.getElementById(`map-v2p-${col}`);
+                    if (el) el.value = `${value}`;
+                    break;
+                }
+                case 'virtualDirectionInverted': {
+                    stepperMotorState.virtualDirectionInverted[col] = !!value;
+                    const el = document.getElementById(`map-inv-${col}`);
+                    if (el) el.checked = !!value;
+                    break;
+                }
+                case 'virtualMinSensorMap': {
+                    stepperMotorState.virtualMinSensorMap[col] = value;
+                    const el = document.getElementById(`map-min-${col}`);
+                    if (el) el.value = `${value}`;
+                    break;
+                }
+                case 'virtualMaxSensorMap': {
+                    stepperMotorState.virtualMaxSensorMap[col] = value;
+                    const el = document.getElementById(`map-max-${col}`);
+                    if (el) el.value = `${value}`;
                     break;
                 }
             }
@@ -1580,22 +1918,34 @@
         function getJogUnitConfig(unit) {
             if (unit === 'rpm') return { min: 0.2,  max: 150,  step: 0.5, suffix: 'RPM',     decimals: 1 };
             if (unit === 'mms') return { min: 0.5,  max: 200,  step: 0.5, suffix: 'mm/s',    decimals: 1 };
-            return                       { min: 10,   max: 5000, step: 10,  suffix: 'steps/s', decimals: 0 };
+            return                       { min: 10,   max: 5000, step: 10,  suffix: 'pulses/s', decimals: 0 };
+        }
+
+        function refreshStepBasisDisplay() {
+            const el = document.getElementById('stepper-step-basis');
+            if (!el) return;
+            const micro = stepperMotorState.microstepping || 1;
+            const pulsesPerRev = 200 * micro;
+            el.textContent = micro === 1
+                ? `Basis: ${pulsesPerRev} pulses/rev (full step)`
+                : `Basis: ${pulsesPerRev} pulses/rev (1/${micro})`;
         }
         
         function stepsToUnit(stepsPerSec, unit) {
-            const totalSteps = 200 * (stepperMotorState.microstepping || 16);
-            const circ = 2 * Math.PI * (stepperMotorState.spoolRadius || 0.015);
-            if (unit === 'rpm') return (stepsPerSec * 60) / totalSteps;
-            if (unit === 'mms') return (stepsPerSec / totalSteps) * circ * 1000;
+            // stepsPerSec is driver pulse rate (actual step pulses).
+            const totalPulseSteps = 200 * (stepperMotorState.microstepping || 16);
+            const circ = 2 * Math.PI * (stepperMotorState.spoolRadius || 0.05);
+            if (unit === 'rpm') return (stepsPerSec * 60) / totalPulseSteps;
+            if (unit === 'mms') return (stepsPerSec / totalPulseSteps) * circ * 1000;
             return stepsPerSec;
         }
         
         function unitToSteps(val, unit) {
-            const totalSteps = 200 * (stepperMotorState.microstepping || 16);
-            const circ = 2 * Math.PI * (stepperMotorState.spoolRadius || 0.015);
-            if (unit === 'rpm') return Math.round((val * totalSteps) / 60);
-            if (unit === 'mms') return Math.round((val / 1000 / circ) * totalSteps);
+            // Return value is driver pulse rate.
+            const totalPulseSteps = 200 * (stepperMotorState.microstepping || 16);
+            const circ = 2 * Math.PI * (stepperMotorState.spoolRadius || 0.05);
+            if (unit === 'rpm') return Math.round((val * totalPulseSteps) / 60);
+            if (unit === 'mms') return Math.round((val / 1000 / circ) * totalPulseSteps);
             return Math.round(val);
         }
         
@@ -1643,6 +1993,7 @@
         async function onSpoolRadiusChange(mm) {
             const meters = parseFloat(mm) / 1000;
             stepperMotorState.spoolRadius = meters;
+            refreshStepBasisDisplay();
             refreshJogSpeedDisplay();
             refreshJogAccelDisplay();
             await sendStepperSetting('spoolRadius', meters);
@@ -1655,7 +2006,7 @@
             // Acceleration unit = jog-speed-unit per second
             if (unit === 'rpm')   return { min: 0.5,  max: 1000,  step: 0.5,  suffix: 'RPM/s',   decimals: 1 };
             if (unit === 'mms')   return { min: 1,    max: 5000,  step: 1,    suffix: 'mm/s²',   decimals: 0 };
-            return                        { min: 10,   max: 100000, step: 10,  suffix: 'steps/s²', decimals: 0 };
+            return                        { min: 10,   max: 100000, step: 10,  suffix: 'pulses/s²', decimals: 0 };
         }
 
         function refreshJogAccelDisplay() {
@@ -1722,8 +2073,14 @@
             const estopBtn = document.getElementById('stepper-estop-btn');
             const clearBtn = document.getElementById('stepper-estop-clear-btn');
             const homeBtn = document.getElementById('stepper-home-btn');
+            const checkBtn = document.getElementById('stepper-home-check-btn');
             const abortBtn = document.getElementById('stepper-abort-home-btn');
+            const pauseBtn = document.getElementById('stepper-pause-home-btn');
+            const resumeBtn = document.getElementById('stepper-resume-home-btn');
             const isEStop = (stateVal === 5); // 5 = E_STOP
+            const isHoming = (stateVal === 2); // 2 = HOMING
+            const homingPaused = !!stepperMotorState.homingPaused;
+            const allHomed = stepperMotorState.motorHomed.every(Boolean);
             if (label) {
                 const name = STATE_NAMES[stateVal] || `UNKNOWN(${stateVal})`;
                 const color = STATE_COLORS[stateVal] || '#999';
@@ -1743,13 +2100,16 @@
                 clearBtn.style.display = isEStop ? 'inline-block' : 'none';
             }
             // Show/hide homing buttons based on state
-            const isHoming = (stateVal === 2); // 2 = HOMING
             if (homeBtn) homeBtn.style.display = isHoming ? 'none' : 'inline-block';
+            if (checkBtn) checkBtn.style.display = (!isHoming && allHomed) ? 'inline-block' : 'none';
             if (abortBtn) abortBtn.style.display = isHoming ? 'inline-block' : 'none';
-            // Disable jog buttons during homing
+            if (pauseBtn) pauseBtn.style.display = (isHoming && !homingPaused) ? 'inline-block' : 'none';
+            if (resumeBtn) resumeBtn.style.display = (isHoming && homingPaused) ? 'inline-block' : 'none';
+            // Disable jog buttons during active homing, allow while paused
             document.querySelectorAll('.stepper-jog-btn').forEach(btn => {
-                btn.disabled = isHoming;
-                btn.style.opacity = isHoming ? '0.4' : '1';
+                const jogLocked = isHoming && !homingPaused;
+                btn.disabled = jogLocked;
+                btn.style.opacity = jogLocked ? '0.4' : '1';
             });
         }
         
@@ -1770,7 +2130,7 @@
         function updatePositionUI(motorId, position) {
             const posEl = document.getElementById(`motor-${motorId}-position`);
             if (posEl) {
-                posEl.textContent = `Position: ${position} steps`;
+                posEl.textContent = `Position: ${position} pulses`;
             }
         }
         
@@ -1794,6 +2154,9 @@
             if (moveHomeSection) {
                 moveHomeSection.style.display = (homedCount === 4) ? 'block' : 'none';
             }
+
+            // Re-evaluate control visibility that depends on all-homed state.
+            updateStateUI(stepperMotorState.playbackState);
         }
         
         function updateHomingProgressUI(homingMotor) {
@@ -1803,7 +2166,8 @@
                 progressEl.style.display = (homingMotor >= 0) ? 'block' : 'none';
             }
             if (motorText && homingMotor >= 0) {
-                motorText.textContent = `Motor ${homingMotor} of 4`;
+                const pauseLabel = stepperMotorState.homingPaused ? ' (PAUSED)' : '';
+                motorText.textContent = `Motor ${homingMotor} of 4${pauseLabel}`;
             }
         }
     </script>

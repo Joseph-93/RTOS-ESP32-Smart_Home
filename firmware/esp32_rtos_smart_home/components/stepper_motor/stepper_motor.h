@@ -52,8 +52,8 @@
  * 
  * The ISR is IRAM-resident and runs at whatever frequency is needed to
  * achieve the target RPM. At 1200 RPM with 1/16 microstepping:
- * - Steps/rev = 200 × 16 = 3200
- * - Steps/sec = 1200/60 × 3200 = 64,000
+ * - Pulses/rev = 200 × 16 = 3200
+ * - Pulses/sec = 1200/60 × 3200 = 64,000
  * - ISR period = 15.6 µs
  * 
  * ============================================================================
@@ -271,7 +271,7 @@ enum class PlaybackState : uint8_t {
 // Homing sub-phases (internal to motionTask, not exposed as PlaybackState)
 enum class HomingPhase : uint8_t {
     IDLE = 0,
-    RETRACT,       // Retracting motor N, other 3 paying out at same rate
+    RETRACT,       // Retracting motor N with coupled payout on other motors
     BACKOFF,       // Backing off motor N from limit switch
     NEXT,          // Zeroing position, advancing to next motor
     DONE           // All motors homed
@@ -342,7 +342,7 @@ private:
     static constexpr uint32_t MAX_ISR_RATE_HZ = 80000;      // Max step ISR rate (80 kHz)
     
     // Safety limits
-    static constexpr uint32_t MAX_VELOCITY_STEPS_PER_TICK = 320;  // @ 200Hz = 64k steps/sec max
+    static constexpr uint32_t MAX_VELOCITY_STEPS_PER_TICK = 320;  // @ 200Hz = 64k pulses/sec max
     
     // ========================================================================
     // Parameters
@@ -370,14 +370,17 @@ private:
     IntParameter* jogCommandParams[4];     // Per-motor jog: -1=retract, 0=stop, 1=pay-out
     BoolParameter* motorHomedParams[4];    // Per-motor homing status
     BoolParameter* moveToHomeParam;        // Move to center after all homed
-    IntParameter* jogSpeedParam;           // Jog speed in steps/sec (target)
-    IntParameter* jogAccelerationParam;    // Jog acceleration in steps/sec²
-    IntParameter* backoffDistanceParam;    // Limit backoff distance
+    IntParameter* jogSpeedParam;           // Jog speed in driver pulses/sec (target)
+    IntParameter* jogAccelerationParam;    // Jog acceleration in driver pulses/sec²
+    IntParameter* backoffDistanceParam;    // Limit backoff distance in driver pulses
     
     // Homing Control
     BoolParameter* startHomingParam;       // Trigger: start homing sequence
-    IntParameter* homingSpeedParam;        // Homing speed in steps/sec (separate from jog)
+    BoolParameter* startHomingCheckParam;  // Trigger: run homing verification pass
+    IntParameter* homingSpeedParam;        // Homing speed in driver pulses/sec (separate from jog)
+    IntParameter* homingCheckToleranceParam;// Allowed error (pulses) for MIN hit during homing check
     IntParameter* homingMotorParam;        // Read-only: which motor is currently homing (-1=none)
+    BoolParameter* pauseHomingParam;       // Toggle: pause/resume homing while preserving progress
     BoolParameter* abortHomingParam;       // Trigger: abort homing sequence
     
     // Limit switch simulation (for testing without hardware)
@@ -420,7 +423,13 @@ private:
     FloatParameter* roomDimensionZ;      // Room Z dimension (meters)
     IntParameter* maxPositionSteps;      // Read-only: auto-calculated from room diagonal
     BoolParameter* softLimitsEnabled;    // Enable/disable soft position limiting
-    FloatParameter* spoolRadius;         // Spool radius in meters (for GUI unit conversion, default 15mm)
+    FloatParameter* spoolRadius;         // Spool radius in meters (for GUI unit conversion, default 50mm)
+
+    // Virtual axis mapping (set by GUI; persisted in NVS)
+    IntParameter* virtualToPhysicalMotorParam;   // 1x4: virtual motor index -> physical motor index
+    BoolParameter* virtualDirectionInvertedParam;// 1x4: true => virtual payout/retract is inverted on physical motor
+    IntParameter* virtualMinSensorMapParam;      // 1x4: virtual MIN limit sensor -> physical sensor index
+    IntParameter* virtualMaxSensorMapParam;      // 1x4: virtual MAX limit sensor -> physical sensor index
     
     // ========================================================================
     // Choreography Storage
@@ -450,6 +459,17 @@ private:
     
     // Velocity safety tracking (for detecting bad trajectories)
     int32_t prevTarget[4];  // Previous target positions (task-local, no atomics needed)
+
+    // Virtual axis mapping cache for runtime translation
+    // virtualToPhysicalMotorCache[v] = physical motor index
+    std::atomic<int8_t> virtualToPhysicalMotorCache[4];
+    // physicalToVirtualMotorCache[p] = virtual motor index
+    std::atomic<int8_t> physicalToVirtualMotorCache[4];
+    // directionSignCache[v] = +1 (normal) or -1 (inverted)
+    std::atomic<int8_t> directionSignCache[4];
+    // Virtual limit sensor mappings (virtual axis -> physical sensor index)
+    std::atomic<int8_t> virtualMinSensorMapCache[4];
+    std::atomic<int8_t> virtualMaxSensorMapCache[4];
     
     // Position limits (cached for ISR performance)
     std::atomic<int32_t> cachedMaxPosition;  // Cached from maxPositionSteps param
@@ -503,8 +523,12 @@ private:
     // Homing State (task-local, no atomics needed)
     // ========================================================================
     HomingPhase homingPhase;
+    bool homingPaused;                      // True when homing is paused for manual cable management
+    bool homingCheckMode;                   // True when running verification pass instead of initial homing
+    uint8_t homingCheckFailures;            // Number of motors that failed homing check tolerance
     uint8_t homingMotorIndex;                   // Which motor is currently being homed (0-3)
     int32_t homingBackoffTarget;                // Target position after backoff
+    int32_t homingPhaseStartVirtualPos[4];      // Virtual positions captured at start of each motor phase
     uint32_t savedJogSpeedFP;                   // Saved jog speed before homing overwrote it
     
     // ========================================================================
@@ -534,8 +558,11 @@ private:
     
     // Homing
     void beginHoming();
+    void beginHomingCheck();
     void abortHoming();
     void homingTick();  // Called each motionTask iteration when state==HOMING
+    void applyHomingJogPattern();
+    void captureHomingPhaseStartPositions();
     
     // Choreography management
     int16_t findNextChoreographyId() const;
@@ -547,6 +574,21 @@ private:
     void transitionTo(PlaybackState newState);
     void updateStatusParams();
     void updateChoreographyIdsParam();
+
+    // Virtual axis mapping helpers
+    bool applyVirtualMotorMappingFromParams();
+    void applyDirectionMappingFromParams();
+    void applyVirtualSensorMappingFromParams();
+    int8_t getPhysicalMotorFromVirtual(uint8_t virtualIdx) const;
+    int8_t getVirtualMotorFromPhysical(uint8_t physicalIdx) const;
+    int8_t getDirectionSignForVirtual(uint8_t virtualIdx) const;
+    int32_t toPhysicalPosition(uint8_t virtualIdx, int32_t virtualSteps) const;
+    int32_t toVirtualPosition(uint8_t virtualIdx, int32_t physicalSteps) const;
+    int8_t virtualJogToPhysical(uint8_t virtualIdx, int8_t virtualJog) const;
+    bool readVirtualMinLimit(uint8_t virtualIdx) const;
+    bool readVirtualMaxLimit(uint8_t virtualIdx) const;
+    bool readPhysicalMinLimitForMotor(uint8_t physicalMotorIdx) const;
+    bool readPhysicalMaxLimitForMotor(uint8_t physicalMotorIdx) const;
     
     // ISR rate calculation
     uint32_t calculateRequiredIsrRate() const;
